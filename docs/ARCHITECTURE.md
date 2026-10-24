@@ -64,6 +64,31 @@ See [The contract](#the-contract-edit-timeline-draft-v0) below. Everything upstr
 - **It applies the fail-safe rules:** interpolate boxes between keyframes, hold a lost track's mask for a few frames and grow it, pad uncertain masks more, and on an error mask the whole affected segment and log it, never skip it.
 - **Two paths:** **export** (whole file, through ffmpeg) and **frame by frame** (preview and live). They share the same masking and effect code, so preview, export and live look identical.
 
+## Code layout
+One repo, with the backend and frontend side by side, each with its own toolchain (D-011). A frontend-only person never needs Python, and a backend-only person never needs Node beyond the root scripts.
+
+```
+backend/                 Python 3.12, uv (D-010). Package name: vibe
+  src/vibe/
+    contract/            edit timeline: op models, fold, undo, JSON schema (F-02)
+    video/               probe, decode, frame<->time, audio extraction (F-03)
+    toolbox/             typed tools that write ops (F-06)
+    modules/             AI modules, each with stub / local / remote backends (F-08)
+    render/              export and per-frame paths (F-04)
+    agent/               planner: request -> plan of tool calls (F-05)
+    api/                 FastAPI app; every route lives under /api
+    config.py            settings from the environment (VIBE_BACKEND, default stub)
+  tests/
+frontend/                React + Vite + TS (D-009), created by F-07
+  src/api/generated/     TS types generated from the backend's OpenAPI spec (F-07 extra)
+package.json             root scripts: `npm run dev` starts every part of the app
+.github/workflows/       backend.yml now; frontend.yml comes with F-07
+```
+
+- **One folder per layer.** Each feature owner works in their own subpackage, so parallel branches rarely touch the same files.
+- **The browser talks to one address.** The Vite dev server proxies `/api` to the backend (F-07), so the UI and API share an origin in development.
+- **CI runs per side.** Each workflow only runs when its side changes, and the backend's runs with no GPU on the `stub` backend.
+
 ## Compute: everyone can work, whatever their machine
 The team's hardware varies widely. Some people have a laptop with no usable GPU, some a weak or older GPU, and the strongest known machine is **Alex's RTX 5070** (VRAM to be confirmed: 12 GB on the desktop card, 8 GB on the laptop version). **Nobody should be blocked by their hardware.**
 
@@ -199,6 +224,8 @@ Add a row when something gets decided. **"Accepted" means "what we're going with
 | D-008 | 2026-10-23 | Compute tiers: every AI module has `stub` / `local` / `remote` backends; the analysis cache is shareable; the RTX 5070 is the reference machine for benchmarks | Accepted | Team hardware ranges from CPU-only laptops to one RTX 5070; nobody should be blocked |
 | D-009 | 2026-10-24 | Frontend: React + Vite + TypeScript; frontend types generated from the backend's OpenAPI schema | Accepted | The timeline, review queue and box editing are state-heavy UI shared by 10 people; typed components catch contract mismatches at build time |
 | D-010 | 2026-10-24 | Python environments and dependencies are managed with uv (pinned Python version, one committed `uv.lock`) | Accepted | One fast, reproducible install for everyone; optional dependency groups keep GPU-only packages (PyTorch `cu128`) off CPU-only laptops |
+| D-011 | 2026-10-24 | One repo with `backend/` (Python package `vibe`, src layout, one subpackage per layer) and `frontend/` side by side, each with its own toolchain and CI workflow; root `package.json` scripts start everything; Python pinned to 3.12 for now | Accepted | Generated frontend types (D-009) need both sides in one PR; separate folders keep the toolchains apart. Revisit Python 3.14 after the R-3 model shortlist |
+| D-012 | 2026-10-24 | Backend web framework: FastAPI + Uvicorn | Proposed | Used by the F-01 skeleton; its OpenAPI output is what D-009's generated types need. Confirm as a team |
 
 ## Open questions
 - **Compute:** confirm the 5070's VRAM (12 GB desktop or 8 GB laptop). Does anyone else have a GPU worth listing? Are university HPC, club hardware or cloud credits available for tier 3? Should the 5070 host a shared model server, and when would it be on?

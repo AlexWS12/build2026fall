@@ -16,7 +16,7 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 ### Foundation (needed before features can be built in parallel)
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
-| F-01 | Repo skeleton: backend package, test runner, stub mode, one-command run | Must | – | idea | Decide the code layout here |
+| F-01 | Repo skeleton: backend package, test runner, stub mode, one-command run | Must | – | done | Layout decided: D-011, ARCHITECTURE "Code layout" |
 | F-02 | Edit timeline contract v0 in code: op models, fold, undo, generated schema, example timelines | Must | – | idea | ARCHITECTURE "The contract". Unblocks everyone |
 | F-03 | Video I/O: probe, decode frames, frame↔time, audio extraction | Must | F-01 | idea | |
 | F-04 | Renderer: export path (ffmpeg) + per-frame path, shared effect code | Must | F-02, F-03 | idea | The per-frame path is required for live later |
@@ -126,11 +126,11 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 **Build (foundation)**
 | Card | Owner | Branch | Exit check | Status |
 |---|---|---|---|---|
-| F-01 Repo skeleton: backend package, uv project (D-010), pytest in stub mode, lint (Ruff), GitHub Actions CI, one-command run | _open_ | | Fresh clone → `uv sync` → tests pass on CI with no GPU | planned |
+| F-01 Repo skeleton: backend package, uv project (D-010), pytest in stub mode, lint (Ruff), GitHub Actions CI, one-command run | eduardo | eduardo/repo-skeleton | Fresh clone → `uv sync` → tests pass on CI with no GPU | done |
 | F-02 Contract v0 in code: op models, fold, undo, generated JSON schema, example timelines. **Highest priority: everyone in Sprint 2 builds on it** | _open_ | | Example timelines validate. Fold and undo tests pass. `schema_version` set | planned |
 | F-03 Video I/O: probe, decode frames, frame↔time, audio extraction | _open_ | | Tests pass on a tiny clip that ffmpeg generates during the test (no video is committed) | planned |
 | F-06 Toolbox scaffolding: typed tool schemas, registry, stub tools, CLI per tool (starts from the F-02 draft) | _open_ | | `<tool> --help` lists tools. A stub tool writes a valid op to an example timeline | planned |
-| F-07 Web UI shell: React + Vite + TS (D-009), with upload, chat, player and timeline view placeholders against a mocked API | _open_ | | `npm run dev` shows the shell. Vitest passes | planned |
+| F-07 Web UI shell: React + Vite + TS (D-009) in `frontend/`, with upload, chat, player and timeline view placeholders against a mocked API, and a Vite `/api` proxy to the backend. **Extra:** generate TS types from the backend's OpenAPI spec into `frontend/src/api/generated/`, plus a CI check that fails if they're out of date (D-009) | _open_ | | `npm run dev` shows the shell. Vitest passes. Extra: `npm run gen:api` regenerates the types, and CI fails on a stale type | planned |
 | F-08 Compute setup: `stub`/`local`/`remote` backend interface, model download script, install notes per tier, **plus the team GPU survey** (who has what, and the 5070's VRAM) | _open_ | | Stub backend replays a cached result in a test. Survey table added to ARCHITECTURE "Compute" | planned |
 | F-09 Benchmark harness, first cut: consented test clips + manifest, label format, request set, report script | _open_ | | `report` script runs on the stub backend and prints a table. Clips are listed in the manifest (not committed) | planned |
 | F-50 Live feasibility spike: per-frame latency of detector + tracker + identity check at 720p/1080p, **on the RTX 5070** (needs whoever has it, or remote access) | _open_ | | Script output with fps and latency per stage, hardware stated. Uses R-3 candidates | planned |

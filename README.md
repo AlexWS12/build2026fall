@@ -154,9 +154,13 @@ These hold whatever stack we pick.
 - **Masks are boxes until segmentation lands.** Boxes blur some background around each target.
 
 ## Repository layout
-*Planned; the code layout is decided in sprint planning. Today:*
+The backend and frontend live side by side, each with its own toolchain. The code layout and what goes in each folder are described in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#code-layout).
 
 ```
+backend/               Python backend (uv): pyproject.toml, uv.lock, src/vibe/, tests/
+frontend/              React + Vite + TS UI (npm), created by F-07
+package.json           root scripts: npm run dev / test / lint
+.github/workflows/     CI, one workflow per side
 README.md              this file
 CLAUDE.md              rules and reading map for Claude (loaded automatically)
 HANDOFF.md             how we work: branches, handoffs, versions
@@ -174,4 +178,14 @@ docs/
 3. Pick your assignment from the current sprint in [docs/ROADMAP.md](docs/ROADMAP.md), make a branch, and work.
 4. Run `/b-handoff` when you stop, then open a PR.
 
-How to run the app: *to be written once there's code.*
+### Run the app
+You need [uv](https://docs.astral.sh/uv/) and Node 22 LTS. No GPU is needed: AI modules default to the `stub` backend.
+
+```bash
+npm install            # once, for the root scripts
+npm run dev            # starts the backend at http://localhost:8000 (API docs at /docs)
+npm test               # backend tests
+npm run lint           # Ruff lint and format check
+```
+
+To work on the backend directly: `cd backend && uv sync`, then `uv run pytest`. Set `VIBE_BACKEND=local` or `remote` to use real models once they exist.
