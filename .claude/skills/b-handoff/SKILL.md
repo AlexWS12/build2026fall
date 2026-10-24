@@ -1,10 +1,10 @@
 ---
-name: handoff
+name: b-handoff
 description: Leave the current work ready for the next person. Runs the tests, writes or updates this branch's handoff entry in docs/handoffs/ (with base and head commit hashes), updates the owned feature rows in docs/ROADMAP.md, and commits them. Use when the user is stopping work, finishing a feature, or about to open a PR.
 disable-model-invocation: true
 ---
 
-# /handoff: leave the work ready for the next person
+# /b-handoff: leave the work ready for the next person
 
 The format and rules are in `HANDOFF.md` ("Handoff entries"). Follow them exactly.
 

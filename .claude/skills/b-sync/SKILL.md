@@ -1,9 +1,9 @@
 ---
-name: sync
+name: b-sync
 description: Catch up on the project before starting work. Fetches main, finds which handoff entries, contract changes and commits landed since the current branch started (or summarizes the current sprint if there's no branch), and reports the version, what's new, what affects this branch and what's next. Use at the start of a work session, or when asked "what's the current state", "what changed", "what should I work on".
 ---
 
-# /sync: catch up before working
+# /b-sync: catch up before working
 
 Read-only, except for `git fetch`. Never rebase, merge, pull into a branch with local changes, or edit files without asking.
 

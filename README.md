@@ -25,7 +25,7 @@ An agent turns each request into calls to a fixed toolbox of editing tools. The 
 | What's left to build, and the sprints | [docs/ROADMAP.md](docs/ROADMAP.md) |
 | How to start and finish work, handoffs, branches, versions | [HANDOFF.md](HANDOFF.md) |
 | What changed in each version | [CHANGELOG.md](CHANGELOG.md) |
-| What happened most recently, and what's next | the entries in [docs/handoffs/](docs/handoffs/), or run `/sync` in Claude Code |
+| What happened most recently, and what's next | the entries in [docs/handoffs/](docs/handoffs/), or run `/b-sync` in Claude Code |
 | How Claude should behave in this repo | [CLAUDE.md](CLAUDE.md) |
 
 ## Background
@@ -45,7 +45,7 @@ An agent turns each request into calls to a fixed toolbox of editing tools. The 
 - **Inference:** hybrid. A cloud LLM may be used for the agent and planner; heavy vision and audio models run on our own GPUs.
 - **Product:** a web app with a Python backend.
 - **Versioning:** SemVer tags, bumped at each sprint close, starting at `v0.1.0`. Every handoff records commit hashes.
-- **Handoffs:** each handoff is its own file in `docs/handoffs/`, read and written through the `/sync` and `/handoff` Claude commands.
+- **Handoffs:** each handoff is its own file in `docs/handoffs/`, read and written through the `/b-sync` and `/b-handoff` Claude commands.
 
 ## How it works (short version)
 
@@ -165,13 +165,13 @@ docs/
   ARCHITECTURE.md      layers, contract, live mode, decisions, open questions
   ROADMAP.md           feature backlog and sprints
   handoffs/            one file per handoff (current sprint); archive/ holds past sprints
-.claude/skills/        /sync, /handoff, /release for Claude Code
+.claude/skills/        /b-sync, /b-handoff, /b-release for Claude Code
 ```
 
 ## Getting started
 1. Clone the repo and open it in Claude Code.
-2. Run `/sync`. Claude summarizes the current state, what's new and what's next.
+2. Run `/b-sync`. Claude summarizes the current state, what's new and what's next.
 3. Pick your assignment from the current sprint in [docs/ROADMAP.md](docs/ROADMAP.md), make a branch, and work.
-4. Run `/handoff` when you stop, then open a PR.
+4. Run `/b-handoff` when you stop, then open a PR.
 
 How to run the app: *to be written once there's code.*

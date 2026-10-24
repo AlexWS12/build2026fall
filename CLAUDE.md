@@ -14,13 +14,13 @@ Don't guess about the project: read the file that answers the question.
 | Most recent work and what's next | `docs/handoffs/*.md` (current sprint), then `CHANGELOG.md` |
 | Reference MVP the design comes from | https://github.com/Edugre/KnightHacks-26 (read-only inspiration, not our codebase) |
 
-When someone asks a general question ("how does the project work?", "what's the scope?", "what should I do?"), answer from these files and cite them. When they're starting work, suggest `/sync`.
+When someone asks a general question ("how does the project work?", "what's the scope?", "what should I do?"), answer from these files and cite them. When they're starting work, suggest `/b-sync`.
 
 ## Rules
 
 **Workflow**
-- Never commit to `main` directly. Work on `<name>/<topic>` branches and merge through PRs (`HANDOFF.md`). The one exception is the sprint lead's release commit and tag (`/release`).
-- At the start of a work session, run or suggest `/sync`. Before the user stops, or when they say they're done, run or suggest `/handoff`.
+- Never commit to `main` directly. Work on `<name>/<topic>` branches and merge through PRs (`HANDOFF.md`). The one exception is the sprint lead's release commit and tag (`/b-release`).
+- At the start of a work session, run or suggest `/b-sync`. Before the user stops, or when they say they're done, run or suggest `/b-handoff`.
 - Keep `main` working: run the tests before every push, and rebase on `origin/main` before opening a PR.
 - Ask before pushing, force-pushing, tagging or rewriting history.
 - Commits are authored by the team member under their own git identity. Never add `Co-Authored-By: Claude` or any other Claude attribution, and never commit as Claude. Use type prefixes: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`.

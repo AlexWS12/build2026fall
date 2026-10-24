@@ -1,10 +1,10 @@
 ---
-name: release
+name: b-release
 description: Close a sprint. Rolls the sprint's handoff entries into CHANGELOG.md, archives them under docs/handoffs/archive/<version>/, closes the sprint in docs/ROADMAP.md, commits, and tags the new version. Only for the sprint lead at sprint close.
 disable-model-invocation: true
 ---
 
-# /release: close a sprint and tag the version
+# /b-release: close a sprint and tag the version
 
 The rules are in `HANDOFF.md` ("Versions" and "Sprint close"). Only the sprint lead runs this, on `main`.
 
