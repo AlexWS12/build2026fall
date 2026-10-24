@@ -4,7 +4,7 @@ date: 2026-10-24
 branch: eduardo/repo-skeleton
 features: [F-01]
 base: untagged @ 269de2f
-head: 34a89f1
+head: dc7bc9d
 status: ready for review
 ---
 
@@ -36,7 +36,7 @@ npm run dev      # then open http://localhost:8000/api/health -> {"status":"ok",
 ```
 Verified on 2026-10-24 (macOS, Apple Silicon, Python 3.12.12, Node 22.16) from a clean copy with no `.venv` or `node_modules`: `npm ci`, `uv sync --locked`, lint and tests all pass, and `npm run dev` serves the health route.
 
-**Not verified yet:** the GitHub Actions workflow has not run, because the branch isn't pushed. F-01's exit check ("tests pass on CI") is met once that run is green.
+**CI:** the `backend` workflow passed on PR #4 at `dc7bc9d` (ubuntu-24.04, no GPU, stub backend), so F-01's exit check is met. The first run failed only because `setup-uv@v10` doesn't exist (see Gotchas).
 
 ## Decisions made
 - **D-011 (Accepted):** sibling `backend/` and `frontend/` folders in one repo. The generated frontend types (D-009) need both sides in the same PR, and separate folders keep the toolchains apart. Python stays at 3.12 for now. A resolve check found current wheels for torch, PyAV, OpenCV, onnxruntime and faster-whisper on 3.14 too (Linux, Windows, macOS 14+), so 3.14 gets revisited after the R-3 model shortlist.
@@ -45,7 +45,7 @@ Verified on 2026-10-24 (macOS, Apple Silicon, Python 3.12.12, Node 22.16) from a
 - **The generated API types go to F-07 as an extra**, not into F-01.
 
 ## Next steps
-- Push, open the PR, and confirm the `backend` CI job passes. Then set F-01 to `done` in `docs/ROADMAP.md`.
+- PR #4 is open with CI green, and F-01 is marked `done` in `docs/ROADMAP.md`. It needs a review and then a merge.
 - Post the shared-files heads-up, and get D-012 confirmed.
 - F-02, F-03, F-06 and F-08 can now start in their `backend/src/vibe/<layer>/` folders. F-07 creates `frontend/`, adds `dev:frontend` to the root `package.json`, and adds `frontend.yml`.
 
