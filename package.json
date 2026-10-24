@@ -1,0 +1,14 @@
+{
+  "name": "build2026fall",
+  "private": true,
+  "description": "Root scripts: `npm run dev` starts every part of the app. F-07 adds the frontend here.",
+  "scripts": {
+    "dev": "concurrently --kill-others-on-fail --names backend --prefix-colors blue \"npm:dev:backend\"",
+    "dev:backend": "uv run --directory backend uvicorn vibe.api.app:app --reload --port 8000",
+    "test": "uv run --directory backend pytest",
+    "lint": "uv run --directory backend ruff check && uv run --directory backend ruff format --check"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6"
+  }
+}
