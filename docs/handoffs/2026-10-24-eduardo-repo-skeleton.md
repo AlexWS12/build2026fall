@@ -53,4 +53,4 @@ Verified on 2026-10-24 (macOS, Apple Silicon, Python 3.12.12, Node 22.16) from a
 - **pytest prints a warning:** Starlette says using `httpx` with its test client is deprecated and suggests a package called `httpx2`. It wasn't installed, because that name came only from the warning and hasn't been checked. The tests pass. Whoever looks into it should confirm the package is legitimate first.
 - **Run uv commands from `backend/`**, or use `uv run --directory backend ...` (the root npm scripts already do). Running `uv` at the repo root finds no project.
 - **Mac teammates on macOS 13 or older** get older torch and onnxruntime wheels, since the current ones need macOS 14+.
-- `astral-sh/setup-uv@v10` is pinned to a major version, and its latest release (10.3.2) is from 2026-10-22.
+- `astral-sh/setup-uv` publishes exact tags only, so the workflow pins `v10.3.2` (released 2026-10-22). A floating `@v10` fails to resolve; that broke the first CI run.
