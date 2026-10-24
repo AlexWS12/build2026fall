@@ -149,7 +149,7 @@ The timeline is an **append-only op log** plus a **derived state** computed by f
 
 **Contract rules:**
 - **It has its own `schema_version`, separate from the app version.** Any change that breaks a reader or writer bumps it.
-- **A contract change needs a heads-up to the team before merging**, an entry in the decisions log, and updated examples and tests. `/sync` flags contract changes to everyone.
+- **A contract change needs a heads-up to the team before merging**, an entry in the decisions log, and updated examples and tests. `/b-sync` flags contract changes to everyone.
 - **Stubs and tests are built from hand-written example timelines.**
 
 ## Live mode

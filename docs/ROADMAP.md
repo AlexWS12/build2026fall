@@ -1,6 +1,6 @@
 # Roadmap
 
-> **Status (2026-10-23):** the backlog is drafted; **no sprints are planned yet.** Planning the sprints is the next task, and anyone can pick it up: run `/sync`, read this file plus the README and ARCHITECTURE, then fill in [Sprints](#sprints).
+> **Status (2026-10-23):** the backlog is drafted; **no sprints are planned yet.** Planning the sprints is the next task, and anyone can pick it up: run `/b-sync`, read this file plus the README and ARCHITECTURE, then fill in [Sprints](#sprints).
 
 ## How this file works
 - **Backlog** lists every feature we know of, with an ID. IDs never change or get reused, so handoffs, branches and PRs can refer to them (`F-32`).

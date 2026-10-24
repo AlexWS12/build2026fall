@@ -1,28 +1,28 @@
 # How we work: branches, handoffs, versions
 
 There are 10 people, each working in parallel with Claude. The rules below make two things true:
-1. **Anyone can start work and get the current state in one command** (`/sync`).
-2. **Anyone can stop work and leave it ready for the next person in one command** (`/handoff`).
+1. **Anyone can start work and get the current state in one command** (`/b-sync`).
+2. **Anyone can stop work and leave it ready for the next person in one command** (`/b-handoff`).
 
-The `/sync`, `/handoff` and `/release` commands live in `.claude/skills/` and run in Claude Code. Each one follows the steps written here, so if a command isn't available you can do the same steps by hand.
+The `/b-sync`, `/b-handoff` and `/b-release` commands live in `.claude/skills/` and run in Claude Code. Each one follows the steps written here, so if a command isn't available you can do the same steps by hand.
 
 ## The loop
 
 ```
- /sync  ──►  branch from main  ──►  work + commit  ──►  /handoff  ──►  PR  ──►  merge to main
-   ▲                                                                                │
-   └────────────────────────── next person (or you, tomorrow) ─────────────────────┘
+ /b-sync  ──►  branch from main  ──►  work + commit  ──►  /b-handoff  ──►  PR  ──►  merge to main
+   ▲                                                                                    │
+   └────────────────────────── next person (or you, tomorrow) ─────────────────────────┘
 ```
 
-1. **Start:** run `/sync`. Claude fetches `main` and tells you the current version, what changed since your branch started (or this sprint's handoffs, if you have no branch), whether the contract changed, and what's next for you in [docs/ROADMAP.md](docs/ROADMAP.md).
+1. **Start:** run `/b-sync`. Claude fetches `main` and tells you the current version, what changed since your branch started (or this sprint's handoffs, if you have no branch), whether the contract changed, and what's next for you in [docs/ROADMAP.md](docs/ROADMAP.md).
 2. **Branch:** branch from an up-to-date `main` as `<your-name>/<topic>`, e.g. `maria/audio-mute`, `jose/cut-tool`. One branch per feature or piece of one.
 3. **Work:** commit often. Commit messages use a type prefix: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`, e.g. `feat: mute a time range`.
-4. **Stop:** run `/handoff` whenever you stop for a while, not only when the feature is done. It runs the tests, writes your handoff entry, and updates your feature's status in the roadmap.
+4. **Stop:** run `/b-handoff` whenever you stop for a while, not only when the feature is done. It runs the tests, writes your handoff entry, and updates your feature's status in the roadmap.
 5. **PR:** before opening a PR, rebase on the latest `main` (`git pull --rebase origin main`) and make sure the tests pass. The PR includes your handoff entry. At least one other person reviews it.
 6. **`main` always works.** Never push straight to `main` (the only exception is the sprint lead's release commit and tag). If your change breaks `main`, fixing it comes before anything else.
 
 ## Shared files
-Some files every feature depends on. **Post in the team chat before changing them**, and expect `/sync` to flag them to everyone:
+Some files every feature depends on. **Post in the team chat before changing them**, and expect `/b-sync` to flag them to everyone:
 - the edit timeline contract (its definition in code once it exists; today, "The contract" in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md));
 - the toolbox's tool names and arguments;
 - the API routes between UI and backend;
@@ -44,10 +44,10 @@ docs/handoffs/2026-10-26-ana-ui-timeline.md
 File name: `YYYY-MM-DD-<name>-<topic>.md`. **Never edit someone else's entry.** If you take over their work, write your own entry and link theirs.
 
 ### Lifecycle
-1. **Written** on your branch by `/handoff`. Running it again on the same day updates your entry instead of creating a new one.
+1. **Written** on your branch by `/b-handoff`. Running it again on the same day updates your entry instead of creating a new one.
 2. **Merged** to `main` with your PR.
-3. **Read** by everyone's `/sync` during the sprint.
-4. **Archived at sprint close** by `/release`: the sprint's entries are summarized into [CHANGELOG.md](CHANGELOG.md) and moved to `docs/handoffs/archive/vX.Y.Z/`. They're never deleted; the archive answers "why did we do it this way?" later.
+3. **Read** by everyone's `/b-sync` during the sprint.
+4. **Archived at sprint close** by `/b-release`: the sprint's entries are summarized into [CHANGELOG.md](CHANGELOG.md) and moved to `docs/handoffs/archive/vX.Y.Z/`. They're never deleted; the archive answers "why did we do it this way?" later.
 
 So `docs/handoffs/` only ever holds the current sprint's entries.
 
@@ -98,7 +98,7 @@ status: in progress | ready for review | done | blocked
 
 The edit timeline contract has its **own** `schema_version`, separate from the app version (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)).
 
-### Sprint close (`/release`)
+### Sprint close (`/b-release`)
 Done by the sprint lead, on an up-to-date `main`:
 1. Summarize the sprint's handoff entries into a new `## [0.N.0] - YYYY-MM-DD` section of [CHANGELOG.md](CHANGELOG.md), under Added / Changed / Fixed / Removed.
 2. Move the entries to `docs/handoffs/archive/v0.N.0/`.
