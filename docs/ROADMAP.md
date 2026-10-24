@@ -16,7 +16,7 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 ### Foundation (needed before features can be built in parallel)
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
-| F-01 | Repo skeleton: backend package, test runner, stub mode, one-command run | Must | – | idea | Decide the code layout here |
+| F-01 | Repo skeleton: backend package, test runner, stub mode, one-command run | Must | – | in progress | Decide the code layout here |
 | F-02 | Edit timeline contract v0 in code: op models, fold, undo, generated schema, example timelines | Must | – | idea | ARCHITECTURE "The contract". Unblocks everyone |
 | F-03 | Video I/O: probe, decode frames, frame↔time, audio extraction | Must | F-01 | idea | |
 | F-04 | Renderer: export path (ffmpeg) + per-frame path, shared effect code | Must | F-02, F-03 | idea | The per-frame path is required for live later |
@@ -126,7 +126,7 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 **Build (foundation)**
 | Card | Owner | Branch | Exit check | Status |
 |---|---|---|---|---|
-| F-01 Repo skeleton: backend package, uv project (D-010), pytest in stub mode, lint (Ruff), GitHub Actions CI, one-command run | _open_ | | Fresh clone → `uv sync` → tests pass on CI with no GPU | planned |
+| F-01 Repo skeleton: backend package, uv project (D-010), pytest in stub mode, lint (Ruff), GitHub Actions CI, one-command run | eduardo | eduardo/repo-skeleton | Fresh clone → `uv sync` → tests pass on CI with no GPU | in progress |
 | F-02 Contract v0 in code: op models, fold, undo, generated JSON schema, example timelines. **Highest priority: everyone in Sprint 2 builds on it** | _open_ | | Example timelines validate. Fold and undo tests pass. `schema_version` set | planned |
 | F-03 Video I/O: probe, decode frames, frame↔time, audio extraction | _open_ | | Tests pass on a tiny clip that ffmpeg generates during the test (no video is committed) | planned |
 | F-06 Toolbox scaffolding: typed tool schemas, registry, stub tools, CLI per tool (starts from the F-02 draft) | _open_ | | `<tool> --help` lists tools. A stub tool writes a valid op to an example timeline | planned |
