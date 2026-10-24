@@ -141,7 +141,8 @@ These hold whatever stack we pick.
 | Speech | Whisper / faster-whisper (transcripts, word timestamps) | Enables cut-by-transcript |
 | Speakers | pyannote (diarization), speech separation models | "Mute this person" |
 | Noise | DeepFilterNet, Demucs, RNNoise | "Remove the background noise" |
-| Frontend | Web: React + Vite, or plain JS (as Knight Hacks did) | Player, chat, timeline, review |
+| Frontend | **Decided (D-009):** React + Vite + TypeScript | Player, chat, timeline, review; types generated from the backend's OpenAPI schema |
+| Environment and packaging | **Decided (D-010):** uv (pinned Python, committed `uv.lock`) | GPU packages in an optional dependency group |
 | Compute | Reference machine: an RTX 5070 (Alex); everyone else from CPU-only laptops up; rented GPU optional | Prefer models with small or quantized variants. See ARCHITECTURE "Compute" |
 
 ## Limitations and risks we expect

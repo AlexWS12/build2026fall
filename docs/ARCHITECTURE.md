@@ -197,13 +197,14 @@ Add a row when something gets decided. **"Accepted" means "what we're going with
 | D-006 | 2026-10-23 | Template parser for plain requests + one LLM call writing a JSON plan for the rest | Proposed | Carried over from Knight Hacks; confirm once the toolbox is defined |
 | D-007 | 2026-10-23 | Live mode is the top-priority stretch; the contract has standing rules and the renderer a per-frame path from v0 | Accepted | Keeps live possible without building it first |
 | D-008 | 2026-10-23 | Compute tiers: every AI module has `stub` / `local` / `remote` backends; the analysis cache is shareable; the RTX 5070 is the reference machine for benchmarks | Accepted | Team hardware ranges from CPU-only laptops to one RTX 5070; nobody should be blocked |
+| D-009 | 2026-10-24 | Frontend: React + Vite + TypeScript; frontend types generated from the backend's OpenAPI schema | Accepted | The timeline, review queue and box editing are state-heavy UI shared by 10 people; typed components catch contract mismatches at build time |
+| D-010 | 2026-10-24 | Python environments and dependencies are managed with uv (pinned Python version, one committed `uv.lock`) | Accepted | One fast, reproducible install for everyone; optional dependency groups keep GPU-only packages (PyTorch `cu128`) off CPU-only laptops |
 
 ## Open questions
 - **Compute:** confirm the 5070's VRAM (12 GB desktop or 8 GB laptop). Does anyone else have a GPU worth listing? Are university HPC, club hardware or cloud credits available for tier 3? Should the 5070 host a shared model server, and when would it be on?
-- Which LLM for the planner, and its cost per request?
+- Which LLM for the planner, and its cost per request? Team decision; candidates are Claude Opus 5 (`claude-opus-5`) and Claude Sonnet 5 (`claude-sonnet-5`), ideally compared on the F-09 request set.
 - May frames or footage go to a cloud model (e.g. so the planner can see the scene), or only text and metadata?
 - Boxes or segmentation masks from the start?
-- How is the analysis cache stored (files per video, a database)?
+- How is the analysis cache stored (files per video, a database)? Team decision; the Sprint 1 candidate is one folder per project (`timeline.jsonl` op log plus `cache/` keyed by video hash), which also makes the cache easy to share.
 - What does "fix by hand" look like for audio edits?
-- Frontend: React + Vite, or plain JS?
 - Live: virtual camera tooling per OS; browser vs local helper process.
