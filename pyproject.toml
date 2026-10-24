@@ -1,0 +1,8 @@
+[project]
+name = "build2026fall"
+# Releases are versioned by git tags at sprint close (HANDOFF.md, "Versions"), not here.
+version = "0.0.0"
+description = "Vibe Editing Agent: edit video by chatting with an agent that calls typed editing tools."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = []
