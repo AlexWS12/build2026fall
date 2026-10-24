@@ -1,6 +1,6 @@
 # Roadmap
 
-> **Status (2026-10-23):** the backlog is drafted; **no sprints are planned yet.** Planning the sprints is the next task, and anyone can pick it up: run `/b-sync`, read this file plus the README and ARCHITECTURE, then fill in [Sprints](#sprints).
+> **Status (2026-10-24):** sprints are weekly, and **demo day is 2026-12-04**. **Sprint 1 (2026-10-20 → 2026-10-27) is planned, and its cards are open to claim.** See [Sprints](#sprints).
 
 ## How this file works
 - **Backlog** lists every feature we know of, with an ID. IDs never change or get reused, so handoffs, branches and PRs can refer to them (`F-32`).
@@ -86,20 +86,78 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 - **Schedule F-50 (live feasibility) early**, even though live is a stretch. It's the top-priority stretch, and we need its numbers to know whether it's realistic.
 - **Compute (F-08) early.** Most of the team will be on laptops (ARCHITECTURE "Compute"). Assign GPU-heavy work (model evaluation, benchmarks, F-50) to whoever has a GPU or access to the 5070; everyone else builds on stubs and the shared analysis cache. Ask each person what GPU they have when assigning.
 - **Every feature should end with an exit check:** a command or demo someone can run to see it work, recorded in the handoff.
-- Sprint length and sprint dates aren't decided yet. Pick them when planning.
+- Sprints are one week long, Tuesday → Tuesday, starting 2026-10-20. Each Tuesday closes one sprint and starts the next. The last sprint is cut short to end the day before demo day (see [Schedule](#schedule)).
+- **Members claim cards; nobody is assigned.** The planner lists the cards, and each person picks the ones they want (see [Claiming a card](#claiming-a-card)).
 
 ## Sprints
-*None planned yet.* Copy the template below for each sprint, newest at the bottom.
+### Schedule
+Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts the next. Each close tags the next minor version (`/b-release`). **Demo day is Friday 2026-12-04.**
+
+| Sprint | Dates | Version at close | Rough focus (tentative, re-plan each week) |
+|---|---|---|---|
+| 1 | 2026-10-20 → 2026-10-27 | v0.1.0 | Foundation against stubs + settle the open stack questions |
+| 2 | 2026-10-27 → 2026-11-03 | v0.2.0 | First end-to-end path: request → plan → toolbox → timeline → render (renderer F-04, planner F-05) |
+| 3 | 2026-11-03 → 2026-11-10 | v0.3.0 | Core Must edits (blur, cut, mute, noise reduction) on real models |
+| 4 | 2026-11-10 → 2026-11-17 | v0.4.0 | Human in the loop (review queue, hand fixes, undo) + Should features. Decide on live mode, based on the F-50 numbers |
+| 5 | 2026-11-17 → 2026-11-24 | v0.5.0 | Stretches (live first) |
+| 6 | 2026-11-24 → 2026-12-01 | v0.6.0 | Stretches + hardening. **Short week: Thanksgiving is 2026-11-26** |
+| 7 | 2026-12-01 → 2026-12-03 | v0.7.0 | **3-day demo sprint:** feature freeze, bug fixes, demo script and clips, rehearsal |
+
+### Claiming a card
+- Each row in a sprint table is a card. An `_open_` owner means nobody has claimed it yet.
+- To claim a card, put your name and branch in its row: either in a one-line PR, or in the first PR for that card. Say so in the team chat too, so two people don't start the same card.
+- A card can be split between two people, by files rather than by sharing them. Add a row for each part, e.g. `F-07 (chat panel)`.
+- **Research cards** end in a decision: a new row in the decisions log in [ARCHITECTURE.md](ARCHITECTURE.md#decisions-log) (proposed to the team before it's accepted), plus a short write-up in your handoff entry. Any number in a write-up comes from a script, with the hardware stated.
+
+### Sprint 1: foundation + stack decisions   (2026-10-20 → 2026-10-27)  · version at close: v0.1.0
+
+**Goal:** by Tuesday 2026-10-27, the open stack questions are decided and logged. Also by Tuesday, the contract v0 exists in code, with a repo skeleton anyone can install with uv and test in stub mode. That way Sprint 2 can build the first end-to-end path in parallel against stubs.
+
+**Sprint lead:** Alex or Eduardo.
+
+**Research (settle open questions)**
+| Card | Owner | Branch | Exit check | Status |
+|---|---|---|---|---|
+| R-1 Planner LLM: **open choice** between any AI provider's hosted model (Anthropic, OpenAI, Google, ...) or an open-weight model run on our own hardware. Shortlist a few, then compare them on a draft request set of ~20 requests (shared with F-09). Also decide which requests the template parser should take | _open_ | | Script output with plan validity, latency and cost per request (or the hardware needed, for open models) for each candidate → decision row | planned |
+| R-2 Project storage and analysis cache: one folder per project (`timeline.jsonl` + `cache/` keyed by video hash) vs a database | _open_ | | Decision row, with the folder layout written down for F-02/F-08 | planned |
+| R-3 Detection, tracking and identity model shortlist for F-10/F-50/F-52, **with licenses** (e.g. RT-DETR, YOLOX, EgoBlur, YOLOE, SAM 2, face embedders). Avoid AGPL unless the team agrees | _open_ | | Shortlist table (model, task, license, weights size, CUDA 12.8 support) → decision row | planned |
+| R-4 Data policy and target shape: may frames go to a cloud model, or only text and metadata? Boxes or segmentation masks from the start? | _open_ | | Two decision rows. Both open questions closed in ARCHITECTURE | planned |
+
+**Build (foundation)**
+| Card | Owner | Branch | Exit check | Status |
+|---|---|---|---|---|
+| F-01 Repo skeleton: backend package, uv project (D-010), pytest in stub mode, lint (Ruff), GitHub Actions CI, one-command run | _open_ | | Fresh clone → `uv sync` → tests pass on CI with no GPU | planned |
+| F-02 Contract v0 in code: op models, fold, undo, generated JSON schema, example timelines. **Highest priority: everyone in Sprint 2 builds on it** | _open_ | | Example timelines validate. Fold and undo tests pass. `schema_version` set | planned |
+| F-03 Video I/O: probe, decode frames, frame↔time, audio extraction | _open_ | | Tests pass on a tiny clip that ffmpeg generates during the test (no video is committed) | planned |
+| F-06 Toolbox scaffolding: typed tool schemas, registry, stub tools, CLI per tool (starts from the F-02 draft) | _open_ | | `<tool> --help` lists tools. A stub tool writes a valid op to an example timeline | planned |
+| F-07 Web UI shell: React + Vite + TS (D-009), with upload, chat, player and timeline view placeholders against a mocked API | _open_ | | `npm run dev` shows the shell. Vitest passes | planned |
+| F-08 Compute setup: `stub`/`local`/`remote` backend interface, model download script, install notes per tier, **plus the team GPU survey** (who has what, and the 5070's VRAM) | _open_ | | Stub backend replays a cached result in a test. Survey table added to ARCHITECTURE "Compute" | planned |
+| F-09 Benchmark harness, first cut: consented test clips + manifest, label format, request set, report script | _open_ | | `report` script runs on the stub backend and prints a table. Clips are listed in the manifest (not committed) | planned |
+| F-50 Live feasibility spike: per-frame latency of detector + tracker + identity check at 720p/1080p, **on the RTX 5070** (needs whoever has it, or remote access) | _open_ | | Script output with fps and latency per stage, hardware stated. Uses R-3 candidates | planned |
+
+**Risks / dependencies:**
+- F-02 gates F-06 and all of Sprint 2. If it isn't merged by midweek, F-06 builds on the draft branch.
+- F-01 builds on the proposed Sprint 1 stack (see the stack-sprint1 handoff). The team is close to settling it, and any change gets logged as a decision row.
+- R-1 needs the request set that F-09 drafts. R-1 can write its own draft set first, and F-09 adopts it.
+- F-50 can only run on the RTX 5070. If nobody with access claims it, it slips to Sprint 2, which still leaves time for the Sprint 4 live decision.
+- Shared files (contract, dependency files, CI): post in the team chat before merging (HANDOFF.md, "Shared files").
+- F-04 (renderer) and F-05 (planner) are left for Sprint 2 on purpose: they depend on F-02 and R-1. Anyone who finishes early can draft them against the contract.
+
+**Closed:** (filled in at sprint close: what shipped, what moved to the next sprint)
 
 ### Sprint template
+Copy this for each new sprint, above this template, so the newest sprint is last.
+
 ```markdown
 ### Sprint N: <goal in a few words>   (YYYY-MM-DD → YYYY-MM-DD)  · version at close: v0.N.0
 
 **Goal:** one or two sentences on what's true at the end of this sprint.
 
-| Person | Feature(s) | Branch | Exit check | Status |
+**Sprint lead:** <name>
+
+| Card | Owner | Branch | Exit check | Status |
 |---|---|---|---|---|
-| <name> | F-xx (part) | <name>/<topic> | <how anyone can see it works> | planned |
+| F-xx (part) or R-x <question> | _open_ or <name> | <name>/<topic> | <how anyone can see it works> | planned |
 
 **Risks / dependencies:** ...
 **Closed:** (filled in at sprint close: what shipped, what moved to the next sprint)
