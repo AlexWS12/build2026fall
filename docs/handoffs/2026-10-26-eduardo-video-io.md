@@ -57,7 +57,7 @@ Verified on 2026-10-26 (macOS, Apple Silicon, Python 3.12.12, ffmpeg 8.0.1 CLI, 
 - `FrameIndex` is cheap to rebuild, but it could be saved in the analysis cache once R-2 decides how the cache is stored.
 
 ## Gotchas
-- **CI's ffmpeg is Ubuntu's 6.1.1**, while local testing used 8.0.1. Every fixture flag works on both, including `-display_rotation`, which needs ffmpeg 6.0 or newer.
+- **CI's ffmpeg is Ubuntu's 6.1.1**, while local testing used 8.0.1. Every fixture flag works on both, including `-display_rotation`.
 - **Rotation isn't exposed on the stream in PyAV 19.** `probe` reads it from the first decoded frame, which also catches files whose header looks fine but whose video won't decode.
 - **Lossless H.264 (`-qp 0`) ignores `-bf`**, so the B-frame fixture is a separate, lossy clip.
 - **Brightness has to stay inside video range (16–235)**, or the lowest frames all decode as black. The fixtures use luma 16 + 3n.
