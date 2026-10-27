@@ -182,11 +182,13 @@ docs/
 You need [uv](https://docs.astral.sh/uv/) and Node 22 LTS. No GPU is needed: AI modules default to the `stub` backend.
 
 ```bash
-npm install            # once, for the root scripts
-npm run dev            # starts the backend at http://localhost:8000 (API docs at /docs)
-npm test               # backend tests
-npm run lint           # Ruff lint and format check
+npm install            # once: root scripts, then the frontend's packages
+npm run dev            # the UI at http://localhost:5173 and the backend at http://localhost:8000 (API docs at /docs)
+npm test               # backend tests, then frontend tests
+npm run lint           # Ruff lint and format check, then oxlint and the TypeScript check
 ```
+
+The UI runs against a mock API by default, so it works before the backend's routes exist. Set `VITE_API_MODE=http` to use the real backend through the `/api` proxy. Each side also has its own scripts: `test:backend`, `test:frontend`, `lint:backend`, `lint:frontend`.
 
 The video tests generate tiny clips with the [ffmpeg](https://ffmpeg.org/) command line, so install it to run them: `brew install ffmpeg` (Mac), `winget install ffmpeg` (Windows), or `sudo apt install ffmpeg` (Linux). Without it those tests are skipped; CI installs it and fails instead. The app itself reads video through PyAV, which bundles its own ffmpeg libraries. To check a clip by hand: `uv run --directory backend python -m vibe.video probe path/to/clip.mp4`.
 

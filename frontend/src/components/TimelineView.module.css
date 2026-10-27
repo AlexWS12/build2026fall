@@ -1,0 +1,90 @@
+.timeline {
+  --name-width: 104px;
+}
+
+.empty {
+  margin: 0;
+  color: var(--muted);
+}
+
+.axis {
+  position: relative;
+  height: 18px;
+  margin-left: var(--name-width);
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.axis span {
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.axis span:first-child {
+  transform: none;
+}
+
+.axis span:last-child {
+  transform: translateX(-100%);
+}
+
+.lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lane {
+  display: flex;
+  align-items: center;
+}
+
+.laneName {
+  flex: 0 0 var(--name-width);
+  overflow: hidden;
+  font-size: 0.85rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track {
+  position: relative;
+  flex: 1;
+  height: 20px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--sunken);
+}
+
+.span {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 3px;
+  box-shadow: inset -1px 0 0 var(--surface);
+}
+
+.mask {
+  background: var(--lane-mask);
+}
+
+.cut {
+  background: var(--lane-cut);
+}
+
+.mute {
+  background: var(--lane-mute);
+}
+
+.filter {
+  background: var(--lane-filter);
+}
+
+.rules {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
