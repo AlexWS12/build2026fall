@@ -119,7 +119,7 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 | Card | Owner | Branch | Exit check | Status |
 |---|---|---|---|---|
 | R-1 Planner LLM: **open choice** between any AI provider's hosted model (Anthropic, OpenAI, Google, ...) or an open-weight model run on our own hardware. Shortlist a few, then compare them on a draft request set of ~20 requests (shared with F-09). Also decide which requests the template parser should take | _open_ | | Script output with plan validity, latency and cost per request (or the hardware needed, for open models) for each candidate → decision row | planned |
-| R-2 Project storage and analysis cache: one folder per project (`timeline.jsonl` + `cache/` keyed by video hash) vs a database | _open_ | | Decision row, with the folder layout written down for F-02/F-08 | planned |
+| R-2 Project storage and analysis cache: one folder per project (`timeline.jsonl` + `cache/` keyed by video hash) vs a database | alex | alex/storage | Decision row, with the folder layout written down for F-02/F-08 | in progress |
 | R-3 Detection, tracking and identity model shortlist for F-10/F-50/F-52, **with licenses** (e.g. RT-DETR, YOLOX, EgoBlur, YOLOE, SAM 2, face embedders). Avoid AGPL unless the team agrees | _open_ | | Shortlist table (model, task, license, weights size, CUDA 12.8 support) → decision row | planned |
 | R-4 Data policy and target shape: may frames go to a cloud model, or only text and metadata? Boxes or segmentation masks from the start? | _open_ | | Two decision rows. Both open questions closed in ARCHITECTURE | planned |
 
