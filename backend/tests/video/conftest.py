@@ -67,7 +67,7 @@ def vfr_clip(clip_dir: Path, main_clip: Path) -> Path:
     _ffmpeg(
         "-i", str(main_clip),
         "-vf", f"select='not(eq(mod(n\\,{VFR_DROP})\\,2))'", "-fps_mode", "passthrough",
-        "-an", "-c:v", "libx264", "-qp", "0",
+        "-an", "-c:v", "libx264", "-qp", "0", "-g", str(GOP),
         str(path),
     )  # fmt: skip
     return path
@@ -89,7 +89,11 @@ def bframes_clip(clip_dir: Path) -> Path:
 def webm_clip(clip_dir: Path, main_clip: Path) -> Path:
     """The main clip as lossless VP9 in WebM: 1 ms timestamps and no frame count in the header."""
     path = clip_dir / "main.webm"
-    _ffmpeg("-i", str(main_clip), "-an", "-c:v", "libvpx-vp9", "-lossless", "1", str(path))
+    _ffmpeg(
+        "-i", str(main_clip),
+        "-an", "-c:v", "libvpx-vp9", "-lossless", "1", "-g", str(GOP),
+        str(path),
+    )  # fmt: skip
     return path
 
 
@@ -102,10 +106,11 @@ def silent_clip(clip_dir: Path, main_clip: Path) -> Path:
 
 
 @pytest.fixture(scope="session")
-def rotated_clip(clip_dir: Path, main_clip: Path) -> Path:
-    """The main clip tagged as rotated 90°, like a portrait phone recording."""
+def rotated_clip(clip_dir: Path, bframes_clip: Path) -> Path:
+    """The B-frames clip (a test pattern, so orientation shows) tagged as rotated 90°, like a
+    portrait phone recording."""
     path = clip_dir / "rotated.mp4"
-    _ffmpeg("-display_rotation", "90", "-i", str(main_clip), "-c", "copy", str(path))
+    _ffmpeg("-display_rotation", "90", "-i", str(bframes_clip), "-c", "copy", str(path))
     return path
 
 

@@ -6,7 +6,7 @@ from pathlib import Path
 import av
 import numpy as np
 import pytest
-from clip_spec import FPS, FRAMES, SECONDS, VFR_DROP
+from clip_spec import FPS, FRAMES, GOP, SECONDS, VFR_DROP
 
 from vibe.video import FrameIndex, NoVideoStream, UnreadableMedia
 
@@ -90,12 +90,39 @@ def test_times_are_read_only(main_clip: Path) -> None:
         index.times[0] = 1.0
 
 
+def test_keyframes(main_clip: Path) -> None:
+    index = FrameIndex.build(main_clip)
+    assert index.keyframes.tolist() == list(range(0, FRAMES, GOP))
+    assert index.keyframe_before(0) == 0
+    assert index.keyframe_before(GOP - 1) == 0
+    assert index.keyframe_before(GOP) == GOP
+    assert index.keyframe_before(GOP * 2 + 5) == GOP * 2
+    with pytest.raises(IndexError):
+        index.keyframe_before(FRAMES)
+
+
+@pytest.mark.parametrize("clip", ["main_clip", "bframes_clip"])
+def test_pts_of(clip: str, request: pytest.FixtureRequest) -> None:
+    path = request.getfixturevalue(clip)
+    with av.open(str(path)) as container:
+        pts = sorted(p.pts for p in container.demux(video=0) if p.size)
+    index = FrameIndex.build(path)
+    assert [index.pts_of(i) for i in range(len(index))] == pts
+
+
 def test_from_pts_table() -> None:
     # Timestamps that don't start at 0 are shifted so the first frame is at 0 s.
     index = FrameIndex(np.array([200, 100, 300]), Fraction(1, 100), last_duration=100)
     assert index.times.tolist() == [0.0, 1.0, 2.0]
     assert index.end == 3.0
     assert index.frame_at(1.5) == 1
+    assert index.pts_of(0) == 100, "raw timestamps are kept for seeking"
+    assert index.keyframes.tolist() == [0], "without keyframe info, only frame 0 is one"
+
+
+def test_rejects_unknown_keyframe() -> None:
+    with pytest.raises(ValueError):
+        FrameIndex(np.array([0, 1, 2]), Fraction(1, 30), last_duration=1, keyframe_pts=[5])
 
 
 def test_errors(audio_only: Path, junk_file: Path) -> None:
