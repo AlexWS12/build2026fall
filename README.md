@@ -190,6 +190,15 @@ npm run lint           # Ruff lint and format check, then oxlint and the TypeScr
 
 The UI runs against a mock API by default, so it works before the backend's routes exist. Set `VITE_API_MODE=http` to use the real backend through the `/api` proxy. Each side also has its own scripts: `test:backend`, `test:frontend`, `lint:backend`, `lint:frontend`.
 
+The UI's API types are generated from the backend's OpenAPI spec, which is committed as `backend/src/vibe/api/openapi.json` so the frontend never needs Python. After changing a route or a response model, regenerate both and commit them:
+
+```bash
+uv run --directory backend python -m vibe.api   # writes openapi.json (--check only checks it)
+npm --prefix frontend run gen:api               # writes frontend/src/api/generated/ from it
+```
+
+A backend test fails if the spec is stale, and frontend CI fails if the generated types are.
+
 The video tests generate tiny clips with the [ffmpeg](https://ffmpeg.org/) command line, so install it to run them: `brew install ffmpeg` (Mac), `winget install ffmpeg` (Windows), or `sudo apt install ffmpeg` (Linux). Without it those tests are skipped; CI installs it and fails instead. The app itself reads video through PyAV, which bundles its own ffmpeg libraries. To check a clip by hand: `uv run --directory backend python -m vibe.video probe path/to/clip.mp4`.
 
 To work on the backend directly: `cd backend && uv sync`, then `uv run pytest`. Set `VIBE_BACKEND=local` or `remote` to use real models once they exist.
