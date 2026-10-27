@@ -6,3 +6,7 @@ import { afterEach } from 'vitest'
 afterEach(() => {
   cleanup()
 })
+
+// jsdom has no object URLs; the player only needs a string to put in <video src>.
+URL.createObjectURL ??= () => 'blob:test'
+URL.revokeObjectURL ??= () => {}

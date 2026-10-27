@@ -1,10 +1,19 @@
 :root {
   --text: #1f1d24;
   --muted: #6b6375;
-  --bg: #fff;
-  --border: #e5e4e7;
+  --bg: #f6f5f8;
+  --surface: #fff;
+  --sunken: #eeedf1;
+  --border: #e2e0e6;
+  --accent: #5b4bd6;
+  --ok: #1f7a4d;
+  --danger: #b3261e;
+  --lane-mask: #7c6cf0;
+  --lane-cut: #d0453f;
+  --lane-mute: #d18b1f;
+  --lane-filter: #2f8f8a;
 
-  font: 16px/1.5 system-ui, 'Segoe UI', Roboto, sans-serif;
+  font: 15px/1.5 system-ui, 'Segoe UI', Roboto, sans-serif;
   color-scheme: light dark;
   color: var(--text);
   background: var(--bg);
@@ -14,11 +23,21 @@
   :root {
     --text: #f3f1f6;
     --muted: #a39dab;
-    --bg: #16151a;
+    --bg: #121116;
+    --surface: #1b1a20;
+    --sunken: #26242c;
     --border: #2e2c34;
+    --accent: #7d6ff0;
+    --ok: #5cc794;
+    --danger: #f2827a;
   }
 }
 
 body {
   margin: 0;
+}
+
+input,
+button {
+  font: inherit;
 }

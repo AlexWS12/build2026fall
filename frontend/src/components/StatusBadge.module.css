@@ -1,0 +1,17 @@
+.badge {
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.ok {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.down {
+  border-color: var(--danger);
+  color: var(--danger);
+}

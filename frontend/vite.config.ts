@@ -1,6 +1,6 @@
 /// <reference types="vitest/config" />
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig, searchForWorkspaceRoot } from 'vite'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -9,6 +9,10 @@ export default defineConfig({
     // The browser talks to one address: /api goes to the backend (docs/ARCHITECTURE.md, "Code layout").
     proxy: {
       '/api': 'http://localhost:8000',
+    },
+    fs: {
+      // The mock API serves the contract's example states straight from the backend.
+      allow: [searchForWorkspaceRoot(process.cwd()), '../backend/src/vibe/contract/examples'],
     },
   },
   test: {
