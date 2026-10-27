@@ -7,7 +7,8 @@ from pathlib import Path
 import av
 import av.error
 
-from vibe.video.errors import NoVideoStream, UnreadableMedia
+from vibe.video._media import open_media, video_stream
+from vibe.video.errors import UnreadableMedia
 
 
 @dataclass(frozen=True)
@@ -49,17 +50,8 @@ def probe(path: str | Path) -> VideoInfo:
     read, and ``NoVideoStream`` for media with no video (e.g. an audio-only file).
     """
     path = Path(path)
-    try:
-        container = av.open(str(path))
-    except av.error.FileNotFoundError:
-        raise
-    except av.error.FFmpegError as e:
-        raise UnreadableMedia(f"{path}: {e}") from e
-
-    with container:
-        if not container.streams.video:
-            raise NoVideoStream(f"{path} has no video stream")
-        video = container.streams.video[0]
+    with open_media(path) as container:
+        video = video_stream(container, path)
         time_base = video.time_base
         fps = video.average_rate or video.guessed_rate
         if time_base is None or not fps:

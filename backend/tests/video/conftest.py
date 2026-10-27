@@ -1,6 +1,6 @@
 """Tiny test clips, generated with the ffmpeg CLI once per test session (no video is committed).
 
-Each frame of the main clip encodes its own index as brightness (luma = 4 × index), losslessly,
+Each frame of the main clip encodes its own index as brightness (see ``clip_spec``), losslessly,
 so decode tests can check that a seek landed on exactly the right frame.
 
 Without ffmpeg on PATH the video tests are skipped. Set ``VIBE_REQUIRE_FFMPEG=1`` (CI does) to
@@ -13,7 +13,18 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from clip_spec import FPS, GOP, HEIGHT, LUMA_STEP, SAMPLE_RATE, SECONDS, TONE_HZ, VFR_DROP, WIDTH
+from clip_spec import (
+    FPS,
+    GOP,
+    HEIGHT,
+    LUMA_BASE,
+    LUMA_STEP,
+    SAMPLE_RATE,
+    SECONDS,
+    TONE_HZ,
+    VFR_DROP,
+    WIDTH,
+)
 
 
 def _ffmpeg(*args: str) -> None:
@@ -34,7 +45,10 @@ def clip_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
 def main_clip(clip_dir: Path) -> Path:
     """320×240, 30 fps, 2 s, lossless H.264, plus a 440 Hz tone at 48 kHz stereo."""
     path = clip_dir / "main.mp4"
-    video = f"nullsrc=s={WIDTH}x{HEIGHT}:r={FPS}:d={SECONDS},geq=lum='N*{LUMA_STEP}':cb=128:cr=128"
+    video = (
+        f"nullsrc=s={WIDTH}x{HEIGHT}:r={FPS}:d={SECONDS},"
+        f"geq=lum='{LUMA_BASE}+N*{LUMA_STEP}':cb=128:cr=128"
+    )
     _ffmpeg(
         "-f", "lavfi", "-i", video,
         "-f", "lavfi", "-i", f"sine=f={TONE_HZ}:r={SAMPLE_RATE}:d={SECONDS}",
@@ -56,6 +70,26 @@ def vfr_clip(clip_dir: Path, main_clip: Path) -> Path:
         "-an", "-c:v", "libx264", "-qp", "0",
         str(path),
     )  # fmt: skip
+    return path
+
+
+@pytest.fixture(scope="session")
+def bframes_clip(clip_dir: Path) -> Path:
+    """Lossy H.264 with B-frames, so packets arrive out of display order."""
+    path = clip_dir / "bframes.mp4"
+    _ffmpeg(
+        "-f", "lavfi", "-i", f"testsrc2=s={WIDTH}x{HEIGHT}:r={FPS}:d={SECONDS}",
+        "-c:v", "libx264", "-bf", "3", "-g", str(GOP), "-pix_fmt", "yuv420p",
+        str(path),
+    )  # fmt: skip
+    return path
+
+
+@pytest.fixture(scope="session")
+def webm_clip(clip_dir: Path, main_clip: Path) -> Path:
+    """The main clip as lossless VP9 in WebM: 1 ms timestamps and no frame count in the header."""
+    path = clip_dir / "main.webm"
+    _ffmpeg("-i", str(main_clip), "-an", "-c:v", "libvpx-vp9", "-lossless", "1", str(path))
     return path
 
 
