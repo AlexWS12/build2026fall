@@ -7,3 +7,4 @@ GOP = 10  # a keyframe every 10 frames, so most seeks land between keyframes
 LUMA_BASE, LUMA_STEP = 16, 3
 TONE_HZ, SAMPLE_RATE = 440, 48000
 VFR_DROP = 5  # the VFR clip drops every frame whose index ≡ 2 (mod 5)
+AUDIO_DELAY = 0.5  # seconds the delayed-audio clip's sound starts after its first frame

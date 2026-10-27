@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 from clip_spec import (
+    AUDIO_DELAY,
     FPS,
     GOP,
     HEIGHT,
@@ -102,6 +103,19 @@ def silent_clip(clip_dir: Path, main_clip: Path) -> Path:
     """The main clip with its audio stream removed."""
     path = clip_dir / "silent.mp4"
     _ffmpeg("-i", str(main_clip), "-an", "-c", "copy", str(path))
+    return path
+
+
+@pytest.fixture(scope="session")
+def delayed_audio_clip(clip_dir: Path, main_clip: Path) -> Path:
+    """The main clip with its audio starting AUDIO_DELAY s after the first frame (PCM in MKV, so
+    no encoder padding blurs the start)."""
+    path = clip_dir / "delayed.mkv"
+    _ffmpeg(
+        "-i", str(main_clip), "-itsoffset", str(AUDIO_DELAY), "-i", str(main_clip),
+        "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "pcm_s16le",
+        str(path),
+    )  # fmt: skip
     return path
 
 
