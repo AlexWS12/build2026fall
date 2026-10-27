@@ -1,11 +1,14 @@
-// Hand-written mirrors of the backend's models until types are generated from the
-// OpenAPI spec (F-07 extra, D-009). Source of truth: backend/src/vibe/contract/state.py
-// and backend/src/vibe/storage/store.py. Keep these in step with them until then.
+import type { components } from './generated/schema'
 
-export interface Health {
-  status: string
-  backend: 'stub' | 'local' | 'remote'
-}
+// Types for the UI's side of the API. Where a route exists on the backend, its type comes from
+// generated/schema.ts, which `npm run gen:api` builds from backend/src/vibe/api/openapi.json
+// (D-009). Everything else is a hand-written mirror of the backend's models until its route
+// lands: source of truth backend/src/vibe/contract/state.py and backend/src/vibe/storage/store.py.
+// When a route lands, regenerate and replace its hand-written type with the generated one.
+
+export type Health = components['schemas']['Health']
+
+// Hand-written until the project routes land.
 
 export interface VideoRef {
   sha256: string
