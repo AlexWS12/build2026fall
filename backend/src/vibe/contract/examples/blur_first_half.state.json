@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "masks": {
+    "trk_1": [
+      {
+        "start": 0.0,
+        "end": 15.0,
+        "op_id": "op_1",
+        "request_id": "r_1",
+        "effect": {
+          "type": "blur",
+          "padding": 0.15,
+          "strength": null
+        }
+      }
+    ]
+  },
+  "cuts": [],
+  "mutes": [],
+  "audio_filters": [],
+  "rules": []
+}

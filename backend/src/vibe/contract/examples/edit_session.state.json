@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "masks": {
+    "trk_1": [
+      {
+        "start": 0.0,
+        "end": 40.0,
+        "op_id": "op_1",
+        "request_id": "r_1",
+        "effect": {
+          "type": "blur",
+          "padding": 0.15,
+          "strength": null
+        }
+      }
+    ],
+    "trk_2": [
+      {
+        "start": 0.0,
+        "end": 10.0,
+        "op_id": "op_1",
+        "request_id": "r_1",
+        "effect": {
+          "type": "blur",
+          "padding": 0.15,
+          "strength": null
+        }
+      },
+      {
+        "start": 10.0,
+        "end": 20.0,
+        "op_id": "op_2",
+        "request_id": "r_2",
+        "effect": {
+          "type": "pixelate",
+          "padding": 0.15,
+          "strength": 0.8
+        }
+      },
+      {
+        "start": 20.0,
+        "end": null,
+        "op_id": "op_1",
+        "request_id": "r_1",
+        "effect": {
+          "type": "blur",
+          "padding": 0.15,
+          "strength": null
+        }
+      }
+    ]
+  },
+  "cuts": [
+    {
+      "start": 0.0,
+      "end": 5.0
+    },
+    {
+      "start": 50.0,
+      "end": 55.0
+    }
+  ],
+  "mutes": [
+    {
+      "start": 20.0,
+      "end": 30.0,
+      "op_id": "op_4",
+      "request_id": "r_4",
+      "speaker": "spk_1"
+    }
+  ],
+  "audio_filters": [
+    {
+      "start": 0.0,
+      "end": null,
+      "op_id": "op_5",
+      "request_id": "r_4",
+      "filter": "denoise",
+      "strength": null
+    }
+  ],
+  "rules": []
+}

@@ -1,0 +1,320 @@
+{
+  "$defs": {
+    "AudioFilterSpan": {
+      "additionalProperties": false,
+      "properties": {
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Null means until the end of the video.",
+          "title": "End"
+        },
+        "op_id": {
+          "title": "Op Id",
+          "type": "string"
+        },
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "filter": {
+          "const": "denoise",
+          "title": "Filter",
+          "type": "string"
+        },
+        "strength": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Strength"
+        }
+      },
+      "required": [
+        "start",
+        "op_id",
+        "request_id",
+        "filter"
+      ],
+      "title": "AudioFilterSpan",
+      "type": "object"
+    },
+    "Effect": {
+      "additionalProperties": false,
+      "description": "How to hide a visual target. The renderer owns what each setting looks like.",
+      "properties": {
+        "type": {
+          "enum": [
+            "blur",
+            "pixelate",
+            "box"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "padding": {
+          "default": 0.15,
+          "description": "Grow the box by this fraction of its size.",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Padding",
+          "type": "number"
+        },
+        "strength": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "0 = lightest, 1 = strongest. Null = default.",
+          "title": "Strength"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "Effect",
+      "type": "object"
+    },
+    "MaskSpan": {
+      "additionalProperties": false,
+      "properties": {
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Null means until the end of the video.",
+          "title": "End"
+        },
+        "op_id": {
+          "title": "Op Id",
+          "type": "string"
+        },
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "effect": {
+          "$ref": "#/$defs/Effect"
+        }
+      },
+      "required": [
+        "start",
+        "op_id",
+        "request_id",
+        "effect"
+      ],
+      "title": "MaskSpan",
+      "type": "object"
+    },
+    "MuteSpan": {
+      "additionalProperties": false,
+      "properties": {
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Null means until the end of the video.",
+          "title": "End"
+        },
+        "op_id": {
+          "title": "Op Id",
+          "type": "string"
+        },
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "speaker": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Null = all audio.",
+          "title": "Speaker"
+        }
+      },
+      "required": [
+        "start",
+        "op_id",
+        "request_id",
+        "speaker"
+      ],
+      "title": "MuteSpan",
+      "type": "object"
+    },
+    "Rule": {
+      "additionalProperties": false,
+      "description": "A standing rule, evaluated on every frame against whatever the detectors find.\n\n\"Only I am visible\" is ``category=\"person\", except_identities=[\"id_me\"]``. Fail closed:\na detection whose identity is unknown or unsure is **not** excepted, so it gets masked.",
+      "properties": {
+        "rule_id": {
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "category": {
+          "description": "Detector label to mask, e.g. \"person\", \"face\".",
+          "title": "Category",
+          "type": "string"
+        },
+        "except_identities": {
+          "description": "Enrolled identity ids that stay visible.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Except Identities",
+          "type": "array"
+        },
+        "effect": {
+          "$ref": "#/$defs/Effect"
+        },
+        "time_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "category",
+        "effect"
+      ],
+      "title": "Rule",
+      "type": "object"
+    },
+    "TimeRange": {
+      "additionalProperties": false,
+      "description": "A span of **source** time in seconds, start included, end excluded.\n\n``end`` is ``None`` for \"until the end of the video\". Times always refer to the original\nvideo, so a cut never shifts other edits (docs/ARCHITECTURE.md, \"The contract\").",
+      "properties": {
+        "start": {
+          "description": "Seconds from the start of the source video.",
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds, excluded. Null means until the end of the video.",
+          "title": "End"
+        }
+      },
+      "required": [
+        "start"
+      ],
+      "title": "TimeRange",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "masks": {
+      "additionalProperties": {
+        "items": {
+          "$ref": "#/$defs/MaskSpan"
+        },
+        "type": "array"
+      },
+      "description": "Per track id: when it's masked and how.",
+      "title": "Masks",
+      "type": "object"
+    },
+    "cuts": {
+      "description": "Source time ranges removed from the output, merged.",
+      "items": {
+        "$ref": "#/$defs/TimeRange"
+      },
+      "title": "Cuts",
+      "type": "array"
+    },
+    "mutes": {
+      "items": {
+        "$ref": "#/$defs/MuteSpan"
+      },
+      "title": "Mutes",
+      "type": "array"
+    },
+    "audio_filters": {
+      "items": {
+        "$ref": "#/$defs/AudioFilterSpan"
+      },
+      "title": "Audio Filters",
+      "type": "array"
+    },
+    "rules": {
+      "description": "Active standing rules.",
+      "items": {
+        "$ref": "#/$defs/Rule"
+      },
+      "title": "Rules",
+      "type": "array"
+    }
+  },
+  "title": "TimelineState",
+  "type": "object"
+}

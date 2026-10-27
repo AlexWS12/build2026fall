@@ -1,0 +1,1004 @@
+{
+  "$defs": {
+    "AddAudioFilter": {
+      "additionalProperties": false,
+      "description": "Apply an audio filter (e.g. denoise) over a time range (the whole clip if null).",
+      "properties": {
+        "op_id": {
+          "description": "Unique in the log.",
+          "title": "Op Id",
+          "type": "string"
+        },
+        "request_id": {
+          "description": "The chat message or UI action that caused this op. Undo works per request.",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "agent",
+            "user"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "kind": {
+          "const": "add_audio_filter",
+          "default": "add_audio_filter",
+          "title": "Kind",
+          "type": "string"
+        },
+        "filter": {
+          "const": "denoise",
+          "title": "Filter",
+          "type": "string"
+        },
+        "strength": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Strength"
+        },
+        "time_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "request_id",
+        "source",
+        "filter"
+      ],
+      "title": "AddAudioFilter",
+      "type": "object"
+    },
+    "AddMask": {
+      "additionalProperties": false,
+      "description": "Hide targets with an effect over a time range (the whole clip if ``time_range`` is null).\n\nWhere targets overlap an earlier mask, this op wins over its own range.",
+      "properties": {
+        "op_id": {
+          "description": "Unique in the log.",
+          "title": "Op Id",
+          "type": "string"
+        },
+        "request_id": {
+          "description": "The chat message or UI action that caused this op. Undo works per request.",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "agent",
+            "user"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "kind": {
+          "const": "add_mask",
+          "default": "add_mask",
+          "title": "Kind",
+          "type": "string"
+        },
+        "targets": {
+          "description": "Track ids from the analysis cache.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Targets",
+          "type": "array"
+        },
+        "effect": {
+          "$ref": "#/$defs/Effect"
+        },
+        "time_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "request_id",
+        "source",
+        "targets",
+        "effect"
+      ],
+      "title": "AddMask",
+      "type": "object"
+    },
+    "AddRule": {
+      "additionalProperties": false,
+      "properties": {
+        "op_id": {
+          "description": "Unique in the log.",
+          "title": "Op Id",
+          "type": "string"
+        },
+        "request_id": {
+          "description": "The chat message or UI action that caused this op. Undo works per request.",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "agent",
+            "user"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "kind": {
+          "const": "add_rule",
+          "default": "add_rule",
+          "title": "Kind",
+          "type": "string"
+        },
+        "rule": {
+          "$ref": "#/$defs/Rule"
+        }
+      },
+      "required": [
+        "request_id",
+        "source",
+        "rule"
+      ],
+      "title": "AddRule",
+      "type": "object"
+    },
+    "Cut": {
+      "additionalProperties": false,
+      "description": "Remove a time range from the output. Overlapping cuts merge.",
+      "properties": {
+        "op_id": {
+          "description": "Unique in the log.",
+          "title": "Op Id",
+          "type": "string"
+        },
+        "request_id": {
+          "description": "The chat message or UI action that caused this op. Undo works per request.",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "agent",
+            "user"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "kind": {
+          "const": "cut",
+          "default": "cut",
+          "title": "Kind",
+          "type": "string"
+        },
+        "time_range": {
+          "$ref": "#/$defs/TimeRange"
+        }
+      },
+      "required": [
+        "request_id",
+        "source",
+        "time_range"
+      ],
+      "title": "Cut",
+      "type": "object"
+    },
+    "Effect": {
+      "additionalProperties": false,
+      "description": "How to hide a visual target. The renderer owns what each setting looks like.",
+      "properties": {
+        "type": {
+          "enum": [
+            "blur",
+            "pixelate",
+            "box"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "padding": {
+          "default": 0.15,
+          "description": "Grow the box by this fraction of its size.",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Padding",
+          "type": "number"
+        },
+        "strength": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "0 = lightest, 1 = strongest. Null = default.",
+          "title": "Strength"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "Effect",
+      "type": "object"
+    },
+    "Mute": {
+      "additionalProperties": false,
+      "description": "Silence a time range: all audio if ``speaker`` is null, else one speaker's voice.",
+      "properties": {
+        "op_id": {
+          "description": "Unique in the log.",
+          "title": "Op Id",
+          "type": "string"
+        },
+        "request_id": {
+          "description": "The chat message or UI action that caused this op. Undo works per request.",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "agent",
+            "user"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "kind": {
+          "const": "mute",
+          "default": "mute",
+          "title": "Kind",
+          "type": "string"
+        },
+        "speaker": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Speaker id from diarization.",
+          "title": "Speaker"
+        },
+        "time_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "request_id",
+        "source"
+      ],
+      "title": "Mute",
+      "type": "object"
+    },
+    "Redo": {
+      "additionalProperties": false,
+      "description": "Redo the most recently undone request. Any new edit after an undo clears redo.",
+      "properties": {
+        "op_id": {
+          "description": "Unique in the log.",
+          "title": "Op Id",
+          "type": "string"
+        },
+        "request_id": {
+          "description": "The chat message or UI action that caused this op. Undo works per request.",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "agent",
+            "user"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "kind": {
+          "const": "redo",
+          "default": "redo",
+          "title": "Kind",
+          "type": "string"
+        },
+        "redo_request_id": {
+          "title": "Redo Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "source",
+        "redo_request_id"
+      ],
+      "title": "Redo",
+      "type": "object"
+    },
+    "RemoveAudioFilter": {
+      "additionalProperties": false,
+      "properties": {
+        "op_id": {
+          "description": "Unique in the log.",
+          "title": "Op Id",
+          "type": "string"
+        },
+        "request_id": {
+          "description": "The chat message or UI action that caused this op. Undo works per request.",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "agent",
+            "user"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "kind": {
+          "const": "remove_audio_filter",
+          "default": "remove_audio_filter",
+          "title": "Kind",
+          "type": "string"
+        },
+        "filter": {
+          "const": "denoise",
+          "title": "Filter",
+          "type": "string"
+        },
+        "time_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "request_id",
+        "source",
+        "filter"
+      ],
+      "title": "RemoveAudioFilter",
+      "type": "object"
+    },
+    "RemoveMask": {
+      "additionalProperties": false,
+      "description": "Unmask targets over a time range (the whole clip if null). No-op where not masked.",
+      "properties": {
+        "op_id": {
+          "description": "Unique in the log.",
+          "title": "Op Id",
+          "type": "string"
+        },
+        "request_id": {
+          "description": "The chat message or UI action that caused this op. Undo works per request.",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "agent",
+            "user"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "kind": {
+          "const": "remove_mask",
+          "default": "remove_mask",
+          "title": "Kind",
+          "type": "string"
+        },
+        "targets": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Targets",
+          "type": "array"
+        },
+        "time_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "request_id",
+        "source",
+        "targets"
+      ],
+      "title": "RemoveMask",
+      "type": "object"
+    },
+    "RemoveRule": {
+      "additionalProperties": false,
+      "properties": {
+        "op_id": {
+          "description": "Unique in the log.",
+          "title": "Op Id",
+          "type": "string"
+        },
+        "request_id": {
+          "description": "The chat message or UI action that caused this op. Undo works per request.",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "agent",
+            "user"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "kind": {
+          "const": "remove_rule",
+          "default": "remove_rule",
+          "title": "Kind",
+          "type": "string"
+        },
+        "rule_id": {
+          "title": "Rule Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "source",
+        "rule_id"
+      ],
+      "title": "RemoveRule",
+      "type": "object"
+    },
+    "Rule": {
+      "additionalProperties": false,
+      "description": "A standing rule, evaluated on every frame against whatever the detectors find.\n\n\"Only I am visible\" is ``category=\"person\", except_identities=[\"id_me\"]``. Fail closed:\na detection whose identity is unknown or unsure is **not** excepted, so it gets masked.",
+      "properties": {
+        "rule_id": {
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "category": {
+          "description": "Detector label to mask, e.g. \"person\", \"face\".",
+          "title": "Category",
+          "type": "string"
+        },
+        "except_identities": {
+          "description": "Enrolled identity ids that stay visible.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Except Identities",
+          "type": "array"
+        },
+        "effect": {
+          "$ref": "#/$defs/Effect"
+        },
+        "time_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "category",
+        "effect"
+      ],
+      "title": "Rule",
+      "type": "object"
+    },
+    "SetEffect": {
+      "additionalProperties": false,
+      "description": "Change the effect where targets are already masked. Doesn't mask anything new.",
+      "properties": {
+        "op_id": {
+          "description": "Unique in the log.",
+          "title": "Op Id",
+          "type": "string"
+        },
+        "request_id": {
+          "description": "The chat message or UI action that caused this op. Undo works per request.",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "agent",
+            "user"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "kind": {
+          "const": "set_effect",
+          "default": "set_effect",
+          "title": "Kind",
+          "type": "string"
+        },
+        "targets": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Targets",
+          "type": "array"
+        },
+        "effect": {
+          "$ref": "#/$defs/Effect"
+        },
+        "time_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "request_id",
+        "source",
+        "targets",
+        "effect"
+      ],
+      "title": "SetEffect",
+      "type": "object"
+    },
+    "TimeRange": {
+      "additionalProperties": false,
+      "description": "A span of **source** time in seconds, start included, end excluded.\n\n``end`` is ``None`` for \"until the end of the video\". Times always refer to the original\nvideo, so a cut never shifts other edits (docs/ARCHITECTURE.md, \"The contract\").",
+      "properties": {
+        "start": {
+          "description": "Seconds from the start of the source video.",
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds, excluded. Null means until the end of the video.",
+          "title": "End"
+        }
+      },
+      "required": [
+        "start"
+      ],
+      "title": "TimeRange",
+      "type": "object"
+    },
+    "Uncut": {
+      "additionalProperties": false,
+      "description": "Bring back a time range that was cut. No-op where nothing was cut.",
+      "properties": {
+        "op_id": {
+          "description": "Unique in the log.",
+          "title": "Op Id",
+          "type": "string"
+        },
+        "request_id": {
+          "description": "The chat message or UI action that caused this op. Undo works per request.",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "agent",
+            "user"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "kind": {
+          "const": "uncut",
+          "default": "uncut",
+          "title": "Kind",
+          "type": "string"
+        },
+        "time_range": {
+          "$ref": "#/$defs/TimeRange"
+        }
+      },
+      "required": [
+        "request_id",
+        "source",
+        "time_range"
+      ],
+      "title": "Uncut",
+      "type": "object"
+    },
+    "Undo": {
+      "additionalProperties": false,
+      "description": "Undo every op of ``undo_request_id``, which must be the latest request still in effect.",
+      "properties": {
+        "op_id": {
+          "description": "Unique in the log.",
+          "title": "Op Id",
+          "type": "string"
+        },
+        "request_id": {
+          "description": "The chat message or UI action that caused this op. Undo works per request.",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "agent",
+            "user"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "kind": {
+          "const": "undo",
+          "default": "undo",
+          "title": "Kind",
+          "type": "string"
+        },
+        "undo_request_id": {
+          "title": "Undo Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "source",
+        "undo_request_id"
+      ],
+      "title": "Undo",
+      "type": "object"
+    },
+    "Unmute": {
+      "additionalProperties": false,
+      "description": "Undo a mute over a time range, for the same ``speaker`` (null = the all-audio mute).",
+      "properties": {
+        "op_id": {
+          "description": "Unique in the log.",
+          "title": "Op Id",
+          "type": "string"
+        },
+        "request_id": {
+          "description": "The chat message or UI action that caused this op. Undo works per request.",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "agent",
+            "user"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "kind": {
+          "const": "unmute",
+          "default": "unmute",
+          "title": "Kind",
+          "type": "string"
+        },
+        "speaker": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Speaker"
+        },
+        "time_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "request_id",
+        "source"
+      ],
+      "title": "Unmute",
+      "type": "object"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "add_audio_filter": "#/$defs/AddAudioFilter",
+      "add_mask": "#/$defs/AddMask",
+      "add_rule": "#/$defs/AddRule",
+      "cut": "#/$defs/Cut",
+      "mute": "#/$defs/Mute",
+      "redo": "#/$defs/Redo",
+      "remove_audio_filter": "#/$defs/RemoveAudioFilter",
+      "remove_mask": "#/$defs/RemoveMask",
+      "remove_rule": "#/$defs/RemoveRule",
+      "set_effect": "#/$defs/SetEffect",
+      "uncut": "#/$defs/Uncut",
+      "undo": "#/$defs/Undo",
+      "unmute": "#/$defs/Unmute"
+    },
+    "propertyName": "kind"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/AddMask"
+    },
+    {
+      "$ref": "#/$defs/RemoveMask"
+    },
+    {
+      "$ref": "#/$defs/SetEffect"
+    },
+    {
+      "$ref": "#/$defs/Cut"
+    },
+    {
+      "$ref": "#/$defs/Uncut"
+    },
+    {
+      "$ref": "#/$defs/Mute"
+    },
+    {
+      "$ref": "#/$defs/Unmute"
+    },
+    {
+      "$ref": "#/$defs/AddAudioFilter"
+    },
+    {
+      "$ref": "#/$defs/RemoveAudioFilter"
+    },
+    {
+      "$ref": "#/$defs/AddRule"
+    },
+    {
+      "$ref": "#/$defs/RemoveRule"
+    },
+    {
+      "$ref": "#/$defs/Undo"
+    },
+    {
+      "$ref": "#/$defs/Redo"
+    }
+  ]
+}

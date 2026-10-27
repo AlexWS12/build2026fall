@@ -6,6 +6,7 @@ description = "Vibe Editing Agent backend: edit video by chatting with an agent 
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi>=0.115",
+    "pydantic>=2.9",
     "uvicorn[standard]>=0.30",
 ]
 

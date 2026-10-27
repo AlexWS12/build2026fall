@@ -1,0 +1,3 @@
+{"schema_version": 1}
+{"kind": "add_rule", "op_id": "op_1", "request_id": "r_1", "source": "agent", "rule": {"rule_id": "rule_1", "category": "person", "except_identities": ["id_me"], "effect": {"type": "blur", "padding": 0.2}}}
+{"kind": "add_rule", "op_id": "op_2", "request_id": "r_2", "source": "agent", "rule": {"rule_id": "rule_2", "category": "license_plate", "effect": {"type": "pixelate"}}}

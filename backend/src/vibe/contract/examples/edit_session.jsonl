@@ -1,0 +1,10 @@
+{"schema_version": 1}
+{"kind": "add_mask", "op_id": "op_1", "request_id": "r_1", "source": "agent", "targets": ["trk_1", "trk_2"], "effect": {"type": "blur"}}
+{"kind": "set_effect", "op_id": "op_2", "request_id": "r_2", "source": "user", "targets": ["trk_2"], "effect": {"type": "pixelate", "strength": 0.8}, "time_range": {"start": 10, "end": 20}}
+{"kind": "cut", "op_id": "op_3", "request_id": "r_3", "source": "agent", "time_range": {"start": 0, "end": 5}}
+{"kind": "mute", "op_id": "op_4", "request_id": "r_4", "source": "agent", "speaker": "spk_1", "time_range": {"start": 20, "end": 30}}
+{"kind": "add_audio_filter", "op_id": "op_5", "request_id": "r_4", "source": "agent", "filter": "denoise"}
+{"kind": "remove_mask", "op_id": "op_6", "request_id": "r_5", "source": "agent", "targets": ["trk_1"], "time_range": {"start": 40}}
+{"kind": "undo", "op_id": "op_7", "request_id": "r_6", "source": "user", "undo_request_id": "r_5"}
+{"kind": "redo", "op_id": "op_8", "request_id": "r_7", "source": "user", "redo_request_id": "r_5"}
+{"kind": "cut", "op_id": "op_9", "request_id": "r_8", "source": "agent", "time_range": {"start": 50, "end": 55}}
