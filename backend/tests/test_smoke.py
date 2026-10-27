@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from vibe import config
 from vibe.api.app import app
 
-LAYERS = ["agent", "api", "contract", "modules", "render", "toolbox", "video"]
+LAYERS = ["agent", "api", "contract", "modules", "render", "storage", "toolbox", "video"]
 
 
 @pytest.mark.parametrize("layer", LAYERS)

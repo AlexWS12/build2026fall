@@ -75,9 +75,10 @@ backend/                 Python 3.12, uv (D-010). Package name: vibe
     toolbox/             typed tools that write ops (F-06)
     modules/             AI modules, each with stub / local / remote backends (F-08)
     render/              export and per-frame paths (F-04)
+    storage/             project folders, videos by hash, analysis cache paths (R-2)
     agent/               planner: request -> plan of tool calls (F-05)
     api/                 FastAPI app; every route lives under /api
-    config.py            settings from the environment (VIBE_BACKEND, default stub)
+    config.py            settings from the environment (VIBE_BACKEND, default stub; VIBE_DATA_DIR)
   tests/
 frontend/                React + Vite + TS (D-009), created by F-07
   src/api/generated/     TS types generated from the backend's OpenAPI spec (F-07 extra)
@@ -114,6 +115,37 @@ The team's hardware varies widely. Some people have a laptop with no usable GPU,
 - **Benchmarks state the hardware.** The 5070 is the reference for quoted numbers; numbers from other machines are labeled as such.
 
 **Gotcha (RTX 50 series):** these are Blackwell GPUs, which need a recent CUDA (12.8+) and a PyTorch build compiled for them (PyTorch 2.7+ with the `cu128` wheels). Older wheels and some libraries with custom CUDA kernels may not support them yet. Check this before adopting any model.
+
+## Storage
+> Code: [`backend/src/vibe/storage/`](../backend/src/vibe/storage/) (R-2). Decision: D-014.
+
+Everything lives in plain folders under one **data directory**: `VIBE_DATA_DIR`, by default `data/` at the repo root (gitignored). There's no database.
+
+```
+data/
+  videos/<sha256>.<ext>                 each uploaded video, stored once by content hash
+  cache/<sha256>/<kind>/<key>.json      AI analysis per video: tracks, transcript, speakers... (F-08)
+  projects/<project_id>/
+    project.json                        name, created_at, which video (hash, extension, original name)
+    timeline.jsonl                      the op log, in the contract's file format
+    tracks.user.json                    tracks drawn or corrected by hand
+    exports/                            rendered files
+```
+
+- **Videos are stored once.** Two projects on the same clip share one file, and the hash is the same key the cache uses.
+- **The analysis cache belongs to the video, not the project.** Detector tracks, transcripts and speaker turns are facts about the video, so every project on it reuses them. **To share results computed on the RTX 5070, copy `cache/<sha256>/`**: a teammate with the same clip (same hash) gets real model output on a CPU laptop (D-008). Each cache **key** must change whenever the result would, e.g. `<model>@<version>-<settings hash>`, so switching models never serves stale results. What goes in each `kind`, and its exact keys, is F-08's call.
+- **Hand-drawn tracks are edits,** so they live in the project, not in the cache. The renderer gets cache tracks + user tracks.
+- **Writes are crash-safe.** JSON files are written to a temp file and renamed. An op is appended as one line and synced; if a crash leaves an incomplete last line, it's dropped on the next read with a warning.
+- **One request at a time per project.** The contract needs a request's ops to be contiguous, and storage doesn't lock, so the API layer applies requests to a project one at a time.
+- **`project.json` has its own `storage_version`** (1), bumped on a breaking layout change, like the contract's `schema_version`.
+- **Why not a database:**
+  - sharing a project or a cache is copying a folder;
+  - the files are readable when debugging;
+  - appending to the op log is appending a line;
+  - nothing to install;
+  - Knight Hacks worked this way.
+
+  A database (e.g. SQLite) would pay off with many concurrent writers or queries across projects, neither of which we have.
 
 ## Human in the loop
 The fallback for model mistakes is a person, made cheap and fast:
@@ -219,12 +251,12 @@ Add a row when something gets decided. **"Accepted" means "what we're going with
 | D-011 | 2026-10-24 | One repo with `backend/` (Python package `vibe`, src layout, one subpackage per layer) and `frontend/` side by side, each with its own toolchain and CI workflow; root `package.json` scripts start everything; Python pinned to 3.12 for now | Accepted | Generated frontend types (D-009) need both sides in one PR; separate folders keep the toolchains apart. Revisit Python 3.14 after the R-3 model shortlist |
 | D-012 | 2026-10-24 | Backend web framework: FastAPI + Uvicorn | Proposed | Used by the F-01 skeleton; its OpenAPI output is what D-009's generated types need. Confirm as a team |
 | D-013 | 2026-10-26 | Contract v1 (F-02): Pydantic v2 models, one per op kind; geometry in separate tracks (normalized boxes), not in ops or state; all times are source time in seconds; later ops win over their own range; undo/redo are appended ops, linear, per request; fold is pure | Proposed | Typed ops catch LLM and UI mistakes and generate the JSON schema and TS types; separate tracks let detectors improve without invalidating edits and fit live mode; source time keeps cuts from shifting other edits; append-only undo keeps full history. Confirm on the F-02 PR |
+| D-014 | 2026-10-26 | Storage (R-2): plain folders under `VIBE_DATA_DIR`, no database. Videos stored once by sha256; a shared analysis cache keyed by video hash, then kind and key (key includes model, version and settings); one folder per project with `project.json`, `timeline.jsonl`, `tracks.user.json`, `exports/`; atomic writes | Proposed | Sharing results computed on the 5070 = copying a folder (D-008); no duplicate videos; readable files; append-only log; nothing to install. A database adds nothing for one writer per project. Confirm on the R-2 PR |
 
 ## Open questions
 - **Compute:** confirm the 5070's VRAM (12 GB desktop or 8 GB laptop). Does anyone else have a GPU worth listing? Are university HPC, club hardware or cloud credits available for tier 3? Should the 5070 host a shared model server, and when would it be on?
 - Which LLM for the planner, and its cost per request? Team decision; candidates are Claude Opus 5 (`claude-opus-5`) and Claude Sonnet 5 (`claude-sonnet-5`), ideally compared on the F-09 request set.
 - May frames or footage go to a cloud model (e.g. so the planner can see the scene), or only text and metadata?
 - Boxes or segmentation masks from the start?
-- How is the analysis cache stored (files per video, a database)? Team decision; the Sprint 1 candidate is one folder per project (`timeline.jsonl` op log plus `cache/` keyed by video hash), which also makes the cache easy to share.
 - What does "fix by hand" look like for audio edits?
 - Live: virtual camera tooling per OS; browser vs local helper process.
