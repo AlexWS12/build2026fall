@@ -4,9 +4,18 @@ on:
   push:
     branches: [main]
     # The mock API imports the contract's example states, so a change there can break the UI.
-    paths: ["frontend/**", "backend/src/vibe/contract/examples/**", ".github/workflows/frontend.yml"]
+    # The API types are generated from the committed OpenAPI spec, so a change there can too.
+    paths:
+      - "frontend/**"
+      - "backend/src/vibe/contract/examples/**"
+      - "backend/src/vibe/api/openapi.json"
+      - ".github/workflows/frontend.yml"
   pull_request:
-    paths: ["frontend/**", "backend/src/vibe/contract/examples/**", ".github/workflows/frontend.yml"]
+    paths:
+      - "frontend/**"
+      - "backend/src/vibe/contract/examples/**"
+      - "backend/src/vibe/api/openapi.json"
+      - ".github/workflows/frontend.yml"
 
 jobs:
   test:
@@ -22,6 +31,14 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      # Fails if src/api/generated/ doesn't match backend/src/vibe/api/openapi.json.
+      - name: Check the generated API types are up to date
+        run: |
+          npm run gen:api
+          git diff --exit-code src/api/generated || {
+            echo "::error::Generated API types are stale. Run \`npm --prefix frontend run gen:api\` and commit."
+            exit 1
+          }
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
