@@ -14,7 +14,8 @@ export function createMockClient({ delayMs = 300 }: { delayMs?: number } = {}): 
   return {
     async health() {
       await wait(delayMs)
-      return { status: 'ok', backend: 'stub' }
+      // Not "ok": the badge should never suggest a real backend answered.
+      return { status: 'mock', backend: 'stub' }
     },
     async createProject(file) {
       await wait(delayMs)

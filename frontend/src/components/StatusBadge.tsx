@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { ApiClient } from '../api'
 import styles from './StatusBadge.module.css'
 
-type Status = { kind: 'checking' } | { kind: 'ok'; backend: string } | { kind: 'down' }
+type Status = { kind: 'checking' } | { kind: 'ok'; text: string } | { kind: 'down' }
 
 /** Shows whether the backend answers `/api/health`, and which model backend it runs. */
 export function StatusBadge({ api }: { api: ApiClient }) {
@@ -11,7 +11,7 @@ export function StatusBadge({ api }: { api: ApiClient }) {
   useEffect(() => {
     let active = true
     api.health().then(
-      (health) => active && setStatus({ kind: 'ok', backend: health.backend }),
+      (health) => active && setStatus({ kind: 'ok', text: `${health.status} (${health.backend})` }),
       () => active && setStatus({ kind: 'down' }),
     )
     return () => {
@@ -23,7 +23,7 @@ export function StatusBadge({ api }: { api: ApiClient }) {
     status.kind === 'checking'
       ? 'Backend: checking…'
       : status.kind === 'ok'
-        ? `Backend: ok (${status.backend})`
+        ? `Backend: ${status.text}`
         : 'Backend: unreachable'
 
   return (

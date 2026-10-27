@@ -20,8 +20,17 @@ describe('App shell', () => {
   })
 
   test('shows the backend status from /api/health', async () => {
-    render(<App api={mock()} />)
+    const live: ApiClient = {
+      ...mock(),
+      health: () => Promise.resolve({ status: 'ok', backend: 'stub' }),
+    }
+    render(<App api={live} />)
     expect(await screen.findByText('Backend: ok (stub)')).toBeInTheDocument()
+  })
+
+  test('says when the mock API is answering', async () => {
+    render(<App api={mock()} />)
+    expect(await screen.findByText('Backend: mock (stub)')).toBeInTheDocument()
   })
 
   test('says so when the backend is unreachable', async () => {
