@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "masks": {},
+  "cuts": [],
+  "mutes": [],
+  "audio_filters": [],
+  "rules": [
+    {
+      "rule_id": "rule_1",
+      "category": "person",
+      "except_identities": [
+        "id_me"
+      ],
+      "effect": {
+        "type": "blur",
+        "padding": 0.2,
+        "strength": null
+      },
+      "time_range": null
+    },
+    {
+      "rule_id": "rule_2",
+      "category": "license_plate",
+      "except_identities": [],
+      "effect": {
+        "type": "pixelate",
+        "padding": 0.15,
+        "strength": null
+      },
+      "time_range": null
+    }
+  ]
+}

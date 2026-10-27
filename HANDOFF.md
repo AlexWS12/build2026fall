@@ -23,7 +23,7 @@ The `/b-sync`, `/b-handoff` and `/b-release` commands live in `.claude/skills/` 
 
 ## Shared files
 Some files every feature depends on. **Post in the team chat before changing them**, and expect `/b-sync` to flag them to everyone:
-- the edit timeline contract (its definition in code once it exists; today, "The contract" in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md));
+- the edit timeline contract: `backend/src/vibe/contract/` (rules in "The contract" in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md));
 - the toolbox's tool names and arguments;
 - the API routes between UI and backend;
 - dependency files, run scripts, CI config: `backend/pyproject.toml`, `backend/uv.lock`, `backend/.python-version`, the root `package.json` and `package-lock.json`, `.github/workflows/`;

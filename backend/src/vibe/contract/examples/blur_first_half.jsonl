@@ -1,0 +1,2 @@
+{"schema_version": 1}
+{"kind": "add_mask", "op_id": "op_1", "request_id": "r_1", "source": "agent", "targets": ["trk_1"], "effect": {"type": "blur"}, "time_range": {"start": 0, "end": 15}}

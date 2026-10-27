@@ -1,0 +1,115 @@
+{
+  "$defs": {
+    "Keyframe": {
+      "additionalProperties": false,
+      "properties": {
+        "t": {
+          "description": "Source time in seconds.",
+          "minimum": 0,
+          "title": "T",
+          "type": "number"
+        },
+        "box": {
+          "description": "[x1, y1, x2, y2], normalized to 0..1 of the frame width and height.",
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Box",
+          "type": "array"
+        },
+        "conf": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Conf",
+          "type": "number"
+        },
+        "state": {
+          "enum": [
+            "detected",
+            "tracked",
+            "uncertain",
+            "user"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "t",
+        "box",
+        "conf",
+        "state"
+      ],
+      "title": "Keyframe",
+      "type": "object"
+    },
+    "Track": {
+      "additionalProperties": false,
+      "properties": {
+        "track_id": {
+          "title": "Track Id",
+          "type": "string"
+        },
+        "label": {
+          "description": "What it is, e.g. \"person\", \"face\", \"license_plate\".",
+          "title": "Label",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "detector",
+            "user"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Matched enrolled identity, if any (for rules).",
+          "title": "Identity"
+        },
+        "keyframes": {
+          "items": {
+            "$ref": "#/$defs/Keyframe"
+          },
+          "minItems": 1,
+          "title": "Keyframes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "track_id",
+        "label",
+        "source",
+        "keyframes"
+      ],
+      "title": "Track",
+      "type": "object"
+    }
+  },
+  "items": {
+    "$ref": "#/$defs/Track"
+  },
+  "type": "array"
+}
