@@ -83,7 +83,7 @@ backend/                 Python 3.12, uv (D-010). Package name: vibe
 frontend/                React + Vite + TS (D-009), created by F-07
   src/api/generated/     TS types generated from the backend's OpenAPI spec (F-07 extra)
 package.json             root scripts: `npm run dev` starts every part of the app
-.github/workflows/       backend.yml now; frontend.yml comes with F-07
+.github/workflows/       backend.yml and frontend.yml, one per side
 ```
 
 - **One folder per layer.** Each feature owner works in their own subpackage, so parallel branches rarely touch the same files.
