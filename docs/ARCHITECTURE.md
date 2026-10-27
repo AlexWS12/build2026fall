@@ -57,7 +57,7 @@ These are wrapped by the query tools and swappable behind them.
 - Candidates are in the README's tech stack table. Heavy models run on our GPUs, possibly behind one resident model server, as Knight Hacks did.
 
 ### 5. Edit timeline (the contract)
-See [The contract](#the-contract-edit-timeline-draft-v0) below. Everything upstream writes to it and everything downstream reads from it. **It's the one interface that lets 10 people build in parallel against stubs.**
+See [The contract](#the-contract-edit-timeline-v1-in-code) below. Everything upstream writes to it and everything downstream reads from it. **It's the one interface that lets 10 people build in parallel against stubs.**
 
 ### 6. Renderer
 - **It's deterministic:** the same timeline and the same source always give the same output.
@@ -131,51 +131,43 @@ The fallback for model mistakes is a person, made cheap and fast:
 | Object removal | show the inpainted preview before applying; the user accepts or rejects |
 | Live rules | mask (fail closed); there's no time to ask |
 
-## The contract: edit timeline (draft v0)
-> **Draft. Field names will change during sprint 1.** Once code exists, the source of truth becomes the code that defines it (e.g. pydantic models) plus a generated JSON schema; this section then just links to them.
+## The contract: edit timeline (v1, in code)
+> **The code is the source of truth:** [`backend/src/vibe/contract/`](../backend/src/vibe/contract/) (F-02). Generated JSON schemas live in [`contract/schema/`](../backend/src/vibe/contract/schema/), and example logs with their folded states in [`contract/examples/`](../backend/src/vibe/contract/examples/). This section explains the rules; for exact fields, read the models or the schemas. `schema_version` is **1**. Design choices: D-013.
 
-The timeline is an **append-only op log** plus a **derived state** computed by folding the log. Ops are what the agent and UI produce, and the state is what the renderer reads. Undo removes the ops of the last request and re-folds.
+The timeline is an **append-only op log** plus a **derived state** computed by folding the log. Ops are what the agent and UI produce, and the state is what the renderer reads. Geometry (where a target is on each frame) is **not** in either one: it lives in **tracks** from the analysis cache.
 
-```jsonc
-// Op (append-only)
-{
-  "op_id": "op_12",
-  "request_id": "r_4",                 // the chat message or UI action that caused it
-  "kind": "add_mask",                  // see op kinds below
-  "targets": ["trk_3"],                // track / speaker / object ids from the analysis cache
-  "params": { "effect": "blur", "padding": 0.15 },
-  "time_range": [0.0, 31.5],           // seconds; optional (absent = whole clip)
-  "source": "agent"                    // agent | user | rule
-}
+```
+ agent / toolbox / UI hand edits ──► OpLog (ops, append-only) ──fold()──► TimelineState ─┐
+ detectors / tracker / drawn boxes ─► tracks (analysis cache, keyed by track id) ────────┴─► renderer
 ```
 
-**Op kinds (draft):**
+**Op kinds** (one typed model each; an unknown kind or field, or a bad value, fails validation):
 
-| Kind | Does | Notes |
-|---|---|---|
-| `add_mask` / `remove_mask` / `set_effect` | visual masking (blur, pixelate, box) | the Knight Hacks core |
-| `cut` / `keep` | remove or keep a time range | changes the output timing; the derived state maps source time → output time |
-| `mute` / `unmute` | silence a time range, or one speaker's audio | speaker mute needs separation |
-| `audio_filter` | e.g. denoise over a range | |
-| `remove_object` | inpaint targets out over a range | references a cached inpainting result |
-| `add_rule` / `remove_rule` | **standing rule**, e.g. "mask every person not matching identity X" | evaluated per frame; this is what live mode runs on, and it works offline too |
+| Kind | Does |
+|---|---|
+| `add_mask` / `remove_mask` | mask targets (track ids) with an effect (`blur`, `pixelate`, `box` + padding, strength), or unmask them, over a time range |
+| `set_effect` | change the effect only where targets are already masked |
+| `cut` / `uncut` | remove a time range from the output, or bring it back. "Keep only X" is the toolbox writing cuts around X |
+| `mute` / `unmute` | silence a time range: all audio, or one `speaker` (diarization id) |
+| `add_audio_filter` / `remove_audio_filter` | e.g. `denoise` over a time range |
+| `add_rule` / `remove_rule` | **standing rule** evaluated on every frame: mask every `category` detection except `except_identities` (live mode; also works offline). Unknown or unsure identity = masked |
+| `undo` / `redo` | undo the latest request in effect, or redo the most recently undone one |
 
-```jsonc
-// Derived state (what the renderer reads); shape is a draft
-{
-  "schema_version": 0,
-  "video": { "fps": 30, "width": 1920, "height": 1080, "duration": 60.0 },
-  "visual":  { "trk_3": { "label": "person", "effect": "blur", "keyframes": [ { "f": 0, "box": [0,0,0,0], "conf": 0.9, "state": "detected" } ] } },
-  "cuts":    [ [10.0, 15.0] ],
-  "audio":   [ { "kind": "mute", "speaker": "spk_1", "range": [20.0, 30.0] } ],
-  "rules":   [ { "rule_id": "rule_1", "kind": "mask_all_except", "identity": "id_me", "effect": "blur" } ]
-}
-```
+Every op has `op_id`, `request_id` (the chat message or UI action that caused it) and `source` (`agent` or `user`). `remove_object` (inpainting) isn't in v1; it gets added when its research lands.
 
-**Contract rules:**
-- **It has its own `schema_version`, separate from the app version.** Any change that breaks a reader or writer bumps it.
-- **A contract change needs a heads-up to the team before merging**, an entry in the decisions log, and updated examples and tests. `/b-sync` flags contract changes to everyone.
-- **Stubs and tests are built from hand-written example timelines.**
+**Rules:**
+- **Time is source time, in seconds.** Every time range refers to the original video, so a cut never shifts other edits. Ranges include the start and exclude the end, and `end: null` means "until the end of the video". The state converts with `source_to_output()` / `output_to_source()`; the toolbox converts what the user sees on screen into source time before writing an op.
+- **Later ops win.** Each op paints its own time range over what came before: per target for masks, per speaker for mutes, per filter for audio filters. Blur 0–30 then pixelate 10–20 gives blur, pixelate, blur. Cuts add up and merge.
+- **Undo is per request and linear.** `undo` must name the latest request still in effect and appends an `undo` op (nothing is ever deleted), so history and redo come free. A new edit after an undo clears redo. A request's ops must be contiguous in the log (the server applies one request at a time).
+- **Fold is pure:** no files, no cache, no network, and the same log always gives the same state. That makes it cheap to test and safe to call per frame (live mode).
+- **Every state span keeps the `op_id` and `request_id` that made it**, so the UI can say where a mask came from.
+- **Tracks:** `track_id`, `label`, `source` (`detector` / `user`), optional `identity`, and keyframes `{t, box, conf, state}`. Boxes are **normalized** `[x1, y1, x2, y2]` in 0..1, so one track works on a 720p preview, a 1080p export and a live stream.
+- **File format** (`OpLog.to_jsonl()`): a header line `{"schema_version": 1}`, then one op per line. Where the file lives is R-2's decision.
+
+**Changing the contract:**
+- **Any change that breaks a reader or writer bumps `SCHEMA_VERSION`** in `contract/common.py`. A new optional field or a new op kind doesn't.
+- **Post a heads-up in the team chat before merging**, and add a decisions-log row.
+- Run `uv run python -m vibe.contract` (from `backend/`) to regenerate the schemas and example states, and commit them. A test fails if they're stale.
 
 ## Live mode
 **Priority stretch** (README, "Live mode"). We are not building it first, but every early decision must keep it possible.
@@ -189,7 +181,7 @@ The timeline is an **append-only op log** plus a **derived state** computed by f
                     per-frame renderer ─► delay buffer (~0.5–1 s) ─► virtual camera ─► OBS / stream
 ```
 
-- **Standing rules, not one-off edits.** "Only I am visible" becomes `add_rule(mask_all_except, identity=me)`. The same rule can run offline on a file.
+- **Standing rules, not one-off edits.** "Only I am visible" becomes an `add_rule` op with `category: "person", except_identities: ["id_me"]` (see `contract/examples/live_only_me.jsonl`). The same rule can run offline on a file.
 - **Identity:** an enrollment step (a few seconds of the streamer on camera) stores an embedding locally. Each person track is checked against it. **Not matching or unsure means masked.**
 - **Latency budget:** capture, detection on some frames, tracking on every frame, masking and encoding all have to fit in one frame interval on average. The delay buffer absorbs spikes. Knight Hacks measured about 134 ms per 720p face + plate + person pass on a Strix Halo iGPU (p99 500 ms), which suggests detecting every ~4th frame plus tracking, behind about 0.8 s of delay. That was **measured, not built**, on different hardware.
 - **What to do early:** a feasibility spike that measures per-frame latency of the candidate person detector, tracker and identity check on the reference RTX 5070, at 720p and 1080p. Its result decides whether live mode stays a stretch or moves up.
@@ -226,6 +218,7 @@ Add a row when something gets decided. **"Accepted" means "what we're going with
 | D-010 | 2026-10-24 | Python environments and dependencies are managed with uv (pinned Python version, one committed `uv.lock`) | Accepted | One fast, reproducible install for everyone; optional dependency groups keep GPU-only packages (PyTorch `cu128`) off CPU-only laptops |
 | D-011 | 2026-10-24 | One repo with `backend/` (Python package `vibe`, src layout, one subpackage per layer) and `frontend/` side by side, each with its own toolchain and CI workflow; root `package.json` scripts start everything; Python pinned to 3.12 for now | Accepted | Generated frontend types (D-009) need both sides in one PR; separate folders keep the toolchains apart. Revisit Python 3.14 after the R-3 model shortlist |
 | D-012 | 2026-10-24 | Backend web framework: FastAPI + Uvicorn | Proposed | Used by the F-01 skeleton; its OpenAPI output is what D-009's generated types need. Confirm as a team |
+| D-013 | 2026-10-26 | Contract v1 (F-02): Pydantic v2 models, one per op kind; geometry in separate tracks (normalized boxes), not in ops or state; all times are source time in seconds; later ops win over their own range; undo/redo are appended ops, linear, per request; fold is pure | Proposed | Typed ops catch LLM and UI mistakes and generate the JSON schema and TS types; separate tracks let detectors improve without invalidating edits and fit live mode; source time keeps cuts from shifting other edits; append-only undo keeps full history. Confirm on the F-02 PR |
 
 ## Open questions
 - **Compute:** confirm the 5070's VRAM (12 GB desktop or 8 GB laptop). Does anyone else have a GPU worth listing? Are university HPC, club hardware or cloud credits available for tier 3? Should the 5070 host a shared model server, and when would it be on?
