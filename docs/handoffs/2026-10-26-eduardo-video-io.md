@@ -37,7 +37,7 @@ uv run --directory backend python -m vibe.video probe path/to/clip.mp4
 ```
 Verified on 2026-10-26 (macOS, Apple Silicon, Python 3.12.12, ffmpeg 8.0.1 CLI, PyAV 19.0.2 bundling ffmpeg 9.0.2): lint passes, `uv sync --locked` passes, and all 105 tests pass with `VIBE_REQUIRE_FFMPEG=1`. To check that the tests catch real bugs, I broke the decoder's frame matching on purpose (5 decode tests failed) and switched off the audio start alignment (the delayed-audio test failed).
 
-**CI:** not confirmed yet. The `backend` run on PR #6 is the remaining part of F-03's exit check. F-03 stays `in progress` in the ROADMAP until it passes.
+**CI:** the `backend` workflow passed on PR #6 at `0180759` (ubuntu-latest, apt's ffmpeg 6.1.1, `VIBE_REQUIRE_FFMPEG=1`): Ruff passed and pytest reported 105 passed, 0 skipped. That meets F-03's exit check.
 
 ## Decisions made
 - **PyAV for runtime decoding; the ffmpeg CLI only to generate test clips.** PyAV's wheels bundle the ffmpeg libraries, so the app needs no system ffmpeg to read video. F-04's export path will need the CLI anyway. This picks PyAV from the tentative stack. **It isn't in the decisions log yet:** add a row if the team agrees.
@@ -51,13 +51,13 @@ Verified on 2026-10-26 (macOS, Apple Silicon, Python 3.12.12, ffmpeg 8.0.1 CLI, 
 - **Plain frozen dataclasses, not Pydantic.** These are internal values, not contract data. `VideoInfo`'s field names match the contract's wherever they overlap.
 
 ## Next steps
-- Get PR #6 reviewed and merged once CI passes, then mark F-03 `done` in the ROADMAP.
+- PR #6 has CI green, and F-03 is marked `done` in `docs/ROADMAP.md`. It needs a review and then a merge.
 - Post the shared-files heads-up, and decide whether "PyAV for decoding" becomes a decisions-log row.
 - F-04 (renderer) can build on `VideoReader` for its per-frame path and on `FrameIndex.frame_at` to map contract times to frames. F-31 (transcription) and F-33 (noise reduction) can use `extract_audio` and `iter_audio_chunks`.
 - `FrameIndex` is cheap to rebuild, but it could be saved in the analysis cache once R-2 decides how the cache is stored.
 
 ## Gotchas
-- **CI's ffmpeg is Ubuntu's 6.1**, while local testing used 8.0.1. If a fixture flag isn't supported there, the most likely one is `-display_rotation` for the rotated clip, and CI will show it.
+- **CI's ffmpeg is Ubuntu's 6.1.1**, while local testing used 8.0.1. Every fixture flag works on both, including `-display_rotation`, which needs ffmpeg 6.0 or newer.
 - **Rotation isn't exposed on the stream in PyAV 19.** `probe` reads it from the first decoded frame, which also catches files whose header looks fine but whose video won't decode.
 - **Lossless H.264 (`-qp 0`) ignores `-bf`**, so the B-frame fixture is a separate, lossy clip.
 - **Brightness has to stay inside video range (16–235)**, or the lowest frames all decode as black. The fixtures use luma 16 + 3n.
