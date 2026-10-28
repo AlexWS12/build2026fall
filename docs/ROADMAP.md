@@ -23,8 +23,9 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 | F-05 | Agent/planner: template parser + LLM JSON plan + validation + clarify | Must | F-02 | idea | Cloud LLM allowed |
 | F-06 | Toolbox scaffolding: typed tool schemas, registry, stub implementations, CLI per tool | Must | F-02 | idea | |
 | F-07 | Web UI shell: upload, chat, player, timeline view, export | Must | F-01 | done | |
-| F-08 | Compute setup: `stub`/`local`/`remote` model backends, shareable analysis cache, model download script, per-tier install notes (CPU / small GPU / RTX 5070; CUDA 12.8+ for the 5070) | Must | F-01 | idea | ARCHITECTURE "Compute". Optional: model server on the 5070 |
+| F-08 | Compute setup: `stub`/`local`/`remote` model backends, shareable analysis cache, model download script, per-tier install notes (CPU / small GPU / RTX 5070; CUDA 12.8+ for the 5070) | Must | F-01 | in progress | ARCHITECTURE "Compute". Optional: model server on the 5070 |
 | F-09 | Benchmark harness: test clips + labels + request set + report script | Must | F-02 | idea | Numbers only from here |
+| F-64 | API routes: upload, request, timeline state | Must | F-06 | planned | Shared file. Starts from the routes F-07's mock uses |
 
 ### Visual edits
 | ID | Feature | Priority | Depends on | Status | Notes |
@@ -144,6 +145,40 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 - F-04 (renderer) and F-05 (planner) are left for Sprint 2 on purpose: they depend on F-02 and R-1. Anyone who finishes early can draft them against the contract.
 
 **Closed (v0.1.0, 2026-10-28):** shipped F-01 repo skeleton, F-02 contract v1, F-03 video I/O, F-07 web UI shell (plus generated API types) and R-2 storage (D-014 still Proposed). Moved to Sprint 2: R-1, R-3, R-4, F-06, F-08, F-09, F-50 (F-50 still needs the RTX 5070).
+
+### Sprint 2: first end-to-end path   (2026-10-27 → 2026-11-03)  · version at close: v0.2.0
+
+**Goal:** by Tuesday 2026-11-03, a request typed in the UI goes through the planner and the toolbox, lands as ops in the edit timeline, and comes out as a render. Stub models are fine.
+
+**Sprint lead:** Alex.
+
+**Order:** first F-06 and F-64 (everything else plugs into them); then F-04, F-05 and R-1; alongside, F-08, R-3 → F-50 and R-4; F-09 can slip.
+
+**Research (carried over from Sprint 1)**
+| Card | Owner | Branch | Exit check | Status |
+|---|---|---|---|---|
+| R-1 Planner LLM: any hosted provider or an open-weight model, compared on the ~20-request set (shared with F-09). Also which requests the template parser takes | paul | | Script output with plan validity, latency and cost per request (or hardware needed) → decision row; planner candidates updated in README and ARCHITECTURE | in progress |
+| R-3 Detection, tracking and identity model shortlist for F-10/F-50/F-52, **with licenses**. Avoid AGPL unless the team agrees | jonathan | | Shortlist table (model, task, license, weights size, CUDA 12.8 support) → decision row | in progress |
+| R-4 Data policy and target shape: may frames go to a cloud model? Boxes or masks from the start? | _open_ | | Two decision rows. Both open questions closed in ARCHITECTURE | planned |
+
+**Build**
+| Card | Owner | Branch | Exit check | Status |
+|---|---|---|---|---|
+| F-06 Toolbox scaffolding: typed tool schemas, registry, stub tools, CLI per tool. **Priority: first.** Shared file (tool names and arguments) | _open_ | | `<tool> --help` lists tools. A stub tool writes a valid op to an example timeline | planned |
+| F-64 API routes: `POST /api/projects`, `POST /api/projects/{id}/requests`, `GET /api/projects/{id}/state`, one request at a time per project. **Priority: first.** Shared file (API routes) | _open_ | | With `VITE_API_MODE=http` the UI uploads, sends a request and shows the real timeline. Route tests pass in stub mode. OpenAPI spec and UI types regenerated | planned |
+| F-04 Renderer: export path (ffmpeg) + per-frame path sharing the effect code; nothing on the per-frame path calls the network. Can be split export / per-frame | _open_ | | A test renders a generated clip with a blur, a cut and a mute from an example timeline and checks the output. No GPU | planned |
+| F-05 Planner: template parser + plan validation + clarify reply; the LLM plan plugs in after R-1 | pablo | | Plain requests → valid tool calls (or clarify) with no network and no GPU | in progress |
+| F-08 Compute setup: `stub`/`local`/`remote` backend interface, model download script, install notes per tier, **plus the team GPU survey**. Cache via `Storage.cache_path()` | eduardo | eduardo/compute-setup | Stub backend replays a cached result in a test. Survey table added to ARCHITECTURE "Compute" | in progress |
+| F-09 Benchmark harness, first cut: consented clips + manifest, label format, request set, report script. Can slip | jean | | `report` runs on the stub backend and prints a table. Clips listed in the manifest, not committed | in progress |
+| F-50 Live feasibility spike on the **RTX 5070**: per-frame latency of detector + tracker + identity check at 720p/1080p, with R-3 candidates | _open_ | | Script output with fps and latency per stage, hardware stated | planned |
+
+**Risks / dependencies:**
+- F-06 and F-64 gate the end-to-end path. Until F-06 lands, F-05 and F-64 build against a stub registry.
+- F-50 needs the RTX 5070 (or remote access) and R-3's shortlist. Its numbers decide live mode in Sprint 4.
+- R-1 and F-09 share the request set; F-05 uses it too.
+- Shared files (tool names, API routes, OpenAPI spec): post in the team chat before merging.
+
+**Closed:** (filled in at sprint close: what shipped, what moved to the next sprint)
 
 ### Sprint template
 Copy this for each new sprint, above this template, so the newest sprint is last.
