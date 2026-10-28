@@ -1,6 +1,6 @@
 # Roadmap
 
-> **Status (2026-10-24):** sprints are weekly, and **demo day is 2026-12-04**. **Sprint 1 (2026-10-20 → 2026-10-27) is planned, and its cards are open to claim.** See [Sprints](#sprints).
+> **Status (2026-10-28):** sprints are weekly, and **demo day is 2026-12-04**. **Sprint 1 closed as v0.1.0 (2026-10-28). Sprint 2 (2026-10-27 → 2026-11-03): first end-to-end path.** See [Sprints](#sprints).
 
 ## How this file works
 - **Backlog** lists every feature we know of, with an ID. IDs never change or get reused, so handoffs, branches and PRs can refer to them (`F-32`).
@@ -17,12 +17,12 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
 | F-01 | Repo skeleton: backend package, test runner, stub mode, one-command run | Must | – | done | Layout decided: D-011, ARCHITECTURE "Code layout" |
-| F-02 | Edit timeline contract v0 in code: op models, fold, undo, generated schema, example timelines | Must | – | in progress | ARCHITECTURE "The contract". Unblocks everyone |
+| F-02 | Edit timeline contract v0 in code: op models, fold, undo, generated schema, example timelines | Must | – | done | ARCHITECTURE "The contract". Unblocks everyone |
 | F-03 | Video I/O: probe, decode frames, frame↔time, audio extraction | Must | F-01 | done | |
 | F-04 | Renderer: export path (ffmpeg) + per-frame path, shared effect code | Must | F-02, F-03 | idea | The per-frame path is required for live later |
 | F-05 | Agent/planner: template parser + LLM JSON plan + validation + clarify | Must | F-02 | idea | Cloud LLM allowed |
 | F-06 | Toolbox scaffolding: typed tool schemas, registry, stub implementations, CLI per tool | Must | F-02 | idea | |
-| F-07 | Web UI shell: upload, chat, player, timeline view, export | Must | F-01 | in progress | |
+| F-07 | Web UI shell: upload, chat, player, timeline view, export | Must | F-01 | done | |
 | F-08 | Compute setup: `stub`/`local`/`remote` model backends, shareable analysis cache, model download script, per-tier install notes (CPU / small GPU / RTX 5070; CUDA 12.8+ for the 5070) | Must | F-01 | idea | ARCHITECTURE "Compute". Optional: model server on the 5070 |
 | F-09 | Benchmark harness: test clips + labels + request set + report script | Must | F-02 | idea | Numbers only from here |
 
@@ -119,7 +119,7 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 | Card | Owner | Branch | Exit check | Status |
 |---|---|---|---|---|
 | R-1 Planner LLM: **open choice** between any AI provider's hosted model (Anthropic, OpenAI, Google, ...) or an open-weight model run on our own hardware. Shortlist a few, then compare them on a draft request set of ~20 requests (shared with F-09). Also decide which requests the template parser should take | _open_ | | Script output with plan validity, latency and cost per request (or the hardware needed, for open models) for each candidate → decision row | planned |
-| R-2 Project storage and analysis cache: one folder per project (`timeline.jsonl` + `cache/` keyed by video hash) vs a database | alex | alex/storage | Decision row, with the folder layout written down for F-02/F-08 | in progress |
+| R-2 Project storage and analysis cache: one folder per project (`timeline.jsonl` + `cache/` keyed by video hash) vs a database | alex | alex/storage | Decision row, with the folder layout written down for F-02/F-08 | done |
 | R-3 Detection, tracking and identity model shortlist for F-10/F-50/F-52, **with licenses** (e.g. RT-DETR, YOLOX, EgoBlur, YOLOE, SAM 2, face embedders). Avoid AGPL unless the team agrees | _open_ | | Shortlist table (model, task, license, weights size, CUDA 12.8 support) → decision row | planned |
 | R-4 Data policy and target shape: may frames go to a cloud model, or only text and metadata? Boxes or segmentation masks from the start? | _open_ | | Two decision rows. Both open questions closed in ARCHITECTURE | planned |
 
@@ -127,10 +127,10 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 | Card | Owner | Branch | Exit check | Status |
 |---|---|---|---|---|
 | F-01 Repo skeleton: backend package, uv project (D-010), pytest in stub mode, lint (Ruff), GitHub Actions CI, one-command run | eduardo | eduardo/repo-skeleton | Fresh clone → `uv sync` → tests pass on CI with no GPU | done |
-| F-02 Contract v0 in code: op models, fold, undo, generated JSON schema, example timelines. **Highest priority: everyone in Sprint 2 builds on it** | alex | alex/contract-v0 | Example timelines validate. Fold and undo tests pass. `schema_version` set | in progress |
+| F-02 Contract v0 in code: op models, fold, undo, generated JSON schema, example timelines. **Highest priority: everyone in Sprint 2 builds on it** | alex | alex/contract-v0 | Example timelines validate. Fold and undo tests pass. `schema_version` set | done |
 | F-03 Video I/O: probe, decode frames, frame↔time, audio extraction | eduardo | eduardo/video-io | Tests pass on a tiny clip that ffmpeg generates during the test (no video is committed) | done |
 | F-06 Toolbox scaffolding: typed tool schemas, registry, stub tools, CLI per tool (starts from the F-02 draft) | _open_ | | `<tool> --help` lists tools. A stub tool writes a valid op to an example timeline | planned |
-| F-07 Web UI shell: React + Vite + TS (D-009) in `frontend/`, with upload, chat, player and timeline view placeholders against a mocked API, and a Vite `/api` proxy to the backend. **Extra:** generate TS types from the backend's OpenAPI spec into `frontend/src/api/generated/`, plus a CI check that fails if they're out of date (D-009) | eduardo | eduardo/web-ui-shell, eduardo/openapi-types (extra) | `npm run dev` shows the shell. Vitest passes. Extra: `npm run gen:api` regenerates the types, and CI fails on a stale type | in progress |
+| F-07 Web UI shell: React + Vite + TS (D-009) in `frontend/`, with upload, chat, player and timeline view placeholders against a mocked API, and a Vite `/api` proxy to the backend. **Extra:** generate TS types from the backend's OpenAPI spec into `frontend/src/api/generated/`, plus a CI check that fails if they're out of date (D-009) | eduardo | eduardo/web-ui-shell, eduardo/openapi-types (extra) | `npm run dev` shows the shell. Vitest passes. Extra: `npm run gen:api` regenerates the types, and CI fails on a stale type | done |
 | F-08 Compute setup: `stub`/`local`/`remote` backend interface, model download script, install notes per tier, **plus the team GPU survey** (who has what, and the 5070's VRAM) | _open_ | | Stub backend replays a cached result in a test. Survey table added to ARCHITECTURE "Compute" | planned |
 | F-09 Benchmark harness, first cut: consented test clips + manifest, label format, request set, report script | _open_ | | `report` script runs on the stub backend and prints a table. Clips are listed in the manifest (not committed) | planned |
 | F-50 Live feasibility spike: per-frame latency of detector + tracker + identity check at 720p/1080p, **on the RTX 5070** (needs whoever has it, or remote access) | _open_ | | Script output with fps and latency per stage, hardware stated. Uses R-3 candidates | planned |
@@ -143,7 +143,7 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 - Shared files (contract, dependency files, CI): post in the team chat before merging (HANDOFF.md, "Shared files").
 - F-04 (renderer) and F-05 (planner) are left for Sprint 2 on purpose: they depend on F-02 and R-1. Anyone who finishes early can draft them against the contract.
 
-**Closed:** (filled in at sprint close: what shipped, what moved to the next sprint)
+**Closed (v0.1.0, 2026-10-28):** shipped F-01 repo skeleton, F-02 contract v1, F-03 video I/O, F-07 web UI shell (plus generated API types) and R-2 storage (D-014 still Proposed). Moved to Sprint 2: R-1, R-3, R-4, F-06, F-08, F-09, F-50 (F-50 still needs the RTX 5070).
 
 ### Sprint template
 Copy this for each new sprint, above this template, so the newest sprint is last.
