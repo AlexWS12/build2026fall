@@ -20,7 +20,7 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 | F-02 | Edit timeline contract v0 in code: op models, fold, undo, generated schema, example timelines | Must | – | done | ARCHITECTURE "The contract". Unblocks everyone |
 | F-03 | Video I/O: probe, decode frames, frame↔time, audio extraction | Must | F-01 | done | |
 | F-04 | Renderer: export path (ffmpeg) + per-frame path, shared effect code | Must | F-02, F-03 | idea | The per-frame path is required for live later |
-| F-05 | Agent/planner: template parser + LLM JSON plan + validation + clarify | Must | F-02 | idea | Cloud LLM allowed |
+| F-05 | Agent/planner: template parser + LLM JSON plan + validation + clarify | Must | F-02 | in progress | Cloud LLM allowed |
 | F-06 | Toolbox scaffolding: typed tool schemas, registry, stub implementations, CLI per tool | Must | F-02 | idea | |
 | F-07 | Web UI shell: upload, chat, player, timeline view, export | Must | F-01 | done | |
 | F-08 | Compute setup: `stub`/`local`/`remote` model backends, shareable analysis cache, model download script, per-tier install notes (CPU / small GPU / RTX 5070; CUDA 12.8+ for the 5070) | Must | F-01 | in progress | ARCHITECTURE "Compute". Optional: model server on the 5070 |
