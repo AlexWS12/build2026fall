@@ -1,0 +1,161 @@
+{
+  "about": "DRAFT shared request set for F-05 (planner), F-09 (benchmark) and R-1 (planner LLM). Each entry is a chat request and what the planner should return: a plan of tool calls, or a clarify reply. Tool names are the F-05 draft (backend/src/vibe/agent/tools_draft.py) until F-06 lands. Times are source seconds. A {\"$ref\": \"sN\"} argument is the output of an earlier step.",
+  "requests": [
+    {
+      "request": "blur faces",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_objects", "args": {"label": "face"}},
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}}}
+      ]
+    },
+    {
+      "request": "Blur all faces.",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_objects", "args": {"label": "face"}},
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}}}
+      ]
+    },
+    {
+      "request": "pixelate the license plates",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_objects", "args": {"label": "license_plate"}},
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "pixelate"}}}
+      ]
+    },
+    {
+      "request": "black box everyone from 0:10 to 0:20",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_objects", "args": {"label": "person"}},
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "box"}, "time_range": {"start": 10, "end": 20}}}
+      ]
+    },
+    {
+      "request": "blur people for the first half",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_objects", "args": {"label": "person"}},
+        {"step_id": "s2", "tool": "resolve_time", "args": {"phrase": "first half"}},
+        {"step_id": "s3", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}, "time_range": {"$ref": "s2"}}}
+      ]
+    },
+    {
+      "request": "blur faces before 0:30",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_objects", "args": {"label": "face"}},
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}, "time_range": {"start": 0, "end": 30}}}
+      ]
+    },
+    {
+      "request": "mute 0:10 to 0:20",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "mute", "args": {"time_range": {"start": 10, "end": 20}}}
+      ]
+    },
+    {
+      "request": "mute the audio",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "mute", "args": {}}
+      ]
+    },
+    {
+      "request": "silence everything after 1:30",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "mute", "args": {"time_range": {"start": 90}}}
+      ]
+    },
+    {
+      "request": "mute between 0:10 and 0:20",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "mute", "args": {"time_range": {"start": 10, "end": 20}}}
+      ]
+    },
+    {
+      "request": "cut the first 5 seconds",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "cut_range", "args": {"time_range": {"start": 0, "end": 5}}}
+      ]
+    },
+    {
+      "request": "cut from 1:00 to 1:15",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "cut_range", "args": {"time_range": {"start": 60, "end": 75}}}
+      ]
+    },
+    {
+      "request": "cut the last 10 seconds",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "resolve_time", "args": {"phrase": "last 10 seconds"}},
+        {"step_id": "s2", "tool": "cut_range", "args": {"time_range": {"$ref": "s1"}}}
+      ]
+    },
+    {
+      "request": "remove 0:05-0:08",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "cut_range", "args": {"time_range": {"start": 5, "end": 8}}}
+      ]
+    },
+    {
+      "request": "blur faces for the whole video and mute 0:10 to 0:20",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_objects", "args": {"label": "face"}},
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}}},
+        {"step_id": "s3", "tool": "mute", "args": {"time_range": {"start": 10, "end": 20}}}
+      ]
+    },
+    {
+      "request": "cut the first 3 seconds, then pixelate faces for the whole clip",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "cut_range", "args": {"time_range": {"start": 0, "end": 3}}},
+        {"step_id": "s2", "tool": "find_objects", "args": {"label": "face"}},
+        {"step_id": "s3", "tool": "add_mask", "args": {"targets": {"$ref": "s2"}, "effect": {"type": "pixelate"}}}
+      ]
+    },
+    {
+      "request": "blur the face",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_objects", "args": {"label": "face"}},
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}}}
+      ]
+    },
+    {
+      "request": "Can you please pixelate the license plate?",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_objects", "args": {"label": "license_plate"}},
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "pixelate"}}}
+      ]
+    },
+    {"request": "cut it", "expect": "clarify"},
+    {"request": "blur him", "expect": "clarify"},
+    {"request": "blur the guy in red", "expect": "clarify"},
+    {"request": "blur faces except mine", "expect": "clarify"},
+    {"request": "make it nicer", "expect": "clarify"},
+    {"request": "remove the people in the background", "expect": "clarify"},
+    {"request": "mute 0:20 to 0:10", "expect": "clarify"},
+    {"request": "trim 0:10 to 0:20", "expect": "clarify"},
+    {"request": "cut 10 to 20 minutes", "expect": "clarify"},
+    {"request": "cut the first 5", "expect": "clarify"},
+    {"request": "mute and cut 0:10 to 0:20", "expect": "clarify"},
+    {"request": "blur faces and mute 0:10 to 0:20", "expect": "clarify"},
+    {"request": "cut the first 3 seconds, then pixelate faces", "expect": "clarify"},
+    {"request": "cut 10 to 20", "expect": "clarify"},
+    {"request": "mute 0:10 and 0:20", "expect": "clarify"},
+    {"request": "mute before 0:00", "expect": "clarify"}
+  ]
+}
