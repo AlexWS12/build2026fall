@@ -4,7 +4,7 @@ date: 2026-10-28
 branch: jonathan/r3-model-shortlist
 features: [R-3]
 base: v0.1.0 @ 16acd80
-head: 792d977
+head: 3de18f0
 status: ready for review
 ---
 
