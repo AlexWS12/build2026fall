@@ -4,7 +4,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from vibe.toolbox.context import ToolContext
 
@@ -13,6 +13,14 @@ ToolKind = Literal["query", "edit"]
 
 Returns = Literal["track_ids", "time_range", "none"]
 """What a tool's result is, so a planner's ``$ref`` to it can be type-checked before running."""
+
+
+def describe_errors(exc: ValidationError) -> str:
+    """One line per problem, ``field.path: message``: the same wording for the planner's plan
+    errors and for ``ToolError``s, so the LLM retry and the user see consistent messages."""
+    return "; ".join(
+        f"{'.'.join(map(str, e['loc'])) or '(args)'}: {e['msg']}" for e in exc.errors()
+    )
 
 
 class ToolError(ValueError):
@@ -27,6 +35,7 @@ class ToolSpec:
     description: str
     args: type[BaseModel]
     result: type[BaseModel]
+    """What ``run`` returns; ``call_tool`` checks it."""
     returns: Returns
     run: Callable[[Any, ToolContext], BaseModel]
     """Called with validated arguments (an instance of ``args``)."""

@@ -10,17 +10,17 @@ from pydantic import ValidationError
 
 from vibe.contract import WHOLE_CLIP, TimeRange
 from vibe.toolbox.timecodes import (
-    TIMESTAMP,
+    NUMBER,
     UNIT,
     TimeParseError,
-    has_unit,
+    is_bare_number,
     parse_timestamp,
 )
 
 __all__ = ["TimeParseError", "parse_time_phrase", "parse_timestamp"]
 
 
-_TS = rf"\d+(?::\d{{2}}){{0,2}}(?:\.\d+)?(?:\s*{UNIT}\b)?"
+_TS = rf"{NUMBER}(?:\s*{UNIT}\b)?"
 """One timestamp: "10", "1.5", "10s", "2 minutes", "1:30", "1:02:03"."""
 
 _LEADING_WORDS = re.compile(r"^(?:(?:for|during|in|over|on|everything|all)\s+)+")
@@ -52,7 +52,9 @@ def parse_time_phrase(text: str) -> TimeRange | str | None:
     if match := _HALF.fullmatch(text):
         return match.group(1)
     if match := _FIRST.fullmatch(text):
-        return _range(None, match.group(1))
+        # Through resolve_time like "last N", so a span longer than the video is caught
+        # ("cut the first 2 minutes" of a 1-minute clip must not cut everything).
+        return f"first {_explicit(match.group(1))}"
     if match := _LAST.fullmatch(text):
         return f"last {_explicit(match.group(1))}"
     if match := _AFTER.fullmatch(text):
@@ -65,7 +67,7 @@ def parse_time_phrase(text: str) -> TimeRange | str | None:
 def _explicit(timestamp: str) -> str:
     """``timestamp`` if it says its unit ("0:10", "10 seconds"); a bare "10" is asked about."""
     timestamp = timestamp.strip()
-    if not has_unit(timestamp) and TIMESTAMP.fullmatch(timestamp):
+    if is_bare_number(timestamp):
         raise TimeParseError(
             f"Is {timestamp!r} in seconds or minutes? Add the unit, like '{timestamp} seconds', "
             "or write a clock time like 1:30."

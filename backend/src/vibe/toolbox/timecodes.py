@@ -8,7 +8,10 @@ import re
 
 UNIT = r"(?:s|secs?|seconds?|m|mins?|minutes?)"
 
-TIMESTAMP = re.compile(rf"(\d+(?::\d{{2}}){{0,2}}(?:\.\d+)?)\s*({UNIT})?")
+NUMBER = r"\d+(?::\d{2}){0,2}(?:\.\d+)?"
+"""The number part of a timestamp: "10", "1.5", "1:30", "1:02:03". Shared with the planner."""
+
+TIMESTAMP = re.compile(rf"({NUMBER})\s*({UNIT})?")
 """Groups: the number (with any colons), then the unit if one was written."""
 
 _MINUTE_UNITS = ("m", "min", "mins", "minute", "minutes")
@@ -38,7 +41,8 @@ def parse_timestamp(text: str) -> float:
     return total
 
 
-def has_unit(text: str) -> bool:
-    """True for "0:10" or "10 seconds"; False for a bare "10", which could be either unit."""
+def is_bare_number(text: str) -> bool:
+    """True for a bare "10", which could be seconds or minutes; False for "0:10", "10 seconds"
+    or anything that isn't a timestamp."""
     match = TIMESTAMP.fullmatch(text.strip())
-    return match is not None and (":" in match.group(1) or match.group(2) is not None)
+    return match is not None and ":" not in match.group(1) and match.group(2) is None

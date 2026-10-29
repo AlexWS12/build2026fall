@@ -10,7 +10,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from vibe.agent.plan import Plan, ToolCall, as_ref
-from vibe.toolbox import Returns, ToolSpec
+from vibe.toolbox import Returns, ToolSpec, describe_errors
 
 _PLACEHOLDERS: Mapping[Returns, Any] = {
     "track_ids": ["placeholder_track"],
@@ -64,6 +64,5 @@ def _check_call(call: ToolCall, spec: ToolSpec, earlier: Mapping[str, Returns]) 
     try:
         spec.args.model_validate(args)
     except ValidationError as exc:
-        details = "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
-        errors.append(f"{call.step_id} ({spec.name}): bad arguments: {details}")
+        errors.append(f"{call.step_id} ({spec.name}): bad arguments: {describe_errors(exc)}")
     return errors

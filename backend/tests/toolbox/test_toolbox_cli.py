@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from vibe.contract import Cut, Mute, OpLog
+from vibe.storage import Storage
 from vibe.toolbox import TOOLS
 from vibe.toolbox.__main__ import main
 
@@ -121,7 +122,7 @@ def test_unreadable_timeline_is_an_error_not_a_traceback(
     code, _, err = run(capsys, "mute", "--log", str(bad))
 
     assert code == 1
-    assert "can't read timeline" in err
+    assert err.startswith("error: mute:") and "timeline" in err
 
 
 def test_query_tools_dont_read_the_timeline(
@@ -152,21 +153,20 @@ def test_writing_keeps_the_timeline_permissions(
 @pytest.mark.skipif(
     sys.platform == "win32" or os.geteuid() == 0, reason="needs POSIX permissions, not root"
 )
-def test_unwritable_folder_is_an_error_and_leaves_no_temp_file(
+def test_read_only_timeline_is_an_error_and_stays_unchanged(
     capsys: pytest.CaptureFixture[str], timeline: Path
 ) -> None:
     before = timeline.read_text()
-    folder = timeline.parent
-    folder.chmod(0o555)
+    timeline.chmod(0o444)
     try:
         code, _, err = run(capsys, "mute", "--log", str(timeline))
     finally:
-        folder.chmod(0o755)
+        timeline.chmod(0o644)
 
     assert code == 1
-    assert "can't write timeline" in err
+    assert "can't read or write the timeline" in err
     assert timeline.read_text() == before
-    assert [p.name for p in folder.iterdir()] == [timeline.name]
+    assert [p.name for p in timeline.parent.iterdir()] == [timeline.name]
 
 
 def test_zero_length_resolve_time_is_an_error_not_a_traceback(
@@ -178,3 +178,61 @@ def test_zero_length_resolve_time_is_an_error_not_a_traceback(
 
     assert code == 1
     assert err.startswith("error:")
+
+
+def test_edits_append_and_never_rewrite_earlier_lines(
+    capsys: pytest.CaptureFixture[str], timeline: Path
+) -> None:
+    before = timeline.read_text()
+
+    run(capsys, "mute", "--log", str(timeline))
+
+    after = timeline.read_text()
+    assert after.startswith(before)
+    assert after.count("\n") == before.count("\n") + 1
+
+
+def test_incomplete_last_line_is_refused_not_glued_onto(
+    capsys: pytest.CaptureFixture[str], timeline: Path
+) -> None:
+    with timeline.open("a") as f:
+        f.write('{"kind": "mu')  # a crash mid-append
+    before = timeline.read_text()
+
+    code, _, err = run(capsys, "mute", "--log", str(timeline))
+
+    assert code == 1
+    assert "incomplete line" in err
+    assert timeline.read_text() == before
+
+
+def test_project_option_writes_through_storage(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VIBE_DATA_DIR", str(tmp_path / "data"))
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"not really a video")
+    project = Storage().create_project(video)
+
+    code, out, _ = run(capsys, "mute", "--project", project.id)
+
+    assert code == 0
+    assert [op.op_id for op in project.log()] == json.loads(out)["op_ids"]
+
+
+def test_unknown_project_is_an_error(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VIBE_DATA_DIR", str(tmp_path / "data"))
+
+    code, _, err = run(capsys, "mute", "--project", "prj_nope")
+
+    assert code == 1
+    assert err.startswith("error:")
+
+
+def test_find_objects_without_tracks_is_an_error(capsys: pytest.CaptureFixture[str]) -> None:
+    code, _, err = run(capsys, "find_objects", "--args", '{"label": "face"}')
+
+    assert code == 1
+    assert "no analysis" in err

@@ -6,7 +6,7 @@ in the same op log and undo works the same way (docs/ARCHITECTURE.md, "Toolbox")
 
 from vibe.toolbox.context import OpSink, ToolContext
 from vibe.toolbox.registry import TOOLS, call_tool
-from vibe.toolbox.spec import Returns, ToolError, ToolKind, ToolSpec
+from vibe.toolbox.spec import Returns, ToolError, ToolKind, ToolSpec, describe_errors
 
 __all__ = [
     "TOOLS",
@@ -17,4 +17,5 @@ __all__ = [
     "ToolKind",
     "ToolSpec",
     "call_tool",
+    "describe_errors",
 ]

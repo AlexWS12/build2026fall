@@ -7,13 +7,13 @@ ops and append them to the timeline; they never touch pixels or audio.
 import math
 import re
 
-from pydantic import Field, ValidationError
+from pydantic import Field
 
 from vibe.contract import AddMask, ContractError, Cut, Mute, Op, TimeRange
 from vibe.contract.common import Effect, Model
 from vibe.toolbox.context import ToolContext
 from vibe.toolbox.spec import ToolError
-from vibe.toolbox.timecodes import TimeParseError, has_unit, parse_timestamp
+from vibe.toolbox.timecodes import TimeParseError, is_bare_number, parse_timestamp
 
 # --- find_objects -------------------------------------------------------------------------
 
@@ -28,7 +28,16 @@ class FindObjectsResult(Model):
 
 
 def find_objects(args: FindObjectsArgs, ctx: ToolContext) -> FindObjectsResult:
-    """**Stub:** filters the tracks in the context. Real detection comes from F-10 via F-08."""
+    """**Stub:** filters the tracks in the context. Real detection comes from F-10 via F-08.
+
+    No tracks at all (``None``) means the video hasn't been analysed, which is an error: "blur
+    all faces" must not succeed with nothing masked (privacy fails closed). An empty list means
+    it was analysed and nothing is there.
+    """
+    if ctx.tracks is None:
+        raise ToolError(
+            f"find_objects: no analysis for this video, so I can't tell where any {args.label!r} is"
+        )
     ids = [t.track_id for t in ctx.tracks if t.label == args.label]
     return FindObjectsResult(track_ids=ids, count=len(ids))
 
@@ -62,7 +71,7 @@ def resolve_time(args: ResolveTimeArgs, ctx: ToolContext) -> ResolveTimeResult:
     if phrase == "second half":
         return ResolveTimeResult(time_range=TimeRange(start=d / 2))
     match = _EDGE.fullmatch(phrase)
-    if match is None or not has_unit(match.group(2)):
+    if match is None or is_bare_number(match.group(2)):
         raise ToolError(f"resolve_time: can't resolve {args.phrase!r}")
     try:
         seconds = parse_timestamp(match.group(2))
@@ -103,13 +112,21 @@ class MuteArgs(Model):
     speaker: str | None = Field(default=None, description="Speaker id; null = all audio.")
 
 
+def _end(r: TimeRange) -> str:
+    return "the end" if r.end is None else f"{r.end:g}s"
+
+
 def _write(tool: str, op: Op, ctx: ToolContext) -> EditResult:
     if ctx.log is None:
         raise ToolError(f"{tool}: needs a timeline to write to")
     try:
         ctx.log.append(op)
-    except (ContractError, ValidationError) as exc:
-        raise ToolError(f"{tool}: the timeline refused the edit: {exc}") from None
+    except OSError as exc:  # a project's timeline.jsonl is missing or unwritable
+        raise ToolError(f"{tool}: can't read or write the timeline: {exc}") from None
+    except (ContractError, ValueError) as exc:
+        # Either the edit breaks a contract rule or the stored log is unreadable (bad UTF-8,
+        # bad header); the message says which, so don't blame the edit.
+        raise ToolError(f"{tool}: couldn't apply the edit to the timeline: {exc}") from None
     return EditResult(op_ids=[op.op_id])
 
 
@@ -125,6 +142,10 @@ def add_mask(args: AddMaskArgs, ctx: ToolContext) -> EditResult:
 
 
 def cut_range(args: CutRangeArgs, ctx: ToolContext) -> EditResult:
+    r = args.time_range
+    if ctx.duration is not None and r.start <= 0 and (r.end is None or r.end >= ctx.duration):
+        # Never silently cut everything ("cut before 2:00" on a 1-minute clip): ask instead.
+        raise ToolError(f"cut_range: {r.start:g}s to {_end(r)} would cut the whole video")
     op = Cut(request_id=ctx.request_id, source=ctx.source, time_range=args.time_range)
     return _write("cut_range", op, ctx)
 

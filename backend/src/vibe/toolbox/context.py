@@ -24,5 +24,6 @@ class ToolContext:
     """The timeline edit tools write to. Query tools don't need one."""
     duration: float | None = None
     """Video length in seconds, for ``resolve_time``."""
-    tracks: Sequence[Track] = ()
-    """Tracks from the analysis cache (stub: given by the caller; real: F-08 / F-10)."""
+    tracks: Sequence[Track] | None = None
+    """Tracks from the analysis cache (stub: given by the caller; real: F-08 / F-10). ``None``
+    means the video hasn't been analysed; ``[]`` means it was and nothing was found."""

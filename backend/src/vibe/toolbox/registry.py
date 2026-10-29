@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from vibe.toolbox import tools
 from vibe.toolbox.context import ToolContext
-from vibe.toolbox.spec import ToolError, ToolSpec
+from vibe.toolbox.spec import ToolError, ToolSpec, describe_errors
 
 _TOOLS = (
     ToolSpec(
@@ -82,11 +82,11 @@ def call_tool(
     try:
         parsed = spec.args.model_validate(args)
     except ValidationError as exc:
-        details = "; ".join(
-            f"{'.'.join(map(str, e['loc'])) or '(args)'}: {e['msg']}" for e in exc.errors()
-        )
-        raise ToolError(f"{name}: bad arguments: {details}") from None
+        raise ToolError(f"{name}: bad arguments: {describe_errors(exc)}") from None
     try:
-        return spec.run(parsed, ctx)
+        result = spec.run(parsed, ctx)
     except ValidationError as exc:  # a tool built an invalid model: still this call's error
-        raise ToolError(f"{name}: {exc}") from None
+        raise ToolError(f"{name}: {describe_errors(exc)}") from None
+    if not isinstance(result, spec.result):  # a bug in the tool, not in the call
+        raise TypeError(f"{name} returned {type(result).__name__}, not {spec.result.__name__}")
+    return result
