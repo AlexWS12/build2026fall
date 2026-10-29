@@ -50,9 +50,9 @@ A chat message, a UI action (click a target, draw a box, drag a box), or a **sta
 - **Hand edits from the UI go through the same tools**, so they land in the same op log and undo works the same way.
 - **Analysis runs once per video and is cached** (tracks, transcripts, speaker turns), so repeat requests are cheap.
 - Every tool has a CLI and a stub implementation, so it can be tested without a GPU.
-- **Built so far (F-06):** `find_objects` (stub: filters the tracks it's given), `resolve_time` (real: arithmetic on the video duration), `add_mask`, `cut_range` and `mute`, the five the planner uses. The other tools above get added when a feature needs them.
+- **Built so far (F-06):** `find_objects` (stub: filters the tracks it's given; with no analysis at all it fails instead of finding nothing), `resolve_time` (real: arithmetic on the video duration), `add_mask`, `cut_range` and `mute`, the five the planner uses. The other tools above get added when a feature needs them.
 - **One entry point:** `call_tool(name, args, ctx)` validates the arguments and runs the tool. `ToolContext` carries the `request_id`, the `source`, the timeline to write to (an `OpLog` in memory or a storage `Project` on disk), the duration and the tracks. Anything that can't be done raises `ToolError` and writes nothing.
-- **CLI:** `uv run python -m vibe.toolbox --help` lists the tools; `... <tool> --help` lists its arguments; `... <tool> --log timeline.jsonl --args '{...}'` runs one.
+- **CLI:** `uv run python -m vibe.toolbox --help` lists the tools; `... <tool> --help` lists its arguments; `... <tool> --project <id> --args '{...}'` (or `--log timeline.jsonl`) runs one. It only appends to a timeline, never rewrites it.
 
 ### 4. AI modules
 These are wrapped by the query tools and swappable behind them.
