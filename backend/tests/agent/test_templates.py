@@ -138,3 +138,12 @@ def test_cutting_the_whole_video_is_not_a_plain_request() -> None:
 )
 def test_polite_words_around_a_request_are_ignored(text: str) -> None:
     assert calls(text) == calls("blur faces")
+
+
+def test_first_n_goes_through_resolve_time_like_last_n() -> None:
+    result = calls("cut the first 2 minutes")
+
+    assert result == [
+        {"step_id": "s1", "tool": "resolve_time", "args": {"phrase": "first 2 minutes"}},
+        {"step_id": "s2", "tool": "cut_range", "args": {"time_range": {"$ref": "s1"}}},
+    ]
