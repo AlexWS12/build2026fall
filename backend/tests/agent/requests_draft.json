@@ -108,7 +108,7 @@
       ]
     },
     {
-      "request": "blur faces and mute 0:10 to 0:20",
+      "request": "blur faces for the whole video and mute 0:10 to 0:20",
       "expect": "plan",
       "calls": [
         {"step_id": "s1", "tool": "find_objects", "args": {"label": "face"}},
@@ -117,7 +117,7 @@
       ]
     },
     {
-      "request": "cut the first 3 seconds, then pixelate faces",
+      "request": "cut the first 3 seconds, then pixelate faces for the whole clip",
       "expect": "plan",
       "calls": [
         {"step_id": "s1", "tool": "cut_range", "args": {"time_range": {"start": 0, "end": 3}}},
@@ -135,6 +135,8 @@
     {"request": "trim 0:10 to 0:20", "expect": "clarify"},
     {"request": "cut 10 to 20 minutes", "expect": "clarify"},
     {"request": "cut the first 5", "expect": "clarify"},
-    {"request": "mute and cut 0:10 to 0:20", "expect": "clarify"}
+    {"request": "mute and cut 0:10 to 0:20", "expect": "clarify"},
+    {"request": "blur faces and mute 0:10 to 0:20", "expect": "clarify"},
+    {"request": "cut the first 3 seconds, then pixelate faces", "expect": "clarify"}
   ]
 }

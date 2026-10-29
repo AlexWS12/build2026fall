@@ -43,6 +43,8 @@ def test_parse_timestamp_rejects_bad_input(text: str) -> None:
         ("from 0:30 on", TimeRange(start=30)),
         ("before 0:30", TimeRange(start=0, end=30)),
         ("until 1:00", TimeRange(start=0, end=60)),
+        ("for the whole video", TimeRange(start=0)),
+        ("the entire clip", TimeRange(start=0)),
     ],
 )
 def test_parse_time_phrase_gives_ranges(text: str, expected: TimeRange) -> None:

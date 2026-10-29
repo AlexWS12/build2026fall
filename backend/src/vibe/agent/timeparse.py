@@ -8,7 +8,7 @@ import re
 
 from pydantic import ValidationError
 
-from vibe.contract import TimeRange
+from vibe.contract import WHOLE_CLIP, TimeRange
 
 
 class TimeParseError(ValueError):
@@ -29,6 +29,7 @@ _LEADING_WORDS = re.compile(r"^(?:(?:for|during|in|over|on|everything|all)\s+)+"
 _RANGE = re.compile(
     rf"(?:from\s+|between\s+)?({_TS})\s*(?:to|until|till|through|and|-|–)\s*({_TS})"
 )
+_WHOLE = re.compile(r"(?:the\s+)?(?:whole|entire|full)\s+(?:video|clip|thing)")
 _HALF = re.compile(r"(?:the\s+)?((?:first|second) half)")
 _FIRST = re.compile(rf"(?:the\s+)?first\s+({_TS_EXPLICIT})")
 _LAST = re.compile(rf"(?:the\s+)?(last\s+{_TS_EXPLICIT})")
@@ -68,6 +69,8 @@ def parse_time_phrase(text: str) -> TimeRange | str | None:
     text = _LEADING_WORDS.sub("", text.strip())
     if match := _RANGE.fullmatch(text):
         return _written_range(match.group(1), match.group(2))
+    if _WHOLE.fullmatch(text):
+        return WHOLE_CLIP
     if match := _HALF.fullmatch(text):
         return match.group(1)
     if match := _FIRST.fullmatch(text):
