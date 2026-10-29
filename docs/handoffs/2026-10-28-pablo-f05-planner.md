@@ -4,7 +4,7 @@ date: 2026-10-28
 branch: pablo/f05-planner-v2
 features: [F-05]
 base: v0.1.0 @ 0977fb7
-head: c9661f7
+head: 9737aa4
 status: ready for review
 ---
 
