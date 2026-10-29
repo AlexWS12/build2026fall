@@ -4,7 +4,7 @@ date: 2026-10-28
 branch: pablo/f06-toolbox
 features: [F-06]
 base: v0.1.0 @ 21ee75c
-head: f2f7d42
+head: 68d3abf
 status: ready for review
 ---
 
@@ -17,14 +17,14 @@ status: ready for review
   - `registry.py`: `TOOLS` (read-only, by name) and `call_tool(name, args, ctx)`. `call_tool` validates the arguments against the tool's model and runs the tool. An unknown tool, bad arguments, or an edit the timeline refuses all raise `ToolError` and write nothing.
   - `tools.py`: the five tools, each with an argument model and a result model:
     - `find_objects(label)` → `{track_ids, count}`. **Stub:** it filters the tracks in the context. Real detection comes from F-10 via F-08.
-    - `resolve_time(phrase)` → `{time_range}`. **Real:** it computes "first half", "second half", "first N" and "last N" (N needs a unit or clock time) from the video duration. It rejects a missing or non-finite duration and empty ranges.
+    - `resolve_time(phrase)` → `{time_range}`. **Real:** it computes "first half", "second half", "first N" and "last N" (N needs a unit or clock time) from the video duration. It rejects a missing or non-finite duration, empty ranges, and a span as long as the video or longer (so "cut the last 2 minutes" of a 1-minute clip asks instead of cutting everything).
     - `add_mask`, `cut_range`, `mute` → `{op_ids}`. Each builds the contract op (`AddMask` / `Cut` / `Mute`) with the context's `request_id` and `source`, then appends it. `add_mask` drops repeated targets.
   - `context.py`: `ToolContext(request_id, source, log, duration, tracks)`. `log` is anything with `append(op)` (`OpSink`): a `contract.OpLog` in memory, or a `storage.Project` on disk.
   - `spec.py`: `ToolSpec` (name, kind, description, args/result models, `returns`, `ref_args` / `ref_required` for the planner's `$ref`s, and `run`) and `ToolError`.
   - `timecodes.py`: `parse_timestamp`, moved here from the agent so the toolbox never imports the agent.
   - `__main__.py`: the CLI, described under "How to check it". Edit tools rewrite the timeline file atomically (temp file + rename) and keep its permissions. Errors print `error: …`, exit 1, and leave the file untouched.
 - **Planner (F-05):** `agent/tools_draft.py` is deleted. The planner validates against `vibe.toolbox.TOOLS`, and `agent/timeparse.py` imports timestamp parsing from `toolbox/timecodes.py`. Tool names didn't change, so the request set's expected plans are the same.
-- **Tests:** `backend/tests/toolbox/` (65 tests):
+- **Tests:** `backend/tests/toolbox/` (68 tests):
   - `test_tools.py`: every tool, every error path, and tools working on both an `OpLog` and a storage `Project`;
   - `test_registry.py`: guards the shared names; argument models forbid unknown fields;
   - `test_toolbox_cli.py`: the **exit check** and the CLI's error handling (bad UTF-8, an unwritable folder, permissions).
@@ -33,7 +33,7 @@ status: ready for review
 ## How to check it
 ```bash
 cd backend
-uv run pytest -q                                   # 343 passed (65 in tests/toolbox)
+uv run pytest -q                                   # 346 passed (68 in tests/toolbox)
 uv run ruff check . && uv run ruff format --check .
 uv run python -m vibe.toolbox --help               # lists the 5 tools
 uv run python -m vibe.toolbox add_mask --help      # its arguments and an example
