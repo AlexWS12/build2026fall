@@ -125,6 +125,22 @@
         {"step_id": "s3", "tool": "add_mask", "args": {"targets": {"$ref": "s2"}, "effect": {"type": "pixelate"}}}
       ]
     },
+    {
+      "request": "blur the face",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_objects", "args": {"label": "face"}},
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}}}
+      ]
+    },
+    {
+      "request": "Can you please pixelate the license plate?",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_objects", "args": {"label": "license_plate"}},
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "pixelate"}}}
+      ]
+    },
     {"request": "cut it", "expect": "clarify"},
     {"request": "blur him", "expect": "clarify"},
     {"request": "blur the guy in red", "expect": "clarify"},
@@ -137,6 +153,9 @@
     {"request": "cut the first 5", "expect": "clarify"},
     {"request": "mute and cut 0:10 to 0:20", "expect": "clarify"},
     {"request": "blur faces and mute 0:10 to 0:20", "expect": "clarify"},
-    {"request": "cut the first 3 seconds, then pixelate faces", "expect": "clarify"}
+    {"request": "cut the first 3 seconds, then pixelate faces", "expect": "clarify"},
+    {"request": "cut 10 to 20", "expect": "clarify"},
+    {"request": "mute 0:10 and 0:20", "expect": "clarify"},
+    {"request": "mute before 0:00", "expect": "clarify"}
   ]
 }

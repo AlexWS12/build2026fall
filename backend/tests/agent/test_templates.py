@@ -30,6 +30,9 @@ def test_mask_verbs_map_to_effects(verb: str, effect: str) -> None:
         ("everyone", "person"),
         ("license plates", "license_plate"),
         ("plates", "license_plate"),
+        ("face", "face"),
+        ("person", "person"),
+        ("license plate", "license_plate"),
     ],
 )
 def test_mask_nouns_map_to_detector_labels(noun: str, label: str) -> None:
@@ -74,6 +77,8 @@ def test_and_inside_a_between_range_is_not_a_clause_split() -> None:
         "remove the people in the background",
         "blur faces and make it nicer",
         "trim 0:10 to 0:20",
+        "mute 0:10 and 0:20",
+        "blur the person in red",
         "",
     ],
 )
@@ -119,3 +124,17 @@ def test_whole_video_means_no_time_range_argument() -> None:
 
 def test_cutting_the_whole_video_is_not_a_plain_request() -> None:
     assert parse("cut the whole video") is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "can you please blur faces",
+        "please blur faces",
+        "blur faces, please",
+        "Could you blur faces please?",
+        "blur faces. Thanks!",
+    ],
+)
+def test_polite_words_around_a_request_are_ignored(text: str) -> None:
+    assert calls(text) == calls("blur faces")

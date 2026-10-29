@@ -22,20 +22,27 @@ _CLAUSE_SPLIT = re.compile(
 
 _MASK = re.compile(
     r"(blur|pixelate|black ?box|box|hide)(?:\s+out)?\s+"
-    r"(?:all\s+(?:the\s+)?|the\s+)?(faces|people|persons|everyone|license plates|plates)\b(.*)"
+    r"(?:all\s+(?:the\s+)?|the\s+|every\s+|each\s+)?"
+    r"(faces?|people|persons?|everyone|everybody|license plates?|plates?)\b(.*)"
 )
 _MUTE = re.compile(r"(?:mute|silence)(?:\s+(?:the\s+)?(?:audio|sound|video|clip|it))?\b(.*)")
 _CUT = re.compile(r"(?:cut|remove|delete)(?:\s+out)?\b(.*)")
 
 _EFFECTS = {"blur": "blur", "hide": "blur", "pixelate": "pixelate", "box": "box"}
 _LABELS = {
+    "face": "face",
     "faces": "face",
     "people": "person",
+    "person": "person",
     "persons": "person",
     "everyone": "person",
+    "everybody": "person",
+    "license plate": "license_plate",
     "license plates": "license_plate",
+    "plate": "license_plate",
     "plates": "license_plate",
 }
+"""Singular nouns mask every match too ("blur the face" = all faces): fail closed for privacy."""
 
 
 class _Steps:
@@ -54,6 +61,10 @@ class _Steps:
         if isinstance(phrase, str):
             return ref(self.add("resolve_time", {"phrase": phrase}))
         return phrase.model_dump(exclude_none=True)
+
+
+class MixedTimeError(TimeParseError):
+    """Only part of a request has a time, so the time may have been meant for every part."""
 
 
 _NO_TIME = object()
@@ -116,10 +127,15 @@ _TEMPLATES: tuple[tuple[re.Pattern[str], Callable[[re.Match[str], _Steps], Match
 )
 
 
+_POLITE_START = re.compile(r"^(?:(?:please|can you|could you|would you|pls)\s+)+")
+_POLITE_END = re.compile(r"(?:,?\s+(?:please|pls|thanks|thank you))+$")
+
+
 def normalize(text: str) -> str:
+    """Lowercase, single spaces, and no polite words or end punctuation around the request."""
     text = re.sub(r"\s+", " ", text.strip().lower())
-    text = re.sub(r"[.!?]+$", "", text)
-    return re.sub(r"^(?:please|can you|could you)\s+", "", text)
+    text = _POLITE_END.sub("", re.sub(r"[.!?]+$", "", text))
+    return re.sub(r"[,.!?]+$", "", _POLITE_START.sub("", text))
 
 
 def parse(text: str) -> Plan | None:
@@ -139,7 +155,7 @@ def parse(text: str) -> Plan | None:
             return None
         scopes.add(scope)
     if {"untimed", "timed"} <= scopes:
-        raise TimeParseError(
+        raise MixedTimeError(
             "Only part of that request has a time. Should the rest cover the whole video, or "
             "the same time? Say it for each part, like 'blur faces for the whole video and "
             "mute 0:10 to 0:20'."

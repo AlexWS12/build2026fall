@@ -17,7 +17,7 @@ status: ready for review
   - `planner.py`: `plan_request(text, registry=DRAFT_REGISTRY, llm=None)` returns a `Plan` or a `Clarify`. It tries the template parser first. With no match and no LLM, it asks a question that depends on the verb, e.g. "Which part should I cut? Give a time range like 0:10 to 0:20." `LlmPlanner` is the slot for R-1's model:
     - an invalid plan is retried once, with the validation errors passed back;
     - after a second invalid plan, it returns `Clarify` with both errors in `reason`;
-    - if the LLM call itself fails, it returns `Clarify` and logs the error.
+    - if the provider fails, the adapter raises `LlmError` and the planner returns `Clarify` and logs it. Any other exception is a bug and is raised, not hidden.
   - `templates.py`: the template parser, which handles:
     - mask requests ("blur / pixelate / black box / hide" + "faces / people / everyone / license plates"), with an optional time;
     - "mute / silence", with an optional time;
@@ -27,17 +27,18 @@ status: ready for review
   - `validate.py`: `validate_plan(plan, registry)` returns readable errors for unknown tools, bad or extra arguments, duplicate step ids, `$ref`s to a missing, later or wrong-type step, and a plan with no edit call. `add_mask.targets` must be a `$ref`, so a planner can't make up track ids.
   - `plan.py`: `ToolCall(step_id, tool, args)`, `Plan(calls)` and `Clarify(question, reason)`. An argument `{"$ref": "s1"}` means "the result of step s1". The LLM will write this same JSON shape.
   - `tools_draft.py`: the **draft** registry, with `find_objects`, `resolve_time`, `add_mask`, `cut_range` and `mute`. It reuses `TimeRange` / `Effect` from the contract.
-- **`backend/tests/agent/`:** 124 tests.
-  - `test_planner.py` holds the **exit check**: it runs every request in `requests_draft.json` (29 requests: 16 plans, 13 clarify) with the socket blocked, and checks the exact tool calls or a clarify.
+- **`backend/tests/agent/`:** 150 tests.
+  - `test_planner.py` holds the **exit check**: it runs every request in `requests_draft.json` (34 requests: 18 plans, 16 clarify) with the socket blocked, and checks the exact tool calls or a clarify.
   - The same file covers the LLM slot with fake LLMs: retry once, then clarify, plus provider errors.
   - `test_templates.py`, `test_timeparse.py` and `test_validate.py` cover each part.
 - `docs/ROADMAP.md`: claimed F-05 (branch in the Sprint 2 row; backlog status `in progress`).
+- **Review fixes (PR #15):** bare numbers ask "seconds or minutes?"; "and" is a range word only after "between"; a non-draft registry rejecting a template plan falls back instead of crashing; the mixed-time clarify has its own reason (`only part of the request has a time`); `LlmError` narrows what counts as a provider failure; singular nouns and polite words are handled.
 - `docs/ARCHITECTURE.md`: added **D-016** (plan format, Proposed) to the decisions log and a pointer to it in "Agent / planner".
 
 ## How to check it
 ```bash
 cd backend
-uv run pytest -q                       # 252 passed (124 in tests/agent)
+uv run pytest -q                       # 278 passed (150 in tests/agent)
 uv run ruff check . && uv run ruff format --check .
 uv run python -c "from vibe.agent import plan_request; print(plan_request('blur faces for the first half')); print(plan_request('cut it'))"
 ```
@@ -48,7 +49,8 @@ pablo made these on 2026-10-28. The plan format is proposed as **D-016** in `doc
 - **Plan format:** a list of `{step_id, tool, args}`, where an argument may be `{"$ref": "<earlier step_id>"}` to use that step's result. The template parser and the future LLM produce the same shape, and both go through `validate_plan`.
 - **The planner asks, it doesn't guess.**
   - **Cuts:** a cut needs an explicit time, so "cut it" and "cut the whole video" get a question.
-  - **Units:** "the first 5" (no unit) and "10 to 20 minutes" (the unit written only once) get a question. Times like "1:5" (one digit after the colon) or "1:30 minutes" (a clock time with a unit) are refused.
+  - **Units:** a bare number anywhere ("cut 10 to 20", "the first 5", "after 90", "10 to 20 minutes") gets "seconds or minutes?", because it could be either. "X and Y" is a range only after "between", since "mute 0:10 and 0:20" may mean two moments. Times like "1:5" (one digit after the colon) or "1:30 minutes" (a clock time with a unit) are refused.
+  - **Singular nouns mask every match:** "blur the face" blurs all faces (fail closed). Polite words around a request ("can you please …", "…, please") are ignored.
   - **"trim"** isn't a template, because it can mean either cut or keep.
   - **Mixed times:** if one part of a request has a time and another doesn't ("blur faces and mute 0:10 to 0:20"), it asks whether the time covers everything. "for the whole video" answers that.
 - **Templates only take what they fully understand.** Leftover words ("faces except mine", "the guy in red", "him") mean no match, which leads to a clarify, or to the LLM once it exists.
@@ -64,5 +66,5 @@ pablo made these on 2026-10-28. The plan format is proposed as **D-016** in `doc
 ## Gotchas
 - **Not plugged in yet.** `plan_request` only returns a plan. Nothing executes it, so no ops reach the timeline until F-06 exists.
 - **Clause splitting only happens on "and" / "then" / commas followed by a known verb**, so "between 0:10 and 0:20" stays one range. A new verb has to be added to `_VERBS` in `templates.py` too.
-- **Bare numbers in a written range are seconds** ("cut 10 to 20" is 10-20 s). Only "first N" / "last N" require a unit.
+- **A template plan the registry rejects** raises `PlanError` only with `DRAFT_REGISTRY` (a parser bug). With any other registry (e.g. F-06's, if it renames a tool) it is logged and falls back to the LLM, or a clarify.
 - The pytest `httpx2` deprecation warning is the existing one from F-01, not new.

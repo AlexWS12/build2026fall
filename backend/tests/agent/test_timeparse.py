@@ -64,15 +64,31 @@ def test_duration_relative_phrases_are_left_for_resolve_time(text: str, phrase: 
 
 
 @pytest.mark.parametrize(
-    "text", ["him", "the guy in red", "except mine", "it", "nicely", "the first 5", "the last 10"]
+    "text", ["him", "the guy in red", "except mine", "it", "nicely", "0:10 and 0:20"]
 )
 def test_text_that_is_not_a_time_phrase_gives_none(text: str) -> None:
     assert parse_time_phrase(text) is None
 
 
 @pytest.mark.parametrize(
-    "text", ["0:20 to 0:10", "before 0:00", "0:10 to 0:10", "10 to 20 minutes", "1-2 minutes"]
+    "text", ["0:20 to 0:10", "before 0:00", "0:10 to 0:10", "the first 0 seconds"]
 )
 def test_empty_or_backwards_ranges_raise(text: str) -> None:
     with pytest.raises(TimeParseError):
         parse_time_phrase(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["10 to 20", "10 to 20 minutes", "0:10 to 20", "the first 5", "the last 10", "after 90"],
+)
+def test_bare_numbers_ask_seconds_or_minutes(text: str) -> None:
+    with pytest.raises(TimeParseError, match="seconds or minutes"):
+        parse_time_phrase(text)
+
+
+def test_nothing_before_the_start_names_only_what_the_user_typed() -> None:
+    with pytest.raises(TimeParseError) as caught:
+        parse_time_phrase("before 0:00")
+
+    assert str(caught.value) == "There's nothing before 0:00. Give a time after the start."

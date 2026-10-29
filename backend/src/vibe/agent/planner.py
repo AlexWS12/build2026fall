@@ -12,7 +12,7 @@ from typing import Any, Protocol
 from pydantic import ValidationError
 
 from vibe.agent.plan import Clarify, Plan, PlannerResult
-from vibe.agent.templates import normalize, parse
+from vibe.agent.templates import MixedTimeError, normalize, parse
 from vibe.agent.timeparse import TimeParseError
 from vibe.agent.tools_draft import DRAFT_REGISTRY, ToolSpec
 from vibe.agent.validate import validate_plan
@@ -26,11 +26,19 @@ EXAMPLES = "'blur faces', 'mute 0:10 to 0:20' or 'cut the first 5 seconds'"
 
 
 class PlanError(RuntimeError):
-    """The template parser built a plan the registry rejects: a bug in the parser."""
+    """The template parser built a plan the draft registry rejects: a bug in the parser."""
+
+
+class LlmError(RuntimeError):
+    """The LLM provider failed (network, rate limit, outage). Adapters wrap their client's
+    errors in this, so the user is asked to retry. Any other exception is a bug and raises."""
 
 
 class LlmPlanner(Protocol):
-    """Writes a whole plan as JSON in one call. ``error`` is set on the retry."""
+    """Writes a whole plan as JSON in one call. ``error`` is set on the retry.
+
+    Raise ``LlmError`` for provider failures.
+    """
 
     def plan(
         self, request: str, tools: Mapping[str, ToolSpec], error: str | None
@@ -44,13 +52,18 @@ def plan_request(
 ) -> PlannerResult:
     try:
         plan = parse(text)
+    except MixedTimeError as exc:
+        return Clarify(question=str(exc), reason="only part of the request has a time")
     except TimeParseError as exc:
         return Clarify(question=str(exc), reason="time range can't be used")
     if plan is not None:
         errors = validate_plan(plan, registry)
-        if errors:
+        if not errors:
+            return plan
+        if registry is DRAFT_REGISTRY:  # the templates are written for it: a parser bug
             raise PlanError(f"template plan for {text!r} is invalid: {errors}")
-        return plan
+        # Another registry (e.g. F-06's) may rename or drop a tool the templates use.
+        logger.error("template plan for %r rejected by the registry: %s", text, errors)
     if llm is None:
         return Clarify(question=_question_for(text), reason="no template matched")
     return _plan_with_llm(text, registry, llm)
@@ -61,7 +74,7 @@ def _plan_with_llm(text: str, registry: Mapping[str, ToolSpec], llm: LlmPlanner)
     for _ in range(LLM_ATTEMPTS):
         try:
             raw = llm.plan(text, registry, failures[-1] if failures else None)
-        except Exception:  # a provider or network error: tell the user, keep the details
+        except LlmError:
             logger.exception("LLM planner failed on %r", text)
             return Clarify(
                 question="I couldn't plan that right now. Try again, or try something like "

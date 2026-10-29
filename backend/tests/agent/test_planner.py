@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from vibe.agent import Clarify, Plan, plan_request, validate_plan
+from vibe.agent import Clarify, LlmError, Plan, PlanError, plan_request, validate_plan
 from vibe.agent.tools_draft import DRAFT_REGISTRY, ToolSpec
 
 REQUEST_SET = json.loads((Path(__file__).parent / "requests_draft.json").read_text())["requests"]
@@ -117,7 +117,7 @@ class FailingLlm:
     def plan(
         self, request: str, tools: Mapping[str, ToolSpec], error: str | None
     ) -> Mapping[str, Any]:
-        raise ConnectionError("provider is down")
+        raise LlmError("provider is down")
 
 
 def test_llm_error_gives_clarify_and_is_logged(caplog: pytest.LogCaptureFixture) -> None:
@@ -134,3 +134,61 @@ def test_clarify_reason_keeps_both_llm_failures() -> None:
     assert isinstance(result, Clarify)
     assert "explode" in result.reason
     assert "not a valid plan" in result.reason
+
+
+class BuggyLlm:
+    def plan(
+        self, request: str, tools: Mapping[str, ToolSpec], error: str | None
+    ) -> Mapping[str, Any]:
+        raise KeyError("bug in the adapter")
+
+
+def test_a_bug_in_the_llm_adapter_is_not_hidden_as_try_again() -> None:
+    with pytest.raises(KeyError):
+        plan_request("make him quieter", llm=BuggyLlm())
+
+
+def test_only_part_timed_has_its_own_clarify_reason() -> None:
+    result = plan_request("blur faces and mute 0:10 to 0:20")
+
+    assert isinstance(result, Clarify)
+    assert result.reason == "only part of the request has a time"
+
+
+def test_unusable_time_keeps_the_time_reason() -> None:
+    result = plan_request("cut 10 to 20")
+
+    assert isinstance(result, Clarify)
+    assert result.reason == "time range can't be used"
+    assert "seconds or minutes" in result.question
+
+
+NO_RESOLVE_TIME = {name: spec for name, spec in DRAFT_REGISTRY.items() if name != "resolve_time"}
+"""Like a real registry (F-06) that dropped or renamed a tool the templates use."""
+
+
+def test_template_plan_rejected_by_another_registry_asks_instead_of_crashing(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    result = plan_request("blur faces for the first half", registry=NO_RESOLVE_TIME)
+
+    assert isinstance(result, Clarify)
+    assert "resolve_time" in caplog.text
+
+
+def test_template_plan_rejected_by_another_registry_goes_to_the_llm() -> None:
+    llm = FakeLlm(GOOD_PLAN)
+
+    result = plan_request("blur faces for the first half", registry=NO_RESOLVE_TIME, llm=llm)
+
+    assert isinstance(result, Plan)
+    assert llm.errors_seen == [None]
+
+
+def test_template_plan_rejected_by_the_draft_registry_is_a_parser_bug(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("vibe.agent.planner.validate_plan", lambda plan, registry: ["broken"])
+
+    with pytest.raises(PlanError):
+        plan_request("blur faces")

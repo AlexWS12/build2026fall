@@ -19,20 +19,17 @@ _UNIT = r"(?:s|secs?|seconds?|m|mins?|minutes?)"
 _TS = rf"\d+(?::\d{{2}}){{0,2}}(?:\.\d+)?(?:\s*{_UNIT}\b)?"
 """One timestamp: "10", "1.5", "10s", "2 minutes", "1:30", "1:02:03"."""
 
-_TS_EXPLICIT = rf"(?:\d+(?::\d{{2}}){{1,2}}(?:\.\d+)?|\d+(?:\.\d+)?\s*{_UNIT}\b)"
-"""A timestamp that says its unit ("5 seconds", "0:05"). "the first 5" alone is ambiguous."""
-
 _TIMESTAMP = re.compile(rf"(\d+(?::\d{{2}}){{0,2}}(?:\.\d+)?)\s*({_UNIT})?")
 
 _LEADING_WORDS = re.compile(r"^(?:(?:for|during|in|over|on|everything|all)\s+)+")
 
-_RANGE = re.compile(
-    rf"(?:from\s+|between\s+)?({_TS})\s*(?:to|until|till|through|and|-|–)\s*({_TS})"
-)
+_RANGE = re.compile(rf"(?:from\s+)?({_TS})\s*(?:to|until|till|through|-|–)\s*({_TS})")
+_BETWEEN = re.compile(rf"between\s+({_TS})\s*and\s*({_TS})")
+"""Only "between" makes "X and Y" a range: "mute 0:10 and 0:20" may mean two moments."""
 _WHOLE = re.compile(r"(?:the\s+)?(?:whole|entire|full)\s+(?:video|clip|thing)")
 _HALF = re.compile(r"(?:the\s+)?((?:first|second) half)")
-_FIRST = re.compile(rf"(?:the\s+)?first\s+({_TS_EXPLICIT})")
-_LAST = re.compile(rf"(?:the\s+)?(last\s+{_TS_EXPLICIT})")
+_FIRST = re.compile(rf"(?:the\s+)?first\s+({_TS})")
+_LAST = re.compile(rf"(?:the\s+)?last\s+({_TS})")
 _AFTER = re.compile(rf"(?:after|from|starting at|since)\s+({_TS})(?:\s+on(?:wards?)?)?")
 _BEFORE = re.compile(rf"(?:before|until|till|up to)\s+({_TS})")
 
@@ -64,48 +61,51 @@ def parse_time_phrase(text: str) -> TimeRange | str | None:
 
     The whole text must be the time phrase: anything left over means it isn't one, so
     "faces except mine" gives None rather than a wrong guess. Raises ``TimeParseError`` for a
-    range that is empty or backwards.
+    range that is empty or backwards, and for a bare number ("10 to 20", "the first 5"),
+    which could be seconds or minutes.
     """
     text = _LEADING_WORDS.sub("", text.strip())
-    if match := _RANGE.fullmatch(text):
-        return _written_range(match.group(1), match.group(2))
+    if match := _RANGE.fullmatch(text) or _BETWEEN.fullmatch(text):
+        return _range(match.group(1), match.group(2))
     if _WHOLE.fullmatch(text):
         return WHOLE_CLIP
     if match := _HALF.fullmatch(text):
         return match.group(1)
     if match := _FIRST.fullmatch(text):
-        return _range("0", match.group(1))
+        return _range(None, match.group(1))
     if match := _LAST.fullmatch(text):
-        return match.group(1)
+        return f"last {_explicit(match.group(1))}"
     if match := _AFTER.fullmatch(text):
         return _range(match.group(1), None)
     if match := _BEFORE.fullmatch(text):
-        return _range("0", match.group(1))
+        return _range(None, match.group(1))
     return None
 
 
-def _is_bare_number(text: str) -> bool:
-    match = _TIMESTAMP.fullmatch(text.strip())
-    return match is not None and ":" not in match.group(1) and match.group(2) is None
-
-
-def _written_range(start: str, end: str) -> TimeRange:
-    """A range the user wrote out, e.g. "0:10 to 0:20"."""
-    if _is_bare_number(start) != _is_bare_number(end):
-        # "10 to 20 minutes": is the start 10 seconds or 10 minutes? Ask, don't guess.
+def _explicit(timestamp: str) -> str:
+    """``timestamp`` if it says its unit ("0:10", "10 seconds"); a bare "10" is asked about."""
+    timestamp = timestamp.strip()
+    match = _TIMESTAMP.fullmatch(timestamp)
+    if match is not None and ":" not in match.group(1) and match.group(2) is None:
         raise TimeParseError(
-            f"Is {start.strip()!r} in the same unit as {end.strip()!r}? "
-            "Give both times, like 10 to 20 minutes as 10:00 to 20:00."
+            f"Is {timestamp!r} in seconds or minutes? Add the unit, like '{timestamp} seconds', "
+            "or write a clock time like 1:30."
         )
-    return _range(start, end)
+    return timestamp
 
 
-def _range(start: str, end: str | None) -> TimeRange:
-    start_s = parse_timestamp(start)
-    end_s = None if end is None else parse_timestamp(end)
+def _range(start: str | None, end: str | None) -> TimeRange:
+    """A range from written times. ``start=None`` is the start of the video."""
+    start_s = 0.0 if start is None else parse_timestamp(_explicit(start))
+    end_s = None if end is None else parse_timestamp(_explicit(end))
     try:
         return TimeRange(start=start_s, end=end_s)
     except ValidationError:
+        if start is None:
+            raise TimeParseError(
+                f"There's nothing before {end.strip()}. Give a time after the start."
+            ) from None
         raise TimeParseError(
-            f"The end ({end}) is before or at the start ({start}). Which range did you mean?"
+            f"The end ({end.strip()}) is before or at the start ({start.strip()}). "
+            "Which range did you mean?"
         ) from None
