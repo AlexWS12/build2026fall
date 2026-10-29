@@ -3,8 +3,8 @@ author: pablo
 date: 2026-10-28
 branch: pablo/f05-planner
 features: [F-05]
-base: v0.1.0 @ 16acd80
-head: 9bcb282
+base: v0.1.0 @ 0977fb7
+head: c9661f7
 status: ready for review
 ---
 
