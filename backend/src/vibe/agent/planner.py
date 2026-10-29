@@ -14,8 +14,8 @@ from pydantic import ValidationError
 from vibe.agent.plan import Clarify, Plan, PlannerResult
 from vibe.agent.templates import MixedTimeError, normalize, parse
 from vibe.agent.timeparse import TimeParseError
-from vibe.agent.tools_draft import DRAFT_REGISTRY, ToolSpec
 from vibe.agent.validate import validate_plan
+from vibe.toolbox import TOOLS, ToolSpec
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ EXAMPLES = "'blur faces', 'mute 0:10 to 0:20' or 'cut the first 5 seconds'"
 
 
 class PlanError(RuntimeError):
-    """The template parser built a plan the draft registry rejects: a bug in the parser."""
+    """The template parser built a plan the toolbox registry rejects: a bug in the parser."""
 
 
 class LlmError(RuntimeError):
@@ -47,7 +47,7 @@ class LlmPlanner(Protocol):
 
 def plan_request(
     text: str,
-    registry: Mapping[str, ToolSpec] = DRAFT_REGISTRY,
+    registry: Mapping[str, ToolSpec] = TOOLS,
     llm: LlmPlanner | None = None,
 ) -> PlannerResult:
     try:
@@ -60,9 +60,9 @@ def plan_request(
         errors = validate_plan(plan, registry)
         if not errors:
             return plan
-        if registry is DRAFT_REGISTRY:  # the templates are written for it: a parser bug
+        if registry is TOOLS:  # the templates are written for it: a parser bug
             raise PlanError(f"template plan for {text!r} is invalid: {errors}")
-        # Another registry (e.g. F-06's) may rename or drop a tool the templates use.
+        # A different registry (a test's, or a future variant) may lack a tool the templates use.
         logger.error("template plan for %r rejected by the registry: %s", text, errors)
     if llm is None:
         return Clarify(question=_question_for(text), reason="no template matched")

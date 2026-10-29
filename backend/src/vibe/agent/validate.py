@@ -10,7 +10,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from vibe.agent.plan import Plan, ToolCall, as_ref
-from vibe.agent.tools_draft import Returns, ToolSpec
+from vibe.toolbox import Returns, ToolSpec
 
 _PLACEHOLDERS: Mapping[Returns, Any] = {
     "track_ids": ["placeholder_track"],

@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from vibe.agent import Clarify, LlmError, Plan, PlanError, plan_request, validate_plan
-from vibe.agent.tools_draft import DRAFT_REGISTRY, ToolSpec
+from vibe.toolbox import TOOLS, ToolSpec
 
 REQUEST_SET = json.loads((Path(__file__).parent / "requests_draft.json").read_text())["requests"]
 
@@ -33,7 +33,7 @@ def test_request_set_gives_valid_plans_or_clarify(case: dict[str, Any]) -> None:
         assert result.question
         return
     assert isinstance(result, Plan), f"expected a plan, got {result!r}"
-    assert validate_plan(result, DRAFT_REGISTRY) == []
+    assert validate_plan(result, TOOLS) == []
     assert [c.model_dump() for c in result.calls] == case["calls"]
 
 
@@ -163,7 +163,7 @@ def test_unusable_time_keeps_the_time_reason() -> None:
     assert "seconds or minutes" in result.question
 
 
-NO_RESOLVE_TIME = {name: spec for name, spec in DRAFT_REGISTRY.items() if name != "resolve_time"}
+NO_RESOLVE_TIME = {name: spec for name, spec in TOOLS.items() if name != "resolve_time"}
 """Like a real registry (F-06) that dropped or renamed a tool the templates use."""
 
 

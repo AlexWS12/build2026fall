@@ -1,5 +1,5 @@
 {
-  "about": "DRAFT shared request set for F-05 (planner), F-09 (benchmark) and R-1 (planner LLM). Each entry is a chat request and what the planner should return: a plan of tool calls, or a clarify reply. Tool names are the F-05 draft (backend/src/vibe/agent/tools_draft.py) until F-06 lands. Times are source seconds. A {\"$ref\": \"sN\"} argument is the output of an earlier step.",
+  "about": "DRAFT shared request set for F-05 (planner), F-09 (benchmark) and R-1 (planner LLM). Each entry is a chat request and what the planner should return: a plan of tool calls, or a clarify reply. Tool names are the toolbox's (backend/src/vibe/toolbox/registry.py, F-06). Times are source seconds. A {\"$ref\": \"sN\"} argument is the output of an earlier step.",
   "requests": [
     {
       "request": "blur faces",

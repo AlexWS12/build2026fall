@@ -9,17 +9,19 @@ import re
 from pydantic import ValidationError
 
 from vibe.contract import WHOLE_CLIP, TimeRange
+from vibe.toolbox.timecodes import (
+    TIMESTAMP,
+    UNIT,
+    TimeParseError,
+    has_unit,
+    parse_timestamp,
+)
+
+__all__ = ["TimeParseError", "parse_time_phrase", "parse_timestamp"]
 
 
-class TimeParseError(ValueError):
-    """A time the user wrote that can't be used as is. The message is a question for them."""
-
-
-_UNIT = r"(?:s|secs?|seconds?|m|mins?|minutes?)"
-_TS = rf"\d+(?::\d{{2}}){{0,2}}(?:\.\d+)?(?:\s*{_UNIT}\b)?"
+_TS = rf"\d+(?::\d{{2}}){{0,2}}(?:\.\d+)?(?:\s*{UNIT}\b)?"
 """One timestamp: "10", "1.5", "10s", "2 minutes", "1:30", "1:02:03"."""
-
-_TIMESTAMP = re.compile(rf"(\d+(?::\d{{2}}){{0,2}}(?:\.\d+)?)\s*({_UNIT})?")
 
 _LEADING_WORDS = re.compile(r"^(?:(?:for|during|in|over|on|everything|all)\s+)+")
 
@@ -32,28 +34,6 @@ _FIRST = re.compile(rf"(?:the\s+)?first\s+({_TS})")
 _LAST = re.compile(rf"(?:the\s+)?last\s+({_TS})")
 _AFTER = re.compile(rf"(?:after|from|starting at|since)\s+({_TS})(?:\s+on(?:wards?)?)?")
 _BEFORE = re.compile(rf"(?:before|until|till|up to)\s+({_TS})")
-
-_MINUTE_UNITS = ("m", "min", "mins", "minute", "minutes")
-
-
-def parse_timestamp(text: str) -> float:
-    """Seconds for one timestamp. Raises ``TimeParseError`` if it isn't one."""
-    match = _TIMESTAMP.fullmatch(text.strip())
-    if match is None:
-        raise TimeParseError(f"I couldn't read {text!r} as a time. Try 0:10 or 10 seconds.")
-    number, unit = match.groups()
-    parts = number.split(":")
-    if len(parts) == 1:
-        seconds = float(number)
-        return seconds * 60 if unit in _MINUTE_UNITS else seconds
-    if unit is not None:
-        raise TimeParseError(f"{text!r} mixes a clock time and a unit. Try 1:30 or 90 seconds.")
-    if any(float(p) >= 60 for p in parts[1:]):
-        raise TimeParseError(f"{text!r} isn't a valid time: minutes and seconds go up to 59.")
-    total = 0.0
-    for part in parts:
-        total = total * 60 + float(part)
-    return total
 
 
 def parse_time_phrase(text: str) -> TimeRange | str | None:
@@ -85,8 +65,7 @@ def parse_time_phrase(text: str) -> TimeRange | str | None:
 def _explicit(timestamp: str) -> str:
     """``timestamp`` if it says its unit ("0:10", "10 seconds"); a bare "10" is asked about."""
     timestamp = timestamp.strip()
-    match = _TIMESTAMP.fullmatch(timestamp)
-    if match is not None and ":" not in match.group(1) and match.group(2) is None:
+    if not has_unit(timestamp) and TIMESTAMP.fullmatch(timestamp):
         raise TimeParseError(
             f"Is {timestamp!r} in seconds or minutes? Add the unit, like '{timestamp} seconds', "
             "or write a clock time like 1:30."
