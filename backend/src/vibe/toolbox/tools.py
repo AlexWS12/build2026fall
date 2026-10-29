@@ -70,9 +70,15 @@ def resolve_time(args: ResolveTimeArgs, ctx: ToolContext) -> ResolveTimeResult:
         raise ToolError(f"resolve_time: {exc}") from None
     if seconds <= 0:
         raise ToolError(f"resolve_time: {args.phrase!r} is an empty range")
+    if seconds >= d:
+        # Don't stretch it to the whole video: "cut the last 2 minutes" of a 1-minute clip
+        # would silently cut everything. Fail so the user is asked.
+        raise ToolError(
+            f"resolve_time: {args.phrase!r} is as long as the whole video ({d:g} seconds)"
+        )
     if match.group(1) == "first":
-        return ResolveTimeResult(time_range=TimeRange(start=0, end=min(seconds, d)))
-    return ResolveTimeResult(time_range=TimeRange(start=max(0.0, d - seconds)))
+        return ResolveTimeResult(time_range=TimeRange(start=0, end=seconds))
+    return ResolveTimeResult(time_range=TimeRange(start=d - seconds))
 
 
 # --- Edit tools ---------------------------------------------------------------------------

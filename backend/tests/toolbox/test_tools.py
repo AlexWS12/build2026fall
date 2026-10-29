@@ -48,7 +48,6 @@ def test_find_objects_with_no_match_returns_an_empty_list() -> None:
         ("second half", TimeRange(start=30)),
         ("last 10 seconds", TimeRange(start=50)),
         ("last 0:10", TimeRange(start=50)),
-        ("last 2 minutes", TimeRange(start=0)),
         ("first 5 seconds", TimeRange(start=0, end=5)),
     ],
 )
@@ -71,6 +70,16 @@ def test_resolve_time_rejects_a_duration_that_isnt_a_positive_number(duration: f
 def test_resolve_time_rejects_empty_ranges(phrase: str) -> None:
     with pytest.raises(ToolError, match="empty"):
         call_tool("resolve_time", {"phrase": phrase}, ctx())
+
+
+@pytest.mark.parametrize(
+    "phrase", ["last 2 minutes", "first 2 minutes", "last 60 seconds", "first 1:00"]
+)
+def test_resolve_time_refuses_a_span_as_long_as_the_video(phrase: str) -> None:
+    # On a 60 s video these would cover everything: "cut the last 2 minutes" must not
+    # silently cut the whole clip.
+    with pytest.raises(ToolError, match="whole video"):
+        call_tool("resolve_time", {"phrase": phrase}, ctx(duration=60.0))
 
 
 @pytest.mark.parametrize("phrase", ["sometime", "last 10", "the middle"])
