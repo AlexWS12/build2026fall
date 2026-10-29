@@ -50,7 +50,7 @@ def test_mute_without_a_time_mutes_the_whole_clip() -> None:
 
 
 def test_step_ids_are_numbered_across_clauses() -> None:
-    result = calls("mute 0:01 to 0:02 and then blur faces")
+    result = calls("mute 0:01 to 0:02 and then blur faces for the whole video")
 
     assert [c["step_id"] for c in result] == ["s1", "s2", "s3"]
     assert result[2]["args"]["targets"] == {"$ref": "s2"}
@@ -86,8 +86,16 @@ def test_backwards_range_raises_so_the_planner_can_ask() -> None:
         parse("mute 0:20 to 0:10")
 
 
-@pytest.mark.parametrize("text", ["mute and cut 0:10 to 0:20", "cut 0:10 to 0:20 and mute"])
-def test_whole_clip_mute_next_to_a_timed_clause_raises_so_the_planner_can_ask(
+@pytest.mark.parametrize(
+    "text",
+    [
+        "mute and cut 0:10 to 0:20",
+        "cut 0:10 to 0:20 and mute",
+        "blur faces and mute 0:10 to 0:20",
+        "cut the first 3 seconds, then blur faces",
+    ],
+)
+def test_a_clause_without_a_time_next_to_one_with_a_time_raises_so_the_planner_can_ask(
     text: str,
 ) -> None:
     with pytest.raises(TimeParseError):
@@ -95,7 +103,19 @@ def test_whole_clip_mute_next_to_a_timed_clause_raises_so_the_planner_can_ask(
 
 
 @pytest.mark.parametrize(
-    "text", ["blur faces and mute the audio", "cut the first 3 seconds, then blur faces"]
+    "text",
+    [
+        "blur faces and mute the audio",
+        "cut the first 3 seconds, then blur faces for the whole video",
+    ],
 )
 def test_clauses_that_cant_be_misread_are_planned(text: str) -> None:
     assert parse(text) is not None
+
+
+def test_whole_video_means_no_time_range_argument() -> None:
+    assert calls("mute for the whole video") == [{"step_id": "s1", "tool": "mute", "args": {}}]
+
+
+def test_cutting_the_whole_video_is_not_a_plain_request() -> None:
+    assert parse("cut the whole video") is None

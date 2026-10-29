@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from vibe.agent.plan import Plan, ToolCall, ref
 from vibe.agent.timeparse import TimeParseError, parse_time_phrase
-from vibe.contract import TimeRange
+from vibe.contract import WHOLE_CLIP, TimeRange
 
 _VERBS = r"blur|pixelate|black ?box|box|hide|mute|silence|cut|remove|delete"
 """No "trim": it means "cut this" or "keep only this" depending on who says it, so it's asked."""
@@ -59,15 +59,27 @@ class _Steps:
 _NO_TIME = object()
 """The clause has no time words: the edit applies to the whole clip."""
 
-Matched = Literal["timed", "whole_clip", "whole_clip_mute"] | None
-"""What a clause builder found (None: no match). A mute with no time next to a timed clause
-("mute and cut 0:10 to 0:20") may have lost its time to the "and", so that gets asked. A
-whole-clip mask doesn't: masking more is the safe side for privacy (fail closed)."""
+Matched = Literal["timed", "untimed"] | None
+"""Whether a clause said when (a range, or "for the whole video") or didn't; None: no match.
+
+A request mixing both ("blur faces and mute 0:10 to 0:20") is asked about, because the time
+may have been meant for every part."""
 
 
 def _time(rest: str) -> TimeRange | str | object | None:
     rest = rest.strip()
     return _NO_TIME if not rest else parse_time_phrase(rest)
+
+
+def _time_args(when: object, steps: _Steps) -> dict[str, Any]:
+    """The ``time_range`` argument, left out for the whole clip."""
+    if when is _NO_TIME or when == WHOLE_CLIP:
+        return {}
+    return {"time_range": steps.time_arg(when)}
+
+
+def _scope(when: object) -> Matched:
+    return "untimed" if when is _NO_TIME else "timed"
 
 
 def _mask(match: re.Match[str], steps: _Steps) -> Matched:
@@ -76,27 +88,22 @@ def _mask(match: re.Match[str], steps: _Steps) -> Matched:
     if when is None:
         return None
     targets = steps.add("find_objects", {"label": _LABELS[noun]})
-    args: dict[str, Any] = {
-        "targets": ref(targets),
-        "effect": {"type": _EFFECTS[verb.replace("black", "").strip()]},
-    }
-    if when is not _NO_TIME:
-        args["time_range"] = steps.time_arg(when)
-    steps.add("add_mask", args)
-    return "whole_clip" if when is _NO_TIME else "timed"
+    effect = {"type": _EFFECTS[verb.replace("black", "").strip()]}
+    steps.add("add_mask", {"targets": ref(targets), "effect": effect, **_time_args(when, steps)})
+    return _scope(when)
 
 
 def _mute(match: re.Match[str], steps: _Steps) -> Matched:
     when = _time(match.group(1))
     if when is None:
         return None
-    steps.add("mute", {} if when is _NO_TIME else {"time_range": steps.time_arg(when)})
-    return "whole_clip_mute" if when is _NO_TIME else "timed"
+    steps.add("mute", _time_args(when, steps))
+    return _scope(when)
 
 
 def _cut(match: re.Match[str], steps: _Steps) -> Matched:
     when = _time(match.group(1))
-    if when is None or when is _NO_TIME:  # never guess what to cut
+    if when is None or when is _NO_TIME or when == WHOLE_CLIP:  # never guess what to cut
         return None
     steps.add("cut_range", {"time_range": steps.time_arg(when)})
     return "timed"
@@ -131,10 +138,11 @@ def parse(text: str) -> Plan | None:
         if scope is None:
             return None
         scopes.add(scope)
-    if {"whole_clip_mute", "timed"} <= scopes:
+    if {"untimed", "timed"} <= scopes:
         raise TimeParseError(
-            "Should I mute the whole video, or only part of it? Give a time for the mute, "
-            "like 'mute 0:10 to 0:20'."
+            "Only part of that request has a time. Should the rest cover the whole video, or "
+            "the same time? Say it for each part, like 'blur faces for the whole video and "
+            "mute 0:10 to 0:20'."
         )
     return Plan(calls=tuple(steps.calls))
 
