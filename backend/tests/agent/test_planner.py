@@ -137,6 +137,23 @@ def test_two_invalid_llm_plans_give_clarify(second: Mapping[str, Any]) -> None:
     assert len(llm.errors_seen) == 2
 
 
+def test_a_question_from_the_llm_goes_to_the_user_without_a_retry() -> None:
+    llm = FakeLlm({"clarify": "Which person do you mean?"})
+
+    result = plan_request("make him quieter", llm=llm)
+
+    assert result == Clarify(question="Which person do you mean?", reason="LLM asked")
+    assert llm.errors_seen == [None]
+
+
+def test_a_null_question_next_to_a_plan_is_ignored() -> None:
+    llm = FakeLlm({"clarify": None, **GOOD_PLAN})
+
+    result = plan_request("make him quieter", llm=llm)
+
+    assert isinstance(result, Plan)
+
+
 class FailingLlm:
     def plan(
         self, request: str, tools: Mapping[str, ToolSpec], error: str | None
