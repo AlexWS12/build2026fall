@@ -10,9 +10,9 @@ import pytest
 from vibe.agent import Plan, plan_request, validate_plan
 from vibe.agent.bench.candidates import Candidate
 from vibe.agent.bench.cases import Case, load_cases, registry_for
-from vibe.agent.bench.report import load_records, report
+from vibe.agent.bench.report import decision, load_records, report
 from vibe.agent.bench.run import run_candidate
-from vibe.agent.bench.score import KEYWORDS, request_times, score, template_claims
+from vibe.agent.bench.score import KEYWORDS, Score, request_times, score, template_claims
 from vibe.agent.llm import _EXAMPLES
 from vibe.agent.plan import ref
 from vibe.agent.providers import Reply, Usage
@@ -264,3 +264,39 @@ def test_a_run_saves_every_reply_and_the_report_scores_it(tmp_path: Path) -> Non
     assert cells[7] == "4"  # over-asked: the other two, twice each
     assert "Candidate zero" in text
     assert "hardware test, network none" in text
+
+
+def scored_runs(outcomes: list[str], seconds: float, usage_in: int = 1000) -> list[Any]:
+    usage = {"input": usage_in, "output": 100, "cache_read": 0, "cache_write": 0, "reasoning": 0}
+    return [
+        (
+            {
+                "tools": "core",
+                "first_call": False,
+                "attempts": [{"seconds": seconds, "usage": usage}],
+            },
+            Score(o),
+        )
+        for o in outcomes
+    ]
+
+
+def test_decision_picks_the_cheapest_hosted_candidate_that_passes_every_gate() -> None:
+    lines = decision(
+        {
+            "opus-5-5": scored_runs(["correct"] * 20, 3.0),
+            "sonnet-5-5": scored_runs(["correct"] * 19 + ["wrong_plan"], 2.0),  # 95%: passes
+            "haiku-5-5": scored_runs(["correct"] * 19 + ["unsafe"], 1.0),  # an unsafe: fails
+            "gpt-5.6-terra": scored_runs(["correct"] * 20, 6.0),  # p95 too slow: fails
+            "qwen3.5-9b": scored_runs(["correct"] * 18 + ["wrong_plan"] * 2, 2.0),
+        }
+    )
+
+    assert "**Winner: sonnet-5-5** (cheapest hosted candidate passing every gate)." in lines
+    assert "**Offline fallback: qwen3.5-9b** (2 of 3 gates)." in lines
+
+
+def test_decision_waits_for_the_ceiling() -> None:
+    assert decision({"haiku-5-5": scored_runs(["correct"], 1.0)}) == [
+        "Needs the opus-5-5 ceiling run first."
+    ]
