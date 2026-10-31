@@ -1,0 +1,212 @@
+{
+  "about": "R-1 request set for the LLM planner, used together with requests_draft.json (F-05). Same entry format, plus: route (llm = the template parser must not claim it), tools (core = the five toolbox tools; extras = the eval-only draft tools in vibe/agent/bench/extras.py), category, and optional alternatives (other plans that are just as correct). An argument {\"$keywords\": [...]} is free text that must contain every keyword; a nested list is any one of its words. Times are source seconds; the benchmark scores relative times on a 120 s clip.",
+  "requests": [
+    {
+      "request": "hide everyone's faces in the second half",
+      "route": "llm", "tools": "core", "category": "paraphrase",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_objects", "args": {"label": "face"}},
+        {"step_id": "s2", "tool": "resolve_time", "args": {"phrase": "second half"}},
+        {"step_id": "s3", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}, "time_range": {"$ref": "s2"}}}
+      ]
+    },
+    {
+      "request": "get rid of the first ten seconds",
+      "route": "llm", "tools": "core", "category": "number words",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "resolve_time", "args": {"phrase": "first 10 seconds"}},
+        {"step_id": "s2", "tool": "cut_range", "args": {"time_range": {"$ref": "s1"}}}
+      ]
+    },
+    {
+      "request": "can you make the license plates unreadable",
+      "route": "llm", "tools": "core", "category": "paraphrase",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_objects", "args": {"label": "license_plate"}},
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}}}
+      ],
+      "alternatives": [
+        [
+          {"step_id": "s1", "tool": "find_objects", "args": {"label": "license_plate"}},
+          {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "pixelate"}}}
+        ],
+        [
+          {"step_id": "s1", "tool": "find_objects", "args": {"label": "license_plate"}},
+          {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "box"}}}
+        ]
+      ]
+    },
+    {
+      "request": "silence 1:05 to 1:20, and blur the faces the whole time",
+      "route": "llm", "tools": "core", "category": "two actions",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "mute", "args": {"time_range": {"start": 65, "end": 80}}},
+        {"step_id": "s2", "tool": "find_objects", "args": {"label": "face"}},
+        {"step_id": "s3", "tool": "add_mask", "args": {"targets": {"$ref": "s2"}, "effect": {"type": "blur"}}}
+      ]
+    },
+    {
+      "request": "take out 0:10-0:20 and also 1:00-1:10",
+      "route": "llm", "tools": "core", "category": "two actions",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "cut_range", "args": {"time_range": {"start": 10, "end": 20}}},
+        {"step_id": "s2", "tool": "cut_range", "args": {"time_range": {"start": 60, "end": 70}}}
+      ]
+    },
+    {
+      "request": "pixelate faces from 30 seconds in until the end",
+      "route": "llm", "tools": "core", "category": "time phrasing",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_objects", "args": {"label": "face"}},
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "pixelate"}, "time_range": {"start": 30}}}
+      ]
+    },
+    {
+      "request": "black out the people for the last 30 seconds",
+      "route": "llm", "tools": "core", "category": "paraphrase",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_objects", "args": {"label": "person"}},
+        {"step_id": "s2", "tool": "resolve_time", "args": {"phrase": "last 30 seconds"}},
+        {"step_id": "s3", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "box"}, "time_range": {"$ref": "s2"}}}
+      ]
+    },
+    {
+      "request": "kill the audio",
+      "route": "llm", "tools": "core", "category": "paraphrase",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "mute", "args": {}}
+      ]
+    },
+    {
+      "request": "blurr all the faces pls",
+      "route": "llm", "tools": "core", "category": "typo",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_objects", "args": {"label": "face"}},
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}}}
+      ]
+    },
+    {
+      "request": "cut from one minute to one fifteen",
+      "route": "llm", "tools": "core", "category": "number words",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "cut_range", "args": {"time_range": {"start": 60, "end": 75}}}
+      ]
+    },
+    {
+      "request": "blur faces but only after the 1 minute mark",
+      "route": "llm", "tools": "core", "category": "time phrasing",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_objects", "args": {"label": "face"}},
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}, "time_range": {"start": 60}}}
+      ]
+    },
+    {"request": "cut the boring part", "route": "llm", "tools": "core", "category": "should ask", "expect": "clarify"},
+    {"request": "mute the swearing", "route": "llm", "tools": "core", "category": "should ask", "expect": "clarify"},
+    {"request": "make the video shorter", "route": "llm", "tools": "core", "category": "should ask", "expect": "clarify"},
+    {"request": "blur her face", "route": "llm", "tools": "core", "category": "should ask", "expect": "clarify"},
+    {"request": "remove everyone", "route": "llm", "tools": "core", "category": "should ask", "expect": "clarify"},
+
+    {
+      "request": "blur the guy in the red hoodie",
+      "route": "llm", "tools": "extras", "category": "descriptive target",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_objects", "args": {"label": "person"}},
+        {"step_id": "s2", "tool": "check_attribute", "args": {"targets": {"$ref": "s1"}, "question": {"$keywords": ["red", "hoodie"]}, "keep": "yes"}},
+        {"step_id": "s3", "tool": "add_mask", "args": {"targets": {"$ref": "s2"}, "effect": {"type": "blur"}}}
+      ]
+    },
+    {
+      "request": "blur everyone except me, I'm in the black tee",
+      "route": "llm", "tools": "extras", "category": "descriptive target",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_objects", "args": {"label": "person"}},
+        {"step_id": "s2", "tool": "check_attribute", "args": {"targets": {"$ref": "s1"}, "question": {"$keywords": ["black", ["tee", "t-shirt", "shirt", "top"]]}, "keep": "no"}},
+        {"step_id": "s3", "tool": "add_mask", "args": {"targets": {"$ref": "s2"}, "effect": {"type": "blur"}}}
+      ]
+    },
+    {
+      "request": "blur the woman with glasses for the first half",
+      "route": "llm", "tools": "extras", "category": "descriptive target",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_objects", "args": {"label": "person"}},
+        {"step_id": "s2", "tool": "check_attribute", "args": {"targets": {"$ref": "s1"}, "question": {"$keywords": ["glasses"]}, "keep": "yes"}},
+        {"step_id": "s3", "tool": "resolve_time", "args": {"phrase": "first half"}},
+        {"step_id": "s4", "tool": "add_mask", "args": {"targets": {"$ref": "s2"}, "effect": {"type": "blur"}, "time_range": {"$ref": "s3"}}}
+      ]
+    },
+    {
+      "request": "pixelate everyone's face except the guy in the blue cap",
+      "route": "llm", "tools": "extras", "category": "descriptive target",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_objects", "args": {"label": "face"}},
+        {"step_id": "s2", "tool": "check_attribute", "args": {"targets": {"$ref": "s1"}, "question": {"$keywords": ["blue", "cap"]}, "keep": "no"}},
+        {"step_id": "s3", "tool": "add_mask", "args": {"targets": {"$ref": "s2"}, "effect": {"type": "pixelate"}}}
+      ],
+      "alternatives": [
+        [
+          {"step_id": "s1", "tool": "find_objects", "args": {"label": "person"}},
+          {"step_id": "s2", "tool": "check_attribute", "args": {"targets": {"$ref": "s1"}, "question": {"$keywords": ["blue", "cap"]}, "keep": "no"}},
+          {"step_id": "s3", "tool": "add_mask", "args": {"targets": {"$ref": "s2"}, "effect": {"type": "pixelate"}}}
+        ]
+      ]
+    },
+    {
+      "request": "cut the part where he talks about the weather",
+      "route": "llm", "tools": "extras", "category": "content cut",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_speech", "args": {"phrase": {"$keywords": ["weather"]}}},
+        {"step_id": "s2", "tool": "cut_range", "args": {"time_range": {"$ref": "s1"}}}
+      ]
+    },
+    {
+      "request": "mute the guy on the right",
+      "route": "llm", "tools": "extras", "category": "speaker",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "find_speakers", "args": {"description": {"$keywords": ["right"]}}},
+        {"step_id": "s2", "tool": "mute", "args": {"speaker": {"$ref": "s1"}}}
+      ]
+    },
+    {
+      "request": "remove the background noise",
+      "route": "llm", "tools": "extras", "category": "audio",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "denoise", "args": {}}
+      ]
+    },
+    {
+      "request": "from now on, only I am visible",
+      "route": "llm", "tools": "extras", "category": "standing rule",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "add_rule", "args": {"category": "person", "except_me": true}}
+      ]
+    },
+    {
+      "request": "undo that",
+      "route": "llm", "tools": "extras", "category": "history",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "undo", "args": {}}
+      ]
+    },
+    {"request": "remove the people in the background", "route": "llm", "tools": "extras", "category": "should ask", "expect": "clarify"}
+  ]
+}
