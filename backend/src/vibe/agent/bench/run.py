@@ -50,29 +50,43 @@ def result_record(result: Plan | Clarify) -> dict[str, Any]:
     return {"type": "clarify", "question": result.question, "reason": result.reason}
 
 
-def preflight(names: Sequence[str]) -> bool:
-    """For each candidate: does the model exist, and does it accept both reply schemas?"""
+def preflight(names: Sequence[str], out_dir: Path = OUT_DIR) -> bool:
+    """For each candidate: does the model exist, and does it accept both reply schemas?
+
+    The output is also saved: its call times are the cold ones (Claude compiles a new schema
+    and caches it for 24 hours; a local model loads into VRAM), so later runs start warm.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"preflight-{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}.txt"
     ok = True
-    for name in names:
-        candidate = CANDIDATES[name]
-        print(f"## {name}")
-        try:
-            provider = candidate.build()
-            print(f"  model: {json.dumps(provider.describe(), default=str)[:600]}")
-            for label, registry in (("core", TOOLS), ("extras", EXTRAS)):
-                reply = provider.complete(
-                    system_prompt(registry, WIRE_REF_KEY),
-                    user_message("blur faces for the first half", None, None),
-                    reply_schema(registry, WIRE_REF_KEY),
-                )
-                print(
-                    f"  {label} schema: accepted, {reply.seconds:.2f}s, stop={reply.stop_reason}, "
-                    f"usage={asdict(reply.usage)}, ${cost(name, [asdict(reply)]):.5f}"
-                )
-                print(f"    reply: {reply.text[:300]}")
-        except Exception as exc:  # report every candidate, then fail
-            ok = False
-            print(f"  FAILED: {type(exc).__name__}: {str(exc)[:800]}")
+    with path.open("w", encoding="utf-8") as log:
+
+        def say(line: str) -> None:
+            print(line)
+            log.write(line + "\n")
+
+        say(f"preflight {datetime.now(UTC).isoformat()} on {hardware()}, ref key {WIRE_REF_KEY!r}")
+        for name in names:
+            say(f"## {name}")
+            try:
+                provider = CANDIDATES[name].build()
+                say(f"  model: {json.dumps(provider.describe(), default=str)[:600]}")
+                for label, registry in (("core", TOOLS), ("extras", EXTRAS)):
+                    reply = provider.complete(
+                        system_prompt(registry, WIRE_REF_KEY),
+                        user_message("blur faces for the first half", None, None),
+                        reply_schema(registry, WIRE_REF_KEY),
+                    )
+                    say(
+                        f"  {label} schema: accepted, {reply.seconds:.2f}s (cold), "
+                        f"stop={reply.stop_reason}, usage={asdict(reply.usage)}, "
+                        f"${cost(name, [asdict(reply)]):.5f}, meta={dict(reply.meta)}"
+                    )
+                    say(f"    reply: {reply.text[:300]}")
+            except Exception as exc:  # report every candidate, then fail
+                ok = False
+                say(f"  FAILED: {type(exc).__name__}: {str(exc)[:800]}")
+    print(f"saved {path}")
     return ok
 
 
@@ -92,7 +106,7 @@ def run_candidate(
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     path = out_dir / f"{candidate.name}-{stamp}.jsonl"
-    spent, first = 0.0, True
+    spent, warm = 0.0, set()  # tool sets whose schema and prompt this session has sent
     with path.open("w", encoding="utf-8") as out:
         for run in range(runs):
             for i, case in enumerate(cases):
@@ -108,7 +122,7 @@ def run_candidate(
                     "request": case.request,
                     "tools": case.tools,
                     "run": run,
-                    "first_call": first,
+                    "first_call": case.tools not in warm,
                     "result": result_record(result),
                     "attempts": attempts,
                     "started_at": started,
@@ -117,7 +131,7 @@ def run_candidate(
                 }
                 out.write(json.dumps(record, default=str) + "\n")
                 out.flush()
-                first = False
+                warm.add(case.tools)
                 spent += cost(candidate.name, attempts)
                 outcome = record["result"].get("reason", "plan")
                 print(f"  run {run + 1}/{runs} case {i + 1}/{len(cases)} ${spent:.4f} {outcome}")

@@ -86,7 +86,8 @@ def candidate_row(name: str, scored: Sequence[tuple[Record, Score]]) -> list[str
     for r, s in scored:
         by_case[r["case"]].add(s.key)
         runs_per_case[r["case"]] += 1
-    repeated = [c for c, k in runs_per_case.items() if k > 1]
+    # Core only: on extras the key holds the model's free-text question, whose wording varies.
+    repeated = [c for c, k in runs_per_case.items() if k > 1 and c.startswith("core:")]
     consistent = _pct(sum(1 for c in repeated if len(by_case[c]) == 1), len(repeated))
     price = CANDIDATES[name].price if name in CANDIDATES else None
     return [
