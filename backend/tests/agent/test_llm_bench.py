@@ -255,7 +255,8 @@ def test_a_run_saves_every_reply_and_the_report_scores_it(tmp_path: Path) -> Non
     text = report(records, CASES, detail=True)
 
     assert len(records) == 6
-    assert [r["first_call"] for r in records] == [True] + [False] * 5
+    # The first request of each tool set sends a new schema and prompt.
+    assert [r["first_call"] for r in records] == [True, False, True, False, False, False]
     assert all(r["attempts"][0]["usage"]["cache_read"] == 900 for r in records)
     row = next(line for line in text.splitlines() if line.startswith("| fake-asks | 3 x 2"))
     cells = [c.strip() for c in row.strip("|").split("|")]

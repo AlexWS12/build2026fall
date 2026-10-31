@@ -16,6 +16,9 @@ from typing import Any, Protocol
 from vibe.agent.planner import LlmError
 
 TIMEOUT_SECONDS = 120.0
+MAX_RETRIES = 0
+"""No silent SDK retries: a backoff would hide inside the measured latency. A transient
+failure shows up as ``LlmError`` instead (the benchmark scores it ``provider_error``)."""
 MAX_OUTPUT_TOKENS = 4096
 """A plan is a few hundred tokens; the rest is room for models that think before answering."""
 
@@ -80,7 +83,7 @@ class AnthropicProvider:
         import anthropic
 
         self._errors = anthropic.APIError
-        self.client = anthropic.Anthropic(timeout=TIMEOUT_SECONDS)
+        self.client = anthropic.Anthropic(timeout=TIMEOUT_SECONDS, max_retries=MAX_RETRIES)
         self.model = model
         self.name = f"anthropic:{model}"
         self.effort = effort
@@ -150,7 +153,10 @@ class OpenAIProvider:
 
         self._errors = openai.APIError
         self.client = openai.OpenAI(
-            api_key=os.environ.get(api_key_env), base_url=base_url, timeout=TIMEOUT_SECONDS
+            api_key=os.environ.get(api_key_env),
+            base_url=base_url,
+            timeout=TIMEOUT_SECONDS,
+            max_retries=MAX_RETRIES,
         )
         self.model = model
         self.name = f"{label}:{model}"
