@@ -26,6 +26,12 @@ dev = [
     "pytest>=8",
     "ruff>=0.6",
 ]
+llm = [
+    "anthropic>=2.3.0",
+    "google-genai>=2.34.0",
+    "httpx>=0.28.1",
+    "openai>=3.42.0",
+]
 
 [build-system]
 requires = ["uv_build>=0.10.4,<0.14"]
