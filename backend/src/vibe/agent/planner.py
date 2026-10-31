@@ -37,7 +37,8 @@ class LlmError(RuntimeError):
 class LlmPlanner(Protocol):
     """Writes a whole plan as JSON in one call. ``error`` is set on the retry.
 
-    Raise ``LlmError`` for provider failures.
+    Returns ``{"calls": [...]}`` (a plan), or ``{"clarify": "<question>"}`` when the request
+    can't be planned without guessing. Raise ``LlmError`` for provider failures.
     """
 
     def plan(
@@ -66,10 +67,13 @@ def plan_request(
         logger.error("template plan for %r rejected by the registry: %s", text, errors)
     if llm is None:
         return Clarify(question=_question_for(text), reason="no template matched")
-    return _plan_with_llm(text, registry, llm)
+    return plan_with_llm(text, registry, llm)
 
 
-def _plan_with_llm(text: str, registry: Mapping[str, ToolSpec], llm: LlmPlanner) -> PlannerResult:
+def plan_with_llm(text: str, registry: Mapping[str, ToolSpec], llm: LlmPlanner) -> PlannerResult:
+    """The LLM half of ``plan_request``, without the templates (the R-1 benchmark runs every
+    request through it). An invalid plan is retried once with the errors; a question from the
+    LLM is passed to the user as is."""
     failures: list[str] = []
     for _ in range(LLM_ATTEMPTS):
         try:
@@ -81,6 +85,11 @@ def _plan_with_llm(text: str, registry: Mapping[str, ToolSpec], llm: LlmPlanner)
                 f"{EXAMPLES}.",
                 reason="LLM call failed",
             )
+        if isinstance(raw, Mapping) and "clarify" in raw:
+            question = raw["clarify"]
+            if isinstance(question, str) and question.strip():
+                return Clarify(question=question.strip(), reason="LLM asked")
+            raw = {k: v for k, v in raw.items() if k != "clarify"}
         try:
             plan = Plan.model_validate(raw)
         except ValidationError as exc:
