@@ -25,8 +25,10 @@ The `/b-sync`, `/b-handoff` and `/b-release` commands live in `.claude/skills/` 
 Some files every feature depends on. **Post in the team chat before changing them**, and expect `/b-sync` to flag them to everyone:
 - the edit timeline contract: `backend/src/vibe/contract/` (rules in "The contract" in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md));
 - the toolbox's tool names and arguments: `backend/src/vibe/toolbox/registry.py` and `tools.py`;
+- the planner's plan format and LLM reply: `backend/src/vibe/agent/plan.py` and `llm.py` (format in "Agent / planner" in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md));
+- the planner's request set, which F-05, F-09 and R-1 all score against: `backend/tests/agent/requests_draft.json` and `requests_llm.json`;
 - the API routes between UI and backend;
-- dependency files, run scripts, CI config: `backend/pyproject.toml`, `backend/uv.lock`, `backend/.python-version`, the root `package.json` and `package-lock.json`, `.github/workflows/`;
+- dependency files, run scripts, CI config: `backend/pyproject.toml`, `backend/uv.lock`, `backend/.python-version`, the root `package.json` and `package-lock.json`, `.github/workflows/`, `.env.example`;
 - `backend/src/vibe/config.py` (environment settings everyone reads);
 - the storage layout: `backend/src/vibe/storage/` (rules in "Storage" in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md));
 - the UI side of the API: `frontend/src/api/` (the `ApiClient`, its routes and types; generated types land in `generated/`).
