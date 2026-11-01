@@ -69,8 +69,8 @@ def candidate_row(name: str, scored: Sequence[tuple[Record, Score]]) -> list[str
     valid = n - outcomes["invalid"] - outcomes["provider_error"] - outcomes["refusal"]
     plans = [s for r, s in scored if r["result"]["type"] == "plan"]
     executable = sum(1 for s in plans if s.outcome not in ("unknown_label", "unresolvable_time"))
-    seconds = [sum(a["seconds"] for a in r["attempts"]) for r, _ in scored if not r["first_call"]]
-    first = [sum(a["seconds"] for a in r["attempts"]) for r, _ in scored if r["first_call"]]
+    seconds = [r["seconds"] for r, _ in scored if not r["first_call"]]
+    first = [r["seconds"] for r, _ in scored if r["first_call"]]
     usd = [cost(name, r["attempts"]) for r, _ in scored]
     usd_uncached = [cost(name, r["attempts"], uncached=True) for r, _ in scored]
     tokens_in = [
@@ -164,8 +164,9 @@ def _core_stats(name: str, scored: Sequence[tuple[Record, Score]]) -> dict[str, 
     core = [(r, s) for r, s in scored if r["tools"] == "core"]
     if not core:
         return None
-    seconds = [sum(a["seconds"] for a in r["attempts"]) for r, _ in core if not r["first_call"]]
+    seconds = [r["seconds"] for r, _ in core if not r["first_call"]]
     return {
+        "runs": Counter(r["case"] for r, _ in core),
         "unsafe": sum(1 for _, s in core if s.outcome == "unsafe"),
         "correct": 100 * sum(1 for _, s in core if s.outcome == "correct") / len(core),
         "p95": _quantile(seconds, 0.95),
@@ -184,7 +185,13 @@ def decision(scored_by: Mapping[str, Sequence[tuple[Record, Score]]]) -> list[st
     if CEILING not in stats:
         return [f"Needs the {CEILING} ceiling run first."]
     ceiling = stats[CEILING]["correct"]
-    fewest_unsafe = min(st["unsafe"] for st in stats.values())
+    ceiling_runs = stats[CEILING]["runs"]
+    if more := [n for n, st in stats.items() if st["runs"].total() > ceiling_runs.total()]:
+        names = ", ".join(more)
+        return [f"The {CEILING} ceiling ran less than {names}: run it the same way first."]
+    # Only runs of the same requests can be compared: a partial run has fewer chances to fail.
+    same_runs = {n for n, st in stats.items() if st["runs"] == ceiling_runs}
+    fewest_unsafe = min(stats[n]["unsafe"] for n in same_runs)
     rows, passing, local = [], [], []
     for name, st in stats.items():
         gates = [
@@ -194,9 +201,9 @@ def decision(scored_by: Mapping[str, Sequence[tuple[Record, Score]]]) -> list[st
         ]
         candidate = CANDIDATES.get(name)
         is_local = candidate is not None and candidate.price is None
-        if is_local:
+        if name in same_runs and is_local:
             local.append((name, st, sum(gates)))
-        elif all(gates):
+        elif name in same_runs and all(gates):
             passing.append((name, st, sum(gates)))
         rows.append(
             [
@@ -206,7 +213,10 @@ def decision(scored_by: Mapping[str, Sequence[tuple[Record, Score]]]) -> list[st
                 f"{st['correct'] - ceiling:+.0f}",
                 _s(st["p95"]),
                 "local" if is_local else f"${st['usd']:.5f}",
-                " ".join("pass" if g else "FAIL" for g in gates),
+                " ".join("pass" if g else "FAIL" for g in gates)
+                if name in same_runs
+                else f"not compared: {st['runs'].total()} core results, "
+                f"{ceiling_runs.total()} on the ceiling",
             ]
         )
     header = [

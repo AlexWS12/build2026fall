@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 from vibe.agent.bench.candidates import CANDIDATES, Candidate, cost
@@ -111,7 +112,9 @@ def run_candidate(
         for run in range(runs):
             for i, case in enumerate(cases):
                 started = datetime.now(UTC).isoformat()
+                start = perf_counter()
                 result = plan_with_llm(case.request, registry_for(case), planner)
+                seconds = perf_counter() - start  # a failed call saves no attempt, only this
                 attempts = [asdict(a) for a in planner.attempts]
                 record = {
                     "candidate": candidate.name,
@@ -124,6 +127,7 @@ def run_candidate(
                     "run": run,
                     "first_call": case.tools not in warm,
                     "result": result_record(result),
+                    "seconds": seconds,
                     "attempts": attempts,
                     "started_at": started,
                     "hardware": hardware_label,

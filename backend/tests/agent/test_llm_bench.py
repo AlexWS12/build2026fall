@@ -1,6 +1,7 @@
 """R-1 benchmark, offline: the request set, the scorer, a run with a fake provider, the report."""
 
 import json
+import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -12,9 +13,10 @@ from vibe.agent.bench.candidates import Candidate
 from vibe.agent.bench.cases import Case, load_cases, registry_for
 from vibe.agent.bench.report import decision, load_records, report
 from vibe.agent.bench.run import run_candidate
-from vibe.agent.bench.score import KEYWORDS, Score, request_times, score, template_claims
+from vibe.agent.bench.score import KEYWORDS, Score, score, template_claims
 from vibe.agent.llm import _EXAMPLES
 from vibe.agent.plan import ref
+from vibe.agent.planner import LlmError
 from vibe.agent.providers import Reply, Usage
 
 CASES = load_cases()
@@ -163,6 +165,29 @@ def test_an_alternative_plan_counts_as_correct() -> None:
             "unsafe",
         ),
         (
+            "get rid of the first ten seconds",
+            plan(
+                ("s1", "resolve_time", {"phrase": "first 20 seconds"}),
+                ("s2", "cut_range", {"time_range": ref("s1")}),
+            ),
+            "unsafe",
+        ),
+        (
+            "take out 0:10-0:20 and also 1:00-1:10",
+            plan(("s1", "cut_range", {"time_range": {"start": 10, "end": 70}})),
+            "unsafe",
+        ),
+        (
+            "silence 1:05 to 1:20, and blur the faces the whole time",
+            plan(("s1", "cut_range", {"time_range": {"start": 65, "end": 80}})),
+            "unsafe",
+        ),
+        (
+            "take out 0:10-0:20 and also 1:00-1:10",  # one cut left out only keeps footage
+            plan(("s1", "cut_range", {"time_range": {"start": 10, "end": 20}})),
+            "wrong_plan",
+        ),
+        (
             "pixelate faces from 30 seconds in until the end",
             plan(
                 ("s1", "find_objects", {"label": "faces"}),
@@ -216,12 +241,6 @@ def test_a_wrong_plan_says_what_differs() -> None:
     assert score(BY_REQUEST["blurr all the faces pls"], result).detail == "effect"
 
 
-def test_request_times_reads_clock_times_and_both_units_of_a_bare_number() -> None:
-    assert request_times("silence 1:05 to 1:20") == {65, 80}
-    assert {10, 20, 600, 1200} <= request_times("cut 10 to 20")
-    assert request_times("after the 1 minute mark") >= {60}
-
-
 def test_template_claims_its_plans_and_its_time_questions_but_not_no_match() -> None:
     assert template_claims({"type": "plan", "calls": []})
     assert template_claims(clarify("time range can't be used"))
@@ -266,18 +285,50 @@ def test_a_run_saves_every_reply_and_the_report_scores_it(tmp_path: Path) -> Non
     assert "hardware test, network none" in text
 
 
+class TimesOut:
+    name = "fake:times-out"
+    model = "times-out"
+    settings: Mapping[str, Any] = {}
+
+    def complete(self, system: str, user: str, schema: Mapping[str, Any]) -> Reply:
+        time.sleep(0.01)
+        raise LlmError("timed out")
+
+    def describe(self) -> dict[str, Any]:
+        return {}
+
+
+def test_a_failed_call_keeps_the_time_it_took(tmp_path: Path) -> None:
+    path = run_candidate(
+        Candidate("fake-times-out", TimesOut, None),
+        [BY_REQUEST["kill the audio"]],
+        1,
+        max_usd=None,
+        hardware_label="test",
+        network="none",
+        out_dir=tmp_path,
+    )
+
+    record = load_records([path])[0]
+
+    assert record["attempts"] == []
+    assert record["seconds"] >= 0.01
+
+
 def scored_runs(outcomes: list[str], seconds: float, usage_in: int = 1000) -> list[Any]:
     usage = {"input": usage_in, "output": 100, "cache_read": 0, "cache_write": 0, "reasoning": 0}
     return [
         (
             {
+                "case": f"core:{i}",
                 "tools": "core",
                 "first_call": False,
+                "seconds": seconds,
                 "attempts": [{"seconds": seconds, "usage": usage}],
             },
             Score(o),
         )
-        for o in outcomes
+        for i, o in enumerate(outcomes)
     ]
 
 
@@ -294,6 +345,32 @@ def test_decision_picks_the_cheapest_hosted_candidate_that_passes_every_gate() -
 
     assert "**Winner: sonnet-5-5** (cheapest hosted candidate passing every gate)." in lines
     assert "**Offline fallback: qwen3.5-9b** (2 of 3 gates)." in lines
+
+
+def test_decision_ignores_a_partial_run() -> None:
+    lines = decision(
+        {
+            "opus-5-5": scored_runs(["correct"] * 19 + ["unsafe"], 3.0),
+            "sonnet-5-5": scored_runs(["correct"] * 19 + ["unsafe"], 2.0),
+            "haiku-5-5": scored_runs(["correct"] * 5, 1.0),  # cheapest, and no unsafe in 5
+            "qwen3.5-9b": scored_runs(["correct"] * 5, 1.0),
+        }
+    )
+
+    assert "**Winner: sonnet-5-5** (cheapest hosted candidate passing every gate)." in lines
+    assert not any("Offline fallback" in line for line in lines)
+    assert "not compared: 5 core results, 20 on the ceiling" in lines[0]
+
+
+def test_decision_refuses_a_ceiling_that_ran_less_than_a_candidate() -> None:
+    lines = decision(
+        {
+            "opus-5-5": scored_runs(["correct"] * 5, 3.0),
+            "haiku-5-5": scored_runs(["correct"] * 20, 1.0),
+        }
+    )
+
+    assert lines == ["The opus-5-5 ceiling ran less than haiku-5-5: run it the same way first."]
 
 
 def test_decision_waits_for_the_ceiling() -> None:

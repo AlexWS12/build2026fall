@@ -13,5 +13,5 @@ applies it). Over the core requests (the five toolbox tools), all runs:
 
 Of the hosted candidates that pass, the lowest $/request wins. The local model that passes,
 or comes closest, becomes the offline fallback. Extras (eval-only tools) are reported but
-don't decide anything.
+don't decide anything. A candidate is only compared if it ran exactly what the ceiling ran.
 """
