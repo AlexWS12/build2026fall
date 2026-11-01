@@ -153,7 +153,8 @@ class OpenAIProvider:
 
         self._errors = openai.APIError
         self.client = openai.OpenAI(
-            api_key=os.environ.get(api_key_env),
+            # Not .get(): given no key, the SDK sends OPENAI_API_KEY to whatever base_url is set.
+            api_key=os.environ[api_key_env],
             base_url=base_url,
             timeout=TIMEOUT_SECONDS,
             max_retries=MAX_RETRIES,
@@ -237,11 +238,13 @@ class GeminiProvider:
         thinking_budget: int | None = None,
         max_tokens: int = MAX_OUTPUT_TOKENS,
     ) -> None:
+        import httpx
         from google import genai
         from google.genai import errors, types
 
         self._types = types
-        self._errors = errors.APIError
+        # The SDK lets httpx's errors through on network failures and timeouts.
+        self._errors = (errors.APIError, httpx.HTTPError)
         self.client = genai.Client(
             api_key=os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"),
             http_options=types.HttpOptions(timeout=int(TIMEOUT_SECONDS * 1000)),
