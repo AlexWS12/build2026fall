@@ -1,0 +1,5 @@
+{
+  "manifest_version": 1,
+  "about": "Clips the benchmark measures on (F-09). Videos are never committed: get them from the team drive and run `uv run python -m vibe.benchmark add-clip FILE`, which checks the hash and stores the video in the data dir. Every clip is our own footage with the people in it agreeing, or properly licensed. consent_cloud says whether that consent covers third-party cloud processing (R-4).",
+  "clips": []
+}
