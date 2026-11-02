@@ -4,11 +4,13 @@ date: 2026-11-02
 branch: jean/benchmark-harness
 features: [F-09]
 base: v0.1.0 @ 21ee75c
-head: (set after the first commit)
-status: in progress
+head: d76bd38
+status: ready for review
 ---
 
 # F-09 benchmark harness, first cut: clip manifest, label format, vision scoring and `report`
+
+> **Ready for review: the code.** The card isn't done until consented clips are registered in `clips.json`; that comes as a follow-up commit on this branch (Next steps).
 
 > **No shared file changes.** New subpackage `backend/src/vibe/benchmark/`, a one-line entry in ARCHITECTURE "Code layout", and my own F-09 rows in the roadmap. The **planner is not scored here**: R-1's bench (`vibe.agent.bench`, on `paul/r1-planner-llm`) already does that on the shared request set, so this doesn't build a second scorer, and `backend/tests/agent/requests_draft.json` stays where it is (F-06 and R-1 both edit it on their branches).
 
