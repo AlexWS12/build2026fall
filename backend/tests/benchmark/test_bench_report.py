@@ -4,6 +4,7 @@ tracks against labels, and the CLI."""
 from pathlib import Path
 
 import pytest
+from bench_helpers import register
 from pydantic import TypeAdapter
 
 from vibe.benchmark import labels as labels_mod
@@ -93,6 +94,18 @@ def test_cached_tracks_are_scored_side_by_side(
     text = render_text(report)
     assert "model-a" in text and "100.0%" in text and "2 (100.0%)" in text
     assert "| clip | tracks | label |" in render_markdown(report)
+
+
+def test_cached_tracks_are_found_without_ffmpeg(
+    fake_clip: Path, manifest_path: Path, labels_dir: Path, storage: Storage
+) -> None:
+    """The cache lookup runs even where the ffmpeg clip tests are skipped."""
+    entry = register(fake_clip, manifest_path, storage)
+    write_labels(entry, labels_dir)
+    cache_tracks(storage, entry, "model-a", TRACKS.dump_json([face_track("p1")]).decode())
+    report = build_report(manifest_path, labels_dir, storage)
+    assert report.problems == []
+    assert [s.tracks_key for s in report.scores] == ["model-a"]
 
 
 def test_unreadable_cached_tracks_are_a_problem_not_a_crash(
