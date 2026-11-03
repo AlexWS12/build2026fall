@@ -4,7 +4,7 @@ date: 2026-11-02
 branch: jean/benchmark-harness
 features: [F-09]
 base: v0.1.0 @ 21ee75c
-head: 91d3121
+head: f610a5a
 status: ready for review
 ---
 
@@ -32,7 +32,7 @@ Seven of Eduardo's ten review comments, fixed in `91d3121`, each with a test tha
 - **#4 Broken `clips.json`** (`manifest.py`). `load_manifest` turns invalid JSON (merge conflict markers) and validation errors into a `BenchmarkError` naming the file, like `load_labels`. Test `test_broken_manifest_names_itself`.
 - **#5 Copy integrity** (`manifest.py`). `Storage.add_video` hashes before copying, so `_store` now re-hashes the stored copy; if it differs (source changed mid-copy, e.g. still syncing from the drive) it deletes the copy and says to retry. Test `test_detects_file_changed_during_copy`.
 - **#6 Metadata flags dropped for an existing clip** (`manifest.py`). `--source`, `--consent`, `--cloud-ok`, `--license`, `--tag` or `--notes` on a clip already in the manifest is now an error listing the ignored flags, instead of silently leaving e.g. `consent_cloud` false. Defaults don't count, so a plain `add-clip FILE` still just stores it. Test `test_cloud_ok_on_existing_clip_errors_instead_of_silently_dropping`.
-- **#10 Report reads the cache through `Storage.cache_path`** (`report.py`), the same call F-08 writes with, so a layout change inside it can't make tracks invisible. No new test (behaviour unchanged today).
+- **#10 Report reads the cache through `Storage.cache_path`** (`report.py`), the same call F-08 writes with, so a layout change inside it can't make tracks invisible. No new test (behaviour unchanged today). The first version used the placeholder key `_x`, which `Storage` rejects (keys must start with a letter or digit), and broke 4 report tests on CI that are skipped locally without ffmpeg. Fixed in `f610a5a` (key `x`), with `test_cached_tracks_are_found_without_ffmpeg` so that path is covered without ffmpeg too.
 
 The new manifest and CLI tests patch `probe` (`fake_clip` fixture in `conftest.py`), so they run without ffmpeg.
 
@@ -45,7 +45,7 @@ uv run python -m vibe.benchmark report                    # the exit-check table
 ```
 Verified on 2026-11-02 in a Linux VM (Ubuntu 22.04, kernel 6.8, 2 vCPUs of an Intel i9-13900H, no GPU), Python 3.12.15, uv 0.13.4, ffmpeg 4.4.2. Full suite: 322 passed. The other 8 (1 failed, 7 errors, all in `tests/video/`) also fail on unchanged `main` in that VM, because ffmpeg 4.4 lacks the `-fps_mode` and `-display_rotation` flags their fixtures use; CI's ffmpeg is newer. CI hasn't run yet.
 
-Review fixes verified on 2026-11-03 on Windows 11 without ffmpeg on PATH: `pytest tests/benchmark tests/test_smoke.py` 42 passed, 26 skipped (the ffmpeg clip tests); ruff clean. The ffmpeg-backed tests were **not** rerun after the fixes; CI or a machine with ffmpeg should run them. The full suite wasn't rerun either.
+Review fixes verified on 2026-11-03 on Windows 11 without ffmpeg on PATH: `pytest tests/benchmark tests/test_smoke.py` 42 passed, 26 skipped (the ffmpeg clip tests); ruff clean. The ffmpeg-backed tests were **not** run locally; CI caught the `_x` bug above in them. After `f610a5a`: full suite on that machine 262 passed, 75 skipped (ffmpeg); ruff clean. CI result on `f610a5a`: see the PR.
 
 ## Decisions made
 jean made these on 2026-11-02 for F-09; say on the PR if you disagree. None is architecture-level, so there's no decisions-log row.
