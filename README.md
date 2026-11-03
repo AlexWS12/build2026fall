@@ -201,4 +201,6 @@ A backend test fails if the spec is stale, and frontend CI fails if the generate
 
 The video tests generate tiny clips with the [ffmpeg](https://ffmpeg.org/) command line, so install it to run them: `brew install ffmpeg` (Mac), `winget install ffmpeg` (Windows), or `sudo apt install ffmpeg` (Linux). Without it those tests are skipped; CI installs it and fails instead. The app itself reads video through PyAV, which bundles its own ffmpeg libraries. To check a clip by hand: `uv run --directory backend python -m vibe.video probe path/to/clip.mp4`.
 
+To try a toolbox tool by hand: `uv run --directory backend python -m vibe.toolbox --help` lists the tools, and `... <tool> --help` shows each one's arguments and an example.
+
 To work on the backend directly: `cd backend && uv sync`, then `uv run pytest`. Set `VIBE_BACKEND=local` or `remote` to use real models once they exist.
