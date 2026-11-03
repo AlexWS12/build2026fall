@@ -159,7 +159,7 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 |---|---|---|---|---|
 | R-1 Planner LLM: any hosted provider or an open-weight model, compared on the ~20-request set (shared with F-09). Also which requests the template parser takes | paul | | Script output with plan validity, latency and cost per request (or hardware needed) → decision row; planner candidates updated in README and ARCHITECTURE | in progress |
 | R-3 Detection, tracking and identity model shortlist for F-10/F-50/F-52, **with licenses**. Avoid AGPL unless the team agrees | jonathan | jonathan/r3-model-shortlist | Shortlist table (model, task, license, weights size, CUDA 12.8 support) → decision row | in progress |
-| R-4 Data policy and target shape: may frames go to a cloud model? Boxes or masks from the start? | _open_ | | Two decision rows. Both open questions closed in ARCHITECTURE | planned |
+| R-4 Data policy and target shape: may frames go to a cloud model? Boxes or masks from the start? | nickolas | nickolas/data-policy | Two decision rows. Both open questions closed in ARCHITECTURE | in progress |
 
 **Build**
 | Card | Owner | Branch | Exit check | Status |
