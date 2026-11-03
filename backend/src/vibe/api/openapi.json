@@ -5,6 +5,144 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/projects": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Create Project",
+        "description": "Upload a video and create a project on it. Files that aren't a readable video get 400.",
+        "operationId": "create_project_api_projects_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_project_api_projects_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/requests": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Send Request",
+        "description": "Plan a chat request and reply. 409 if the project is already handling one.",
+        "operationId": "send_request_api_projects__project_id__requests_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatReply"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/state": {
+      "get": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Get State",
+        "description": "The project's timeline state, folded from its op log.",
+        "operationId": "get_state_api_projects__project_id__state_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "Health",
@@ -26,6 +164,167 @@
   },
   "components": {
     "schemas": {
+      "AudioFilterSpan": {
+        "properties": {
+          "start": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Start"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End",
+            "description": "Null means until the end of the video."
+          },
+          "op_id": {
+            "type": "string",
+            "title": "Op Id"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "filter": {
+            "type": "string",
+            "const": "denoise",
+            "title": "Filter"
+          },
+          "strength": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strength"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "start",
+          "op_id",
+          "request_id",
+          "filter"
+        ],
+        "title": "AudioFilterSpan"
+      },
+      "Body_create_project_api_projects_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_create_project_api_projects_post"
+      },
+      "ChatReply": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "title": "Request Id",
+            "description": "Ops written for this request carry this id."
+          },
+          "reply": {
+            "type": "string",
+            "title": "Reply",
+            "description": "Shown to the user in the chat."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "request_id",
+          "reply"
+        ],
+        "title": "ChatReply"
+      },
+      "ChatRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Text",
+            "description": "The user's chat message."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "ChatRequest"
+      },
+      "Effect": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "blur",
+              "pixelate",
+              "box"
+            ],
+            "title": "Type"
+          },
+          "padding": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Padding",
+            "description": "Grow the box by this fraction of its size.",
+            "default": 0.15
+          },
+          "strength": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strength",
+            "description": "0 = lightest, 1 = strongest. Null = default."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "Effect",
+        "description": "How to hide a visual target. The renderer owns what each setting looks like."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
       "Health": {
         "properties": {
           "status": {
@@ -48,6 +347,322 @@
           "backend"
         ],
         "title": "Health"
+      },
+      "MaskSpan": {
+        "properties": {
+          "start": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Start"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End",
+            "description": "Null means until the end of the video."
+          },
+          "op_id": {
+            "type": "string",
+            "title": "Op Id"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "effect": {
+            "$ref": "#/components/schemas/Effect"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "start",
+          "op_id",
+          "request_id",
+          "effect"
+        ],
+        "title": "MaskSpan"
+      },
+      "MuteSpan": {
+        "properties": {
+          "start": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Start"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End",
+            "description": "Null means until the end of the video."
+          },
+          "op_id": {
+            "type": "string",
+            "title": "Op Id"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker",
+            "description": "Null = all audio."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "start",
+          "op_id",
+          "request_id",
+          "speaker"
+        ],
+        "title": "MuteSpan"
+      },
+      "ProjectInfo": {
+        "properties": {
+          "storage_version": {
+            "type": "integer",
+            "title": "Storage Version",
+            "default": 1
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "video": {
+            "$ref": "#/components/schemas/VideoRef"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project_id",
+          "name",
+          "created_at",
+          "video"
+        ],
+        "title": "ProjectInfo"
+      },
+      "Rule": {
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "title": "Rule Id"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category",
+            "description": "Detector label to mask, e.g. \"person\", \"face\"."
+          },
+          "except_identities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Except Identities",
+            "description": "Enrolled identity ids that stay visible."
+          },
+          "effect": {
+            "$ref": "#/components/schemas/Effect"
+          },
+          "time_range": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TimeRange"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "category",
+          "effect"
+        ],
+        "title": "Rule",
+        "description": "A standing rule, evaluated on every frame against whatever the detectors find.\n\n\"Only I am visible\" is ``category=\"person\", except_identities=[\"id_me\"]``. Fail closed:\na detection whose identity is unknown or unsure is **not** excepted, so it gets masked."
+      },
+      "TimeRange": {
+        "properties": {
+          "start": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Start",
+            "description": "Seconds from the start of the source video."
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End",
+            "description": "Seconds, excluded. Null means until the end of the video."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "start"
+        ],
+        "title": "TimeRange",
+        "description": "A span of **source** time in seconds, start included, end excluded.\n\n``end`` is ``None`` for \"until the end of the video\". Times always refer to the original\nvideo, so a cut never shifts other edits (docs/ARCHITECTURE.md, \"The contract\")."
+      },
+      "TimelineState": {
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "title": "Schema Version",
+            "default": 1
+          },
+          "masks": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/MaskSpan"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Masks",
+            "description": "Per track id: when it's masked and how."
+          },
+          "cuts": {
+            "items": {
+              "$ref": "#/components/schemas/TimeRange"
+            },
+            "type": "array",
+            "title": "Cuts",
+            "description": "Source time ranges removed from the output, merged."
+          },
+          "mutes": {
+            "items": {
+              "$ref": "#/components/schemas/MuteSpan"
+            },
+            "type": "array",
+            "title": "Mutes"
+          },
+          "audio_filters": {
+            "items": {
+              "$ref": "#/components/schemas/AudioFilterSpan"
+            },
+            "type": "array",
+            "title": "Audio Filters"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/Rule"
+            },
+            "type": "array",
+            "title": "Rules",
+            "description": "Active standing rules."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "TimelineState"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VideoRef": {
+        "properties": {
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Sha256"
+          },
+          "ext": {
+            "type": "string",
+            "pattern": "^(\\.[a-z0-9]{1,10})?$",
+            "title": "Ext",
+            "description": "e.g. \".mp4\"; may be empty."
+          },
+          "original_name": {
+            "type": "string",
+            "title": "Original Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "sha256",
+          "ext",
+          "original_name"
+        ],
+        "title": "VideoRef"
       }
     }
   }

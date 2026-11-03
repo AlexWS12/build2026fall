@@ -4,6 +4,66 @@
  */
 
 export interface paths {
+    "/api/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Project
+         * @description Upload a video and create a project on it. Files that aren't a readable video get 400.
+         */
+        post: operations["create_project_api_projects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Request
+         * @description Plan a chat request and reply. 409 if the project is already handling one.
+         */
+        post: operations["send_request_api_projects__project_id__requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get State
+         * @description The project's timeline state, folded from its op log.
+         */
+        get: operations["get_state_api_projects__project_id__state_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -25,6 +85,80 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AudioFilterSpan */
+        AudioFilterSpan: {
+            /** Start */
+            start: number;
+            /**
+             * End
+             * @description Null means until the end of the video.
+             */
+            end?: number | null;
+            /** Op Id */
+            op_id: string;
+            /** Request Id */
+            request_id: string;
+            /**
+             * Filter
+             * @constant
+             */
+            filter: "denoise";
+            /** Strength */
+            strength?: number | null;
+        };
+        /** Body_create_project_api_projects_post */
+        Body_create_project_api_projects_post: {
+            /** File */
+            file: string;
+        };
+        /** ChatReply */
+        ChatReply: {
+            /**
+             * Request Id
+             * @description Ops written for this request carry this id.
+             */
+            request_id: string;
+            /**
+             * Reply
+             * @description Shown to the user in the chat.
+             */
+            reply: string;
+        };
+        /** ChatRequest */
+        ChatRequest: {
+            /**
+             * Text
+             * @description The user's chat message.
+             */
+            text: string;
+        };
+        /**
+         * Effect
+         * @description How to hide a visual target. The renderer owns what each setting looks like.
+         */
+        Effect: {
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "blur" | "pixelate" | "box";
+            /**
+             * Padding
+             * @description Grow the box by this fraction of its size.
+             * @default 0.15
+             */
+            padding: number;
+            /**
+             * Strength
+             * @description 0 = lightest, 1 = strongest. Null = default.
+             */
+            strength?: number | null;
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
         /** Health */
         Health: {
             /** Status */
@@ -35,6 +169,154 @@ export interface components {
              */
             backend: "stub" | "local" | "remote";
         };
+        /** MaskSpan */
+        MaskSpan: {
+            /** Start */
+            start: number;
+            /**
+             * End
+             * @description Null means until the end of the video.
+             */
+            end?: number | null;
+            /** Op Id */
+            op_id: string;
+            /** Request Id */
+            request_id: string;
+            effect: components["schemas"]["Effect"];
+        };
+        /** MuteSpan */
+        MuteSpan: {
+            /** Start */
+            start: number;
+            /**
+             * End
+             * @description Null means until the end of the video.
+             */
+            end?: number | null;
+            /** Op Id */
+            op_id: string;
+            /** Request Id */
+            request_id: string;
+            /**
+             * Speaker
+             * @description Null = all audio.
+             */
+            speaker: string | null;
+        };
+        /** ProjectInfo */
+        ProjectInfo: {
+            /**
+             * Storage Version
+             * @default 1
+             */
+            storage_version: number;
+            /** Project Id */
+            project_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            video: components["schemas"]["VideoRef"];
+        };
+        /**
+         * Rule
+         * @description A standing rule, evaluated on every frame against whatever the detectors find.
+         *
+         *     "Only I am visible" is ``category="person", except_identities=["id_me"]``. Fail closed:
+         *     a detection whose identity is unknown or unsure is **not** excepted, so it gets masked.
+         */
+        Rule: {
+            /** Rule Id */
+            rule_id?: string;
+            /**
+             * Category
+             * @description Detector label to mask, e.g. "person", "face".
+             */
+            category: string;
+            /**
+             * Except Identities
+             * @description Enrolled identity ids that stay visible.
+             */
+            except_identities?: string[];
+            effect: components["schemas"]["Effect"];
+            time_range?: components["schemas"]["TimeRange"] | null;
+        };
+        /**
+         * TimeRange
+         * @description A span of **source** time in seconds, start included, end excluded.
+         *
+         *     ``end`` is ``None`` for "until the end of the video". Times always refer to the original
+         *     video, so a cut never shifts other edits (docs/ARCHITECTURE.md, "The contract").
+         */
+        TimeRange: {
+            /**
+             * Start
+             * @description Seconds from the start of the source video.
+             */
+            start: number;
+            /**
+             * End
+             * @description Seconds, excluded. Null means until the end of the video.
+             */
+            end?: number | null;
+        };
+        /** TimelineState */
+        TimelineState: {
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: number;
+            /**
+             * Masks
+             * @description Per track id: when it's masked and how.
+             */
+            masks?: {
+                [key: string]: components["schemas"]["MaskSpan"][];
+            };
+            /**
+             * Cuts
+             * @description Source time ranges removed from the output, merged.
+             */
+            cuts?: components["schemas"]["TimeRange"][];
+            /** Mutes */
+            mutes?: components["schemas"]["MuteSpan"][];
+            /** Audio Filters */
+            audio_filters?: components["schemas"]["AudioFilterSpan"][];
+            /**
+             * Rules
+             * @description Active standing rules.
+             */
+            rules?: components["schemas"]["Rule"][];
+        };
+        /** ValidationError */
+        ValidationError: {
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
+        };
+        /** VideoRef */
+        VideoRef: {
+            /** Sha256 */
+            sha256: string;
+            /**
+             * Ext
+             * @description e.g. ".mp4"; may be empty.
+             */
+            ext: string;
+            /** Original Name */
+            original_name: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -44,6 +326,105 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    create_project_api_projects_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_create_project_api_projects_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_request_api_projects__project_id__requests_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_state_api_projects__project_id__state_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     health_api_health_get: {
         parameters: {
             query?: never;
