@@ -67,9 +67,25 @@ These are wrapped by the query tools and swappable behind them.
 See [The contract](#the-contract-edit-timeline-v1-in-code) below. Everything upstream writes to it and everything downstream reads from it. **It's the one interface that lets 10 people build in parallel against stubs.**
 
 ### 6. Renderer
+> Code: [`backend/src/vibe/render/`](../backend/src/vibe/render/) (F-04). Encoding: D-019 (proposed).
+
 - **It's deterministic:** the same timeline and the same source always give the same output.
 - **It applies the fail-safe rules:** interpolate boxes between keyframes, hold a lost track's mask for a few frames and grow it, pad uncertain masks more, and on an error mask the whole affected segment and log it, never skip it.
-- **Two paths:** **export** (whole file, through ffmpeg) and **frame by frame** (preview and live). They share the same masking and effect code, so preview, export and live look identical.
+- **Two paths:** **export** (whole file, encoded by the ffmpeg libraries inside PyAV, D-019) and **frame by frame** (preview and live). They share the same masking and effect code, so preview, export and live look identical.
+- **Built so far (F-04):**
+  - **Per-frame:** `FrameRenderer(state, tracks).render(image, t)` (or `render_frame`) applies every mask in effect at source time `t`.
+    - Boxes move linearly between keyframes. Past either end of a track, the box is held for 0.5 s and grows; after that the track is off screen.
+    - `uncertain` keyframes get extra padding.
+    - A masked track id with no track masks the whole frame, and is reported once in `issues`.
+    - Pure: no files, cache or network.
+  - **Effects:** blur, pixelate and black box, numpy only. Their sizes scale with the target, with a floor, so strength 0 still hides it. The numbers are starting points for F-11.
+  - **Audio:** `render_audio` silences all-audio mutes, then removes cuts, on the samples from `extract_audio`.
+  - **Export:** `export(source, state, tracks, out_path)`.
+    - Every frame that isn't cut goes through the per-frame path, timed with `source_to_output`, into an H.264 + AAC MP4.
+    - The file is written under a temporary name and renamed when complete.
+    - An odd width or height loses its last row or column (yuv420p needs even sizes).
+  - **Refused before anything is written** (`UnsupportedEdit`): standing rules (F-51), muting one speaker (F-32) and audio filters (F-33). A privacy edit is never silently missing from an output.
+  - **CLI:** `uv run python -m vibe.render export clip.mp4 --log timeline.jsonl [--tracks tracks.json] -o out.mp4`. With `--project <id>`, it renders a project into a new file in its `exports/` each time.
 
 ## Code layout
 One repo, with the backend and frontend side by side, each with its own toolchain (D-011). A frontend-only person never needs Python, and a backend-only person never needs Node beyond the root scripts.
@@ -263,6 +279,7 @@ Add a row when something gets decided. **"Accepted" means "what we're going with
 | D-016 | 2026-10-28 | Planner plan format (F-05): a plan is a list of tool calls `{step_id, tool, args}`; an argument may be `{"$ref": "<earlier step_id>"}` to use that step's result (e.g. track ids from `find_objects`, a range from `resolve_time`). The template parser and the LLM write the same shape, and both go through `validate_plan` against the tool registry before anything runs; mask targets must be a `$ref`. Builds on D-006 | Proposed | One JSON shape for every planner keeps the LLM swappable and testable offline; refs let one LLM call write the whole plan (Knight Hacks lesson) while code checks every step. Confirm on the F-05 PR, with the F-06 owner and R-1 |
 | D-017 | 2026-10-29 | Data policy (R-4), local-first. Three data classes: **text and metadata** (request, video metadata, tool summaries, transcript excerpts), **media** (frames, crops, clips, audio), **biometric** (face embeddings, identity templates). Text and metadata may go anywhere, including a cloud LLM. Media may go to team-controlled machines (e.g. the 5070 through a `remote` backend); to a third-party service (LLM/VLM API, rented GPU, Colab/Kaggle) only with a per-project opt-in, off by default, and only for clips whose recorded consent covers it. Biometric data never leaves its machine: bystander embeddings are matched in memory against the enrolled user's template and discarded, never written to the shared analysis cache. The planner never sees pixels; a VLM on a team machine answers per-track questions. Live mode: no network on the per-frame path. Missing opt-in fails closed (the edit stops and says why). Logs carry ids, not media | Proposed | Bystanders never consented, and face embeddings are biometric data under laws like BIPA and GDPR Art. 9; live mode can't use the network anyway; models already run locally (D-002, D-015), so it costs little now, and the opt-in keeps tier 3 possible for our own consented clips. Write-up: `docs/research/r4-data-policy-and-target-shape.md` |
 | D-018 | 2026-10-29 | Target shape (R-4): **boxes now, masks later.** v1 targets are tracks of normalized, padded boxes (as in D-013). F-15 adds an optional per-keyframe reference to a mask stored in the analysis cache (e.g. COCO RLE); masks never go in the op log or inline in tracks. The box stays required: the renderer uses the mask when a frame has one and isn't `uncertain`, otherwise the padded box. The op log format doesn't change, but new tracks break old readers (`extra="forbid"`), so F-15 is a shared-file change and likely bumps `schema_version` | Proposed | The whole Sprint 2–3 pipeline (F-04, F-10, F-11) is box-based; a padded box fails closed while a slightly-off mask leaks; masks need a GPU (SAM 2.1, D-015) and live masks are a stretch. Masks are still needed for object removal (F-16) and overlapping people, so the contract leaves room for them. Write-up: `docs/research/r4-data-policy-and-target-shape.md` |
+| D-019 | 2026-11-03 | Renderer export (F-04) encodes with PyAV: H.264 (`libx264`, yuv420p, CRF 18) + AAC in an MP4, using the ffmpeg libraries bundled in its wheel. The ffmpeg command line is only used by tests to generate clips. Builds on F-03 reading video with PyAV | Proposed | Nobody has to install ffmpeg to export; one library reads and writes video in the same process, with no subprocess pipes; the frames the per-frame path makes go straight to the encoder. Confirm on the F-04 PR |
 
 ## Open questions
 - **Compute:** confirm the 5070's VRAM (12 GB desktop or 8 GB laptop). Does anyone else have a GPU worth listing? Are university HPC, club hardware or cloud credits available for tier 3? Should the 5070 host a shared model server, and when would it be on?
