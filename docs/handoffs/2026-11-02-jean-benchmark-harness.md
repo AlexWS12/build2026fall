@@ -4,7 +4,7 @@ date: 2026-11-02
 branch: jean/benchmark-harness
 features: [F-09]
 base: v0.1.0 @ 21ee75c
-head: d76bd38
+head: 91d3121
 status: ready for review
 ---
 
@@ -24,14 +24,28 @@ status: ready for review
 - **Tests, `backend/tests/benchmark/`:** 51 tests, no GPU, no network. Clips are generated with the ffmpeg CLI (flags that work on ffmpeg 4.4+) and skipped without it unless `VIBE_REQUIRE_FFMPEG=1`, as CI sets. The scoring tests show the geometry each expectation comes from. Checked by mutation: removing padding, matching across labels, or letting one box detect two faces each makes a test fail. `test_smoke.py` now imports `vibe.benchmark` too.
 - `docs/ARCHITECTURE.md`: `benchmark/` in "Code layout". `docs/ROADMAP.md`: my branch in the Sprint 2 F-09 row; backlog status `in progress`.
 
+### Review fixes (PR #18)
+Seven of Eduardo's ten review comments, fixed in `91d3121`, each with a test that fails on the old code (checked by stashing the fix). The other three are in Gotchas.
+- **#1 Precision with offset truth keyframes** (`score.py`). Truth boxes are now interpolated with `box_at` like predictions, at every truth keyframe time, so face A labelled at 0 and 1 still counts at 0.5 when face B has a keyframe there. Before, a perfect detector scored precision 0.75 on that case. Times are rounded to 4 decimals so 0.1 and 0.1000001 are one moment, and `box_at`'s edge tolerance went from 1e-6 to 1e-4 s so the rounding never drops a track at its own first or last keyframe. New test `test_offset_truth_keyframes_do_not_create_false_positives`; `test_a_perfect_prediction` now uses two tracks with different keyframe times. Mutation checks rerun: dropping padding, matching across labels, many-to-one matching, and reverting truth to keyframes-only each make a test fail.
+- **#2 Same bytes, different extension** (`manifest.py`). `add-clip clip.mov` for a clip listed as `.mp4` used to store an orphan `<sha>.mov`. Now it's refused with a "rename to match" message. Test `test_rejects_different_extension_for_same_content`.
+- **#3 Traceback on bad input** (`__main__.py`). `pydantic.ValidationError` and `StorageError` are now printed as `error: ...` with exit 1, e.g. `--id Bad_ID`. Test `test_cli_prints_error_for_bad_id`.
+- **#4 Broken `clips.json`** (`manifest.py`). `load_manifest` turns invalid JSON (merge conflict markers) and validation errors into a `BenchmarkError` naming the file, like `load_labels`. Test `test_broken_manifest_names_itself`.
+- **#5 Copy integrity** (`manifest.py`). `Storage.add_video` hashes before copying, so `_store` now re-hashes the stored copy; if it differs (source changed mid-copy, e.g. still syncing from the drive) it deletes the copy and says to retry. Test `test_detects_file_changed_during_copy`.
+- **#6 Metadata flags dropped for an existing clip** (`manifest.py`). `--source`, `--consent`, `--cloud-ok`, `--license`, `--tag` or `--notes` on a clip already in the manifest is now an error listing the ignored flags, instead of silently leaving e.g. `consent_cloud` false. Defaults don't count, so a plain `add-clip FILE` still just stores it. Test `test_cloud_ok_on_existing_clip_errors_instead_of_silently_dropping`.
+- **#10 Report reads the cache through `Storage.cache_path`** (`report.py`), the same call F-08 writes with, so a layout change inside it can't make tracks invisible. No new test (behaviour unchanged today).
+
+The new manifest and CLI tests patch `probe` (`fake_clip` fixture in `conftest.py`), so they run without ffmpeg.
+
 ## How to check it
 ```bash
 cd backend
-uv run pytest tests/benchmark tests/test_smoke.py -q      # 62 passed
+uv run pytest tests/benchmark tests/test_smoke.py -q      # 68 with ffmpeg; 42 passed + 26 skipped without
 uv run ruff check && uv run ruff format --check
 uv run python -m vibe.benchmark report                    # the exit-check table (no clips yet)
 ```
 Verified on 2026-11-02 in a Linux VM (Ubuntu 22.04, kernel 6.8, 2 vCPUs of an Intel i9-13900H, no GPU), Python 3.12.15, uv 0.13.4, ffmpeg 4.4.2. Full suite: 322 passed. The other 8 (1 failed, 7 errors, all in `tests/video/`) also fail on unchanged `main` in that VM, because ffmpeg 4.4 lacks the `-fps_mode` and `-display_rotation` flags their fixtures use; CI's ffmpeg is newer. CI hasn't run yet.
+
+Review fixes verified on 2026-11-03 on Windows 11 without ffmpeg on PATH: `pytest tests/benchmark tests/test_smoke.py` 42 passed, 26 skipped (the ffmpeg clip tests); ruff clean. The ffmpeg-backed tests were **not** rerun after the fixes; CI or a machine with ffmpeg should run them. The full suite wasn't rerun either.
 
 ## Decisions made
 jean made these on 2026-11-02 for F-09; say on the PR if you disagree. None is architecture-level, so there's no decisions-log row.
@@ -49,7 +63,8 @@ jean made these on 2026-11-02 for F-09; say on the PR if you disagree. None is a
 - **Later:** speech scoring (F-31/F-32: word timing, diarization), per-stage timing for F-50 on the 5070, and maybe `--min-coverage` / `--iou` flags once someone needs other thresholds.
 
 ## Gotchas
-- **Labels are only as good as their keyframes.** Scores are taken at ground-truth keyframes, so a target with no keyframe in a stretch isn't measured there. One per second while visible, plus entry and exit.
+- **Labels are only as good as their keyframes.** Scores are taken at ground-truth keyframe times (any target's), and each target is interpolated between its own keyframes, so a stretch with no keyframe on any target isn't measured, and a target that moves between its keyframes is only as accurate as the straight line. One per second while visible, plus entry and exit.
+- **Review nits left for a follow-up PR (from PR #18):** #7 `add_clip` reads the file three times (probe, our hash, `add_video`'s hash; the copy re-hash in #5 makes it four), slow for big clips. #8 `box_at` rebuilds the keyframe times list on every call. #9 `manifest.atomic_write` and `sha256_of` duplicate private helpers in `vibe.storage`; making those public is a shared-file change, so post a heads-up first.
 - **Same label or nothing.** A `person` box over a face doesn't count for `face`, because "blur faces" masks face tracks only. Label with the detector's names (`face`, `person`, `license_plate`).
 - **`--verify` reads every clip in full** (hash and probe), so it's slow on long 4K clips; the default only checks sizes.
 - **On Windows, don't point a Linux shell at the repo's `.venv`.** If you test from WSL or a VM, set `UV_PROJECT_ENVIRONMENT` to a folder outside the repo, or uv rebuilds the venv and breaks the Windows one.
