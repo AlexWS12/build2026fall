@@ -84,6 +84,7 @@ backend/                 Python 3.12, uv (D-010). Package name: vibe
     render/              export and per-frame paths (F-04)
     storage/             project folders, videos by hash, analysis cache paths (R-2)
     agent/               planner: request -> plan of tool calls (F-05)
+    benchmark/           clip manifest, ground-truth labels, vision scores, report (F-09)
     api/                 FastAPI app; every route lives under /api
     config.py            settings from the environment (VIBE_BACKEND, default stub; VIBE_DATA_DIR)
   tests/

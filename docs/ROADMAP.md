@@ -24,7 +24,7 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 | F-06 | Toolbox scaffolding: typed tool schemas, registry, stub implementations, CLI per tool | Must | F-02 | in progress | |
 | F-07 | Web UI shell: upload, chat, player, timeline view, export | Must | F-01 | done | |
 | F-08 | Compute setup: `stub`/`local`/`remote` model backends, shareable analysis cache, model download script, per-tier install notes (CPU / small GPU / RTX 5070; CUDA 12.8+ for the 5070) | Must | F-01 | in progress | ARCHITECTURE "Compute". Optional: model server on the 5070 |
-| F-09 | Benchmark harness: test clips + labels + request set + report script | Must | F-02 | idea | Numbers only from here |
+| F-09 | Benchmark harness: test clips + labels + request set + report script | Must | F-02 | in progress | Numbers only from here |
 | F-64 | API routes: upload, request, timeline state | Must | F-06 | planned | Shared file. Starts from the routes F-07's mock uses |
 
 ### Visual edits
@@ -169,7 +169,7 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 | F-04 Renderer: export path (ffmpeg) + per-frame path sharing the effect code; nothing on the per-frame path calls the network. Can be split export / per-frame | _open_ | | A test renders a generated clip with a blur, a cut and a mute from an example timeline and checks the output. No GPU | planned |
 | F-05 Planner: template parser + plan validation + clarify reply; the LLM plan plugs in after R-1 | pablo | pablo/f05-planner-v2 | Plain requests → valid tool calls (or clarify) with no network and no GPU | in progress |
 | F-08 Compute setup: `stub`/`local`/`remote` backend interface, model download script, install notes per tier, **plus the team GPU survey**. Cache via `Storage.cache_path()` | eduardo | eduardo/compute-setup | Stub backend replays a cached result in a test. Survey table added to ARCHITECTURE "Compute" | in progress |
-| F-09 Benchmark harness, first cut: consented clips + manifest, label format, request set, report script. Can slip | jean | | `report` runs on the stub backend and prints a table. Clips listed in the manifest, not committed | in progress |
+| F-09 Benchmark harness, first cut: consented clips + manifest, label format, request set, report script. Can slip | jean | jean/benchmark-harness | `report` runs on the stub backend and prints a table. Clips listed in the manifest, not committed | in progress |
 | F-50 Live feasibility spike on the **RTX 5070**: per-frame latency of detector + tracker + identity check at 720p/1080p, with R-3 candidates | _open_ | | Script output with fps and latency per stage, hardware stated | planned |
 
 **Risks / dependencies:**
