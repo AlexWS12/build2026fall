@@ -51,11 +51,21 @@ def test_default_padding_is_the_contracts() -> None:
 
 
 def test_a_perfect_prediction() -> None:
-    s = score_tracks([truth((0, FACE), (1, FACE))], [pred((0, FACE), (1, FACE))])
+    # Two targets labelled at different times, as the labelling guide asks: moments are
+    # 0, 0.25, 0.75 and 1. A is there at all four, B at 0.25 and 0.75: 6 truth boxes.
+    gt = [
+        truth((0, FACE), (1, FACE), tid="a"),
+        truth((0.25, OTHER_FACE), (0.75, OTHER_FACE), tid="b"),
+    ]
+    perfect = [
+        pred((0, FACE), (1, FACE), tid="pa"),
+        pred((0.25, OTHER_FACE), (0.75, OTHER_FACE), tid="pb"),
+    ]
+    s = score_tracks(gt, perfect)
     t = s.total
-    assert (t.truth_boxes, t.detected, t.exposed) == (2, 2, 0)
+    assert (t.truth_boxes, t.predicted_boxes, t.detected, t.exposed) == (6, 6, 6, 0)
     assert (t.recall, t.precision, t.exposure_rate) == (1.0, 1.0, 0.0)
-    assert s.moments == 2
+    assert s.moments == 4
 
 
 def test_a_missed_face_is_an_exposure() -> None:
@@ -93,6 +103,20 @@ def test_predictions_are_interpolated_between_keyframes() -> None:
     assert box_at(moving, 1.0) == pytest.approx((0.2, 0.2, 0.4, 0.5))
     assert box_at(moving, 2.5) is None and box_at(moving, -0.1) is None
     assert score_tracks([truth((2, FACE))], [moving]).total.detected == 1
+
+
+def test_offset_truth_keyframes_do_not_create_false_positives() -> None:
+    # A is labelled at 0 and 1, B only at 0.5. At 0.5, A is still there (interpolated), so the
+    # predicted A box matches it instead of counting as a false positive (was precision 0.75).
+    gt = [truth((0, FACE), (1, FACE), tid="a"), truth((0.5, OTHER_FACE), tid="b")]
+    exact = [pred((0, FACE), (1, FACE), tid="pa"), pred((0.5, OTHER_FACE), tid="pb")]
+    t = score_tracks(gt, exact).total
+    assert (t.truth_boxes, t.predicted_boxes, t.detected) == (4, 4, 4)
+    assert (t.precision, t.recall) == (1.0, 1.0)
+
+    # Times a float hair apart are one moment, not two.
+    near = [truth((0.1, FACE), tid="a"), truth((0.1000001, OTHER_FACE), tid="b")]
+    assert score_tracks(near, []).moments == 1
 
 
 def test_a_track_that_ended_doesnt_cover_later_moments() -> None:

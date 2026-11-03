@@ -22,7 +22,7 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, ValidationError, field_validator, model_validator
 
 from vibe.contract.common import Model
 from vibe.storage import Storage, VideoRef
@@ -121,16 +121,23 @@ class ClipManifest(Model):
 
 
 def load_manifest(path: Path = MANIFEST_PATH) -> ClipManifest:
+    """Raises ``BenchmarkError`` (naming the file) if it's missing or isn't valid, e.g. after a
+    merge left conflict markers in it."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
         raise BenchmarkError(f"no clip manifest at {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise BenchmarkError(f"{path.name}: not valid JSON: {exc}") from exc
     version = data.get("manifest_version") if isinstance(data, dict) else None
     if version != MANIFEST_VERSION:
         raise BenchmarkError(
             f"{path.name} has manifest_version {version!r}; this code reads {MANIFEST_VERSION}"
         )
-    return ClipManifest.model_validate(data)
+    try:
+        return ClipManifest.model_validate(data)
+    except ValidationError as exc:
+        raise BenchmarkError(f"{path.name}: {exc}") from exc
 
 
 def save_manifest(manifest: ClipManifest, path: Path = MANIFEST_PATH) -> None:
@@ -179,7 +186,9 @@ def add_clip(
     """Store a clip's video in the data dir and make sure the manifest lists it.
 
     A file the manifest already lists (same hash) is just stored: that's how teammates get the
-    team's clips. A new file needs ``clip_id``, ``source`` and ``consent`` and is appended.
+    team's clips. It must keep the listed extension, and metadata arguments are refused for it
+    rather than dropped (updating an entry isn't supported; edit ``clips.json``). A new file
+    needs ``clip_id``, ``source`` and ``consent`` and is appended.
     Returns the entry and whether the manifest changed. Nothing is stored or written until
     every check passes.
     """
@@ -194,6 +203,31 @@ def add_clip(
         if clip_id is not None and clip_id != existing.clip_id:
             raise BenchmarkError(
                 f"{path.name} is already in the manifest as {existing.clip_id!r}, not {clip_id!r}"
+            )
+        ignored = [
+            flag
+            for flag, given in (
+                ("--source", source is not None),
+                ("--consent", consent is not None),
+                ("--cloud-ok", consent_cloud),
+                ("--license", license != "own footage"),
+                ("--tag", bool(list(tags))),
+                ("--notes", bool(notes)),
+            )
+            if given
+        ]
+        if ignored:
+            raise BenchmarkError(
+                f"{path.name} is already in the manifest as {existing.clip_id!r}, so "
+                f"{', '.join(ignored)} would be ignored. Updating an existing entry isn't "
+                "supported yet: edit clips.json by hand, then run add-clip without them"
+            )
+        ext = path.suffix.lower()
+        if ext != existing.video.ext:
+            raise BenchmarkError(
+                f"{path.name} has the same content as {existing.clip_id!r} but its extension "
+                f"is {ext or '(none)'}, not {existing.video.ext}; rename it to match before "
+                "re-adding"
             )
         _store(storage, path, sha)
         return existing, False
@@ -236,8 +270,16 @@ def add_clip(
 
 def _store(storage: Storage, path: Path, sha: str) -> None:
     ref = storage.add_video(path)
-    if ref.sha256 != sha:  # the file changed between hashing and copying
+    if ref.sha256 != sha:  # the file changed between our hash and add_video's
         raise BenchmarkError(f"{path} changed while it was being stored; try again")
+    # add_video hashes the source before copying, so only re-hashing the copy catches a file
+    # that changed mid-copy (e.g. still syncing from the team drive).
+    stored = storage.video_path(ref)
+    if sha256_of(stored) != sha:
+        stored.unlink(missing_ok=True)
+        raise BenchmarkError(
+            f"{path} changed while it was being copied; retry once it's fully synced"
+        )
 
 
 # --- Is the clip here, and is it the right one? -------------------------------------------

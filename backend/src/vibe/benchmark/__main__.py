@@ -12,11 +12,14 @@ import argparse
 import sys
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from vibe.benchmark import labels as labels_mod
 from vibe.benchmark import manifest as manifest_mod
 from vibe.benchmark.labels import write_labels_template
 from vibe.benchmark.manifest import BenchmarkError, add_clip, atomic_write, load_manifest
 from vibe.benchmark.report import build_report, render_markdown, render_text
+from vibe.storage import StorageError
 from vibe.video import VideoError
 
 
@@ -57,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "add-clip":
             return _add_clip(args)
         return _new_labels(args)
-    except (BenchmarkError, VideoError, FileNotFoundError) as exc:
+    except (BenchmarkError, VideoError, FileNotFoundError, ValidationError, StorageError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 

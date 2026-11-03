@@ -8,13 +8,16 @@ CI sets ``VIBE_REQUIRE_FFMPEG=1`` so a missing ffmpeg fails instead of passing b
 import os
 import shutil
 import subprocess
+from fractions import Fraction
 from pathlib import Path
 
 import pytest
 from bench_helpers import register
 
+from vibe.benchmark import manifest as manifest_mod
 from vibe.benchmark.manifest import ClipEntry, ClipManifest, save_manifest
 from vibe.storage import Storage
+from vibe.video import VideoInfo
 
 
 def _ffmpeg(*args: str) -> None:
@@ -52,6 +55,22 @@ def other_clip(clip_dir: Path) -> Path:
         "-f", "lavfi", "-i", "testsrc=s=128x96:r=15:d=1",
         "-c:v", "libx264", "-pix_fmt", "yuv420p", str(path),
     )  # fmt: skip
+    return path
+
+
+@pytest.fixture
+def fake_clip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A file the manifest reads as a 1 s 160x120 clip (``probe`` is patched), for tests of
+    the bookkeeping around a clip that don't need ffmpeg."""
+    path = tmp_path / "src" / "clip.mp4"
+    path.parent.mkdir()
+    path.write_bytes(b"not really a video " * 64)
+    info = VideoInfo(
+        path=path, duration=1.0, width=160, height=120, rotation=0, fps=Fraction(10),
+        time_base=Fraction(1, 10240), frame_count=10, is_vfr=False, start_time=0.0,
+        codec="h264", pix_fmt="yuv420p", audio=None,
+    )  # fmt: skip
+    monkeypatch.setattr(manifest_mod, "probe", lambda _: info)
     return path
 
 

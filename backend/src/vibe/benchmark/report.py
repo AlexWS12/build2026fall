@@ -141,7 +141,9 @@ def build_report(
         )
         if label_state != "ok" or labels is None:
             continue
-        for path in sorted((storage.cache_dir / entry.video.sha256 / "tracks").glob("*.json")):
+        # Derived from cache_path, the API F-08 writes with, so a layout change can't hide tracks.
+        tracks_dir = storage.cache_path(entry.video.sha256, "tracks", "_x").parent
+        for path in sorted(tracks_dir.glob("*.json")):
             try:
                 predicted = _TRACKS.validate_json(path.read_bytes())
             except (OSError, ValidationError) as exc:

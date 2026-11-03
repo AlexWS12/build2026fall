@@ -13,9 +13,11 @@ Both are reported because they disagree. A box can be a poor detection and still
 (shifted, but big enough to cover), or a good detection and still a leak (tight, with part of the
 face outside it). For "blur every face", exposure is the number that matters most.
 
-Predicted tracks are read at ground-truth times by linear interpolation between their keyframes,
-the way a tracker carries a box between detections. Outside a track's first and last keyframe,
-the track isn't there. Only the same label counts, because "blur faces" masks face tracks only.
+Both truth and predicted tracks are read at every ground-truth keyframe time by linear
+interpolation between their keyframes, the way a tracker carries a box between detections. So a
+target labelled at t=0 and t=1 still counts at t=0.5 when another target has a keyframe there.
+Outside a track's first and last keyframe, the track isn't there. Only the same label counts,
+because "blur faces" masks face tracks only.
 
 **Padding assumption:** the box grows by ``padding`` times its width and height, centred, then
 is clipped to the frame. The renderer (F-04) owns what padding means; if it does something
@@ -23,7 +25,6 @@ else, change ``pad`` to match so exposure measures what viewers would actually s
 """
 
 import bisect
-from collections import defaultdict
 from collections.abc import Iterable, Sequence
 
 from pydantic import Field
@@ -38,7 +39,11 @@ DEFAULT_COVERAGE = 0.9
 DEFAULT_PADDING: float = Effect.model_fields["padding"].default
 """The contract's default effect padding, so the score matches what an unconfigured mask does."""
 
-_TIME_EPS = 1e-6
+_MOMENT_DIGITS = 4
+"""Keyframe times are rounded to this many decimals, so 0.1 and 0.1000001 are one moment."""
+_TIME_EPS = 1e-4
+"""How far outside its keyframes a track still counts. At least the rounding above (5e-5), so
+rounding a track's own first or last keyframe time never makes it vanish there."""
 
 
 class LabelScore(Model):
@@ -152,16 +157,13 @@ def score_tracks(
     padding: float = DEFAULT_PADDING,
 ) -> TrackScore:
     truth, predicted = list(truth), list(predicted)
-    by_time: dict[float, list[tuple[str, Box]]] = defaultdict(list)
-    for track in truth:
-        for k in track.keyframes:
-            by_time[k.t].append((track.label, k.box))
+    moments = sorted({round(k.t, _MOMENT_DIGITS) for track in truth for k in track.keyframes})
     labels = sorted({t.label for t in truth} | {p.label for p in predicted})
 
     counts = {label: [0, 0, 0, 0] for label in labels}  # truth, predicted, detected, exposed
-    for t in sorted(by_time):
+    for t in moments:
         for label in labels:
-            gt = [box for lab, box in by_time[t] if lab == label]
+            gt = [b for g in truth if g.label == label and (b := box_at(g, t)) is not None]
             preds = [b for p in predicted if p.label == label and (b := box_at(p, t)) is not None]
             masks = [pad(p, padding) for p in preds]
             c = counts[label]
@@ -176,7 +178,7 @@ def score_tracks(
         iou=iou_threshold,
         coverage=min_coverage,
         padding=padding,
-        moments=len(by_time),
+        moments=len(moments),
         by_label=by_label,
         total=_label_score("all", *totals),
     )

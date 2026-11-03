@@ -189,6 +189,16 @@ def test_cli_registers_a_clip_starts_labels_and_reports(
     assert (out_dir / "report.md").read_text(encoding="utf-8").startswith("# Vibe benchmark")
 
 
+def test_cli_prints_error_for_bad_id(
+    cli_paths: Path, fake_clip: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    args = ["add-clip", str(fake_clip), "--id", "Bad_ID", "--source", "x", "--consent", "y"]
+    assert main(args) == 1  # a pydantic ValidationError used to escape as a traceback
+    err = capsys.readouterr().err
+    assert err.startswith("error:") and "clip_id" in err
+    assert "Traceback" not in err
+
+
 def test_cli_rejects_a_file_that_isnt_video(
     cli_paths: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
