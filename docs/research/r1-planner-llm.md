@@ -1,16 +1,16 @@
 # R-1 Planner LLM: Research & Approach
 
-Oct 28, 2026 · @Paul P · updated Nov 1, 2026 against `main` @ `21ee75c` (v0.1.0). Open PRs #16 (F-06) and #17 (R-4) are noted where they change something.
+Oct 28, 2026 · @Paul P · updated Nov 2, 2026 against `main` @ `21ee75c` (v0.1.0).
 
 ## TL;DR
 
-R-1 picks the model for the planner's LLM slot. **No model is picked yet, because no candidate has been scored.** This doc settles the shortlist, the request set, the pass/fail rule and the template parser's scope, so the run is the main thing left.
+R-1 picks the model for the planner's LLM slot. **No model is picked yet, because no candidate has been scored.** This doc proposes the shortlist, the request set, the pass/fail rule and the template parser's scope, so running the comparison is the main step left.
 
 - **Shortlist:** Claude Haiku 5.5, Claude Sonnet 5.5, GPT-6.1 Terra and Gemini 3.8 Flash (hosted); Qwen3.5-4B, Qwen3.5-9B, Gemma 4 E4B and Gemma 4 12B (local, sized to the team's 4 to 16 GB GPUs); Claude Opus 5.5 as the ceiling.
-- **Model to beat, as a hypothesis:** Haiku 5.5 as the hosted primary, with Qwen3.5-4B as the offline fallback. The plan is short and schema-constrained, Haiku costs $0.10 / $0.50 per 1M tokens, and it accepted the 5-tool schema in the preflight. Only a scored run can confirm this.
+- **Working hypothesis:** Haiku 5.5 as the hosted primary, with Qwen3.5-4B as the offline fallback. The plan is short and schema-constrained, Haiku costs $0.10 / $0.50 per 1M tokens, and it accepted the 5-tool schema in the preflight. Only a scored run can confirm this.
 - **Biggest finding:** the shared request set can't compare models yet. Of its 34 requests, the 8 that reach the LLM all expect a question, so no request that expects a plan ever gets there. A broken model would also score 8 of 8, because failing twice ends in a question.
 - **Template parser:** keep the scope F-05 built (every word literal, or no match), with one change: "mute it" shouldn't be a whole-clip mute.
-- **Blocking the run:** OpenAI and Gemini are out of credits on Paul's keys, and Ollama isn't installed. The benchmark script exists only on the unmerged `paul/r1-planner-llm` branch.
+- **Blocking the run:** the OpenAI and Gemini keys tested so far are out of credits, and Ollama isn't installed on the test machine. The benchmark script isn't on `main` yet.
 
 ## What R-1 asks for
 
@@ -20,12 +20,14 @@ Scope: an open choice between a hosted model (Anthropic, OpenAI, Google, ...) an
 
 **Exit check (what "done" means):**
 
-- [ ] Script output with plan validity, latency and cost per request for each candidate (for open models, the hardware needed). The script is on `paul/r1-planner-llm`; only a preflight has run.
+- [ ] Script output with plan validity, latency and cost per request for each candidate (for open models, the hardware needed). The script isn't on `main` yet, and only a preflight has run.
 - [ ] A decisions-log row in `docs/ARCHITECTURE.md`, proposed to the team before it is accepted. Draft below.
 - [ ] A write-up in the handoff entry (`/b-handoff`).
 - [ ] The planner candidates updated in `README.md` and `docs/ARCHITECTURE.md`. Replacement lines below.
 
-**House rules that apply:** every number comes from a script with the hardware stated. `docs/ROADMAP.md:160` already names Paul as owner, but its branch column is empty.
+**Scope of this deliverable:** this document and its handoff entry. The exit check above comes from `docs/ROADMAP.md:160`, so the team still needs to confirm that row. The comparison described below hasn't been run, and it's the proposed plan for whoever the team assigns.
+
+**Project rules that apply:** every number comes from a script with the hardware stated. `docs/ROADMAP.md:160` already names Paul as owner, but its branch column is empty.
 
 ## What the planner has to do
 
@@ -35,7 +37,7 @@ The planner turns one chat request into one JSON plan, and plain code runs it th
 
 - One LLM call per request writes the whole plan. At Knight Hacks, one plan took 2 to 7 s; calling tools step by step took over 2 minutes.
 - An invalid plan is retried once with the error, then the agent asks the user. It never guesses (`_plan_with_llm`, `agent/planner.py:72`).
-- The LLM sees text only. PR #17 proposes D-017: text and metadata may go to a cloud LLM, and the planner never sees pixels. So the comparison is text-only.
+- The LLM sees text only, so the comparison is text-only.
 - The LLM is never on the live per-frame path. It runs once when a standing rule is set.
 
 **What exists today:**
@@ -45,15 +47,15 @@ The planner turns one chat request into one JSON plan, and plain code runs it th
 | Template parser, plan validation, clarify reply | Merged (F-05, PR #15) | `backend/src/vibe/agent/` |
 | Plan format | `{step_id, tool, args}`, where `{"$ref": "s1"}` uses an earlier step's result (D-016) | `agent/plan.py` |
 | LLM slot | The `LlmPlanner` protocol and the retry are merged, but no model is wired in | `agent/planner.py:37` |
-| Tools | Five draft tools: `find_objects`, `resolve_time`, `add_mask`, `cut_range`, `mute` | `agent/tools_draft.py`; PR #16 replaces it with `vibe.toolbox`, same names |
+| Tools | Five draft tools: `find_objects`, `resolve_time`, `add_mask`, `cut_range`, `mute` | `agent/tools_draft.py` |
 | Request set | 34 requests with gold results, in JSON | `backend/tests/agent/requests_draft.json` |
-| Benchmark script | Not on `main`. A prototype is on `paul/r1-planner-llm`, stacked on PR #16, with no team review yet (no PR) | `agent/bench/` on that branch |
+| Benchmark script | Not on `main`. A prototype ran the preflight below, but it hasn't had a team review | Not on `main` |
 
 **What changed from the first draft of this doc:**
 
 - **The plan is tool calls, not intents.** Knight Hacks' plan held `action`, `effect` and `targets`, and code expanded those into tool calls (`censor/agent/planner.py`). F-05 merged tool calls instead, and D-016 says the template parser and the LLM write the same shape, so the intent-level schema is dropped.
 - **Only five tools are real.** Descriptive targets, cut-by-transcript, speakers, denoise, standing rules and undo have no tool yet, so they can't decide R-1. See "Risks".
-- **R-3 merged without a VLM,** and PR #17 keeps the planner away from pixels, so the idea of reusing a VLM as the planner is on hold. Knight Hacks' README names only Qwen3-VL-8B, and it appears to have served as the planner too.
+- **R-3 merged without a VLM,** so the idea of reusing a VLM as the planner is on hold. Knight Hacks' README names only Qwen3-VL-8B, and it appears to have served as the planner too.
 
 ## Finding: the shared request set can't compare models yet
 
@@ -70,9 +72,9 @@ Source: the snippet in the appendix, at `21ee75c`, on Windows 11 with Python 3.1
 Two problems follow:
 
 1. **No plan is ever requested from the LLM.** Every request it receives expects a question, so the set says nothing about plan quality.
-2. **A broken model scores perfectly.** `Plan.model_validate(raw)` requires `calls` (`agent/planner.py:85`), so the LLM can't ask on purpose. Its only route to a question is two invalid replies, which `_plan_with_llm` turns into a `Clarify`. Scored through `plan_request`, garbage gets 8 of 8.
+2. **A broken model scores perfectly.** `Plan.model_validate(raw)` requires `calls` (`agent/planner.py:85`), so the LLM can't ask on purpose. Its only route to a question is two invalid replies, which `_plan_with_llm` turns into a `Clarify`. Scored through `plan_request`, invalid output scores 8 of 8.
 
-**Recommendations, neither applied here:** add about 20 requests that reach the LLM and expect plans (next section), and give the reply a `clarify` field so that asking and failing are different outcomes. `paul/r1-planner-llm` has a prototype of both.
+**Recommendations, neither applied here:** add requests that reach the LLM and expect plans ("How to run the comparison", step 2), and give the reply a `clarify` field so that asking and failing are different outcomes.
 
 ## Candidate shortlist
 
@@ -86,19 +88,13 @@ Four hosted candidates (two Claude, one OpenAI, one Google), four local sizes ma
 | [Gemini 3.8 Flash](https://ai.google.dev/gemini-api/docs/pricing) (`gemini-3.8-flash`) | Google API | $0.75 / $3.75 until Dec 31, 2026, then $1.50 / $7.50 | \~$0.0045 | Has a free tier, but free-tier content may be used to improve Google's products |
 | [Qwen3.5-4B](https://ollama.com/library/qwen3.5/tags) (`qwen3.5:4b`) | Every team GPU, tight on the 4 GB RTX 3050; CPU on integrated graphics | $0 (3.3 to 4.0 GB on Ollama) | Hardware only | The local fallback the whole team can run |
 | [Qwen3.5-9B](https://ollama.com/library/qwen3.5/tags) (`qwen3.5:9b`) | 8 GB cards: RTX 4060 Ti, RTX 5060 Ti | $0 (6.6 to 7.6 GB on Ollama) | Hardware only | 66.1 on the BFCL-V4 tool-calling benchmark, per [vdf.ai](https://vdf.ai/blog/best-local-llm-by-vram/) (third party, not our number) |
-| [Gemma 4 E4B](https://ollama.com/library/gemma4/tags) (`gemma4:e4b`) | 8 GB cards | $0 (6.6 to 9.5 GB on Ollama; the `q4_K_M` build is 6.6 GB) | Hardware only | Already on Paul's disk in LM Studio (`google/gemma-4-e4b`, 6.33 GB per `lms ls`) |
+| [Gemma 4 E4B](https://ollama.com/library/gemma4/tags) (`gemma4:e4b`) | 8 GB cards | $0 (6.6 to 9.5 GB on Ollama; the `q4_K_M` build is 6.6 GB) | Hardware only | Already downloaded in LM Studio on the RTX 4060 Ti test machine (`google/gemma-4-e4b`, 6.33 GB per `lms ls`) |
 | [Gemma 4 12B](https://ollama.com/library/gemma4/tags) (`gemma4:12b`) | 12 GB and up: Nickolas's 16 GB card, Pablo's Mac, Alex's 5070 if it's 12 GB | $0 (7.7 to 8.0 GB on Ollama) | Hardware only | Best 12 GB pick in the vdf.ai guide; first local candidate to drop if time runs short |
 | [Claude Opus 5.5](https://platform.claude.com/docs/en/about-claude/pricing) (`claude-opus-5-5`), ceiling only | Anthropic API | $4 / $20 | \~$0.024 | If the strongest model fails a request, suspect the gold result first |
 
 \*An estimate for budgeting, not a measurement: 4,000 input tokens and 400 output tokens, no caching. Script output replaces it.
 
 **Caching:** cache reads are 0.05x to 0.1x the input price on all five hosted models, but a Claude cache write costs 1.25x and lasts 5 minutes by default. Real planner calls are one per chat message, while a benchmark fires them back to back, so it flatters cached cost. Compare candidates on uncached cost.
-
-**Differences from `candidates.py` on `paul/r1-planner-llm`,** to fix before the first scored run (not done, because this branch is doc-only):
-
-- It lists `gpt-5.6-terra`, not `gpt-6.1-terra`. The rule picks the cheapest model that passes, so the older price could rule out OpenAI on price alone.
-- It lacks `qwen3.5:4b`. Without it, the "offline fallback" could be a model most of the team can't run.
-- It lacks Gemma 4 E4B, and it has no provider entry for LM Studio.
 
 **Optional extras:**
 
@@ -122,8 +118,8 @@ This is as reported on Oct 28. Only Paul's card has been checked since (`nvidia-
 | Paul A. | RTX 3050, 4 GB | Windows 11 | Qwen3.5-4B at `q4_K_M` (3.3 GB), with a short context | |
 | Chris | Integrated graphics | Windows 11 | Qwen3.5-4B on the CPU, slowly | $400 Snowflake credits, $30 Gemini API credits |
 
-- **Paul can run the 8 GB tier.** Gemma 4 12B's 7.7 to 8.0 GB leaves no room for its context on an 8 GB card, so part of it would likely run on the CPU and its latency wouldn't be comparable. That one goes to Nickolas or Pablo.
-- **Local runtime:** Ollama isn't installed on Paul's machine (`winget install Ollama.Ollama`). LM Studio is, and its local server may be a shortcut. Whether it enforces a JSON schema is untested, so check that before relying on it.
+- **Paul can run the 8 GB tier.** Gemma 4 12B's 7.7 to 8.0 GB leaves no room for its context on an 8 GB card, so part of it would likely run on the CPU and its latency wouldn't be comparable. That run should go to Nickolas or Pablo.
+- **Local runtime:** Ollama isn't installed on Paul's machine (`winget install Ollama.Ollama`). LM Studio is, and its local server may be an alternative, but whether it enforces a JSON schema is untested and needs checking first.
 - **Compare speed within one machine only,** and label every row with its hardware. Pablo's runs use Metal, not CUDA.
 - **Blackwell cards need CUDA 12.8+ builds:** Nickolas's RTX PRO 2000, the 5060 Ti and Alex's 5070. The 4060 Ti, the 4050 and the 3050 don't.
 - **Credits:** Pablo's Claude credits and Chris's Gemini credits can cover those runs. Nobody on this list has OpenAI credits.
@@ -132,13 +128,6 @@ This is as reported on Oct 28. Only Paul's card has been checked since (`nvidia-
 ## How to run the comparison
 
 Score every candidate against a hand-written gold result for each request, 5 runs each, from one script that saves raw replies to JSONL in `outputs/r1-planner/` (gitignored). Re-scoring then never costs another API call.
-
-```bash
-# on paul/r1-planner-llm, from backend/; this script isn't on main
-PYTHONUTF8=1 uv run --group llm --env-file ../.env python -m vibe.agent.bench preflight
-PYTHONUTF8=1 uv run --group llm --env-file ../.env python -m vibe.agent.bench run --candidate opus-5-5 --set core --runs 5 --max-usd 10 --network "<your connection>"
-uv run python -m vibe.agent.bench report
-```
 
 ```mermaid
 flowchart LR
@@ -153,11 +142,11 @@ flowchart LR
   D --> F
 ```
 
-Both routes produce the same plan type, so the parser is scored like the models, as "candidate zero". The bench also runs each LLM on the requests the parser takes, then reports a routed result (the parser where it claims a request, the LLM otherwise).
+Both routes produce the same plan type, so the parser is scored like the models, as "candidate zero". The benchmark should also run each LLM on the requests the parser takes, then report a routed result (the parser where it claims a request, the LLM otherwise).
 
 **1. The plan shape already exists.** The LLM writes D-016's format, and `validate_plan` checks every plan. `ToolCall.args` is `dict[str, Any]` (`agent/plan.py:20`), which strict schema modes can't take, so the schema sent to providers has to be generated from the registry, with one variant per tool. It also has to leave out what [Claude's structured outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) reject: recursion and numeric or length limits. Checks like `targets` having at least one item stay in `validate_plan`. Whether OpenAI, Gemini and Ollama accept the same schema is untested.
 
-**2. Score the 24 requests that reach the LLM.** That's the card's "about 20": 8 from F-05's file plus 16 from `requests_llm.json` on `paul/r1-planner-llm`, all on today's five tools. Jean (F-09) should review these and adopt the format.
+**2. Score the 24 requests that reach the LLM.** That's the card's "about 20": 8 from F-05's file plus 16 new ones written for this comparison, all on today's five tools. With the rest of F-05's file, that makes 50 core requests. Jean (F-09) should review these and adopt the format.
 
 | # | Request | Category | A correct result |
 | --- | --- | --- | --- |
@@ -191,13 +180,13 @@ The other 26 in F-05's file (18 plans, 8 parser questions) still score the parse
 **3. Print these per candidate:**
 
 - **Plan validity:** share of replies that parse and validate, on the first try and after the one retry.
-- **Plan correctness:** plans compared by what they do: refs followed, `resolve_time` evaluated on a fixed clip length, step names and independent order ignored. A literal 0 to 10 s and `resolve_time("first 10 seconds")` count as the same, which also absorbs PR #16's change to the "first N" gold plans.
+- **Plan correctness:** plans compared by what they do: refs followed, `resolve_time` evaluated on a fixed clip length, step names and independent order ignored. A literal 0 to 10 s and `resolve_time("first 10 seconds")` count as the same.
 - **Unsafe and over-asked counts:** a plan where it should have asked, or any cut the gold result doesn't have, is unsafe. A question where it should have planned is over-asked.
 - **Latency:** p50 and p95 wall time, with network and hardware stated. Report the first call separately: Claude compiles a new schema on first use, and local models load into VRAM.
 - **Cost per request:** token usage returned by each API times the price table, cached and uncached. For local models: peak VRAM, load time and tokens per second.
 - **Consistency:** share of requests where all 5 runs gave the same result.
 
-**4. The decision rule,** fixed on Oct 31 and amended on Nov 1, before any scored run (`agent/bench/__init__.py` on `paul/r1-planner-llm`). Over the core requests, all runs:
+**4. The decision rule,** written on Oct 31 and amended on Nov 1, before any scored run. Over the core requests, all runs:
 
 1. Zero `unsafe` results, or the fewest if no candidate has zero.
 2. Correct within 5 points of the Opus 5.5 ceiling.
@@ -209,12 +198,12 @@ The cheapest hosted candidate that passes wins. The local model that passes, or 
 
 | Question | Recommendation | Why |
 | --- | --- | --- |
-| Do the gates cover all 50 core requests, or the 24 that reach the LLM? | The 24 | 26 of the 50 are the parser's. Over 50, 5 points is 2.5 requests, which is about 10% of what the LLM really handles. `report --requests <file>` drops saved runs outside that file, so a JSON of the 24 should be enough, with no bench change (untested) |
-| Does a mask that leaves people visible count as `unsafe`? | Yes | Privacy edits fail closed (`CLAUDE.md`). Masking the wrong half of a clip is only `wrong_plan` today |
-| Is "cheapest" cached or uncached? | Uncached | See "Caching" above. `report` prints both, but `decision` uses cached |
+| Do the gates cover all 50 core requests, or the 24 that reach the LLM? | The 24 | 26 of the 50 are the parser's. Over 50, 5 points is 2.5 requests, which is about 10% of what the LLM really handles |
+| Does a mask that leaves people visible count as `unsafe`? | Yes | Privacy edits fail closed (`CLAUDE.md`), so masking the wrong half of a clip shouldn't count as just a wrong plan |
+| Is "cheapest" cached or uncached? | Uncached | See "Caching" above |
 | Do requests for future tools run in this pass? | No | The exit check doesn't need them, and Claude rejects the 12-tool schema (see "Results so far") |
 
-**5. Keep it fair:**
+**5. Fairness rules:**
 
 - Same system prompt, few-shot examples and schema for every candidate, with no few-shot example in the scored set.
 - Each provider's native schema mode: Claude `output_config.format`, OpenAI strict Structured Outputs, Gemini's response schema, Ollama's `format` field.
@@ -242,15 +231,15 @@ Keep what F-05 built: the parser takes a request only when every word is account
 
 **What changed from the first draft:** two-action requests stay with the parser when each clause is literal; undo, redo and denoise aren't templates; and "screens" and "text" aren't nouns.
 
-**What the data says so far:** the parser takes 26 of the 34 requests and gets all of them right (`test_planner.py`, 150 agent tests passed at `21ee75c`, Windows 11, Python 3.12.2). That's weak evidence, because the set was written alongside the parser. On 23 extra requests probed by hand (negation, exclusions, pronouns, new phrasings), it took 9. "don't blur faces" and "blur everyone but me" correctly went to the LLM. The candidate-zero line in `report` should be run again on the full set.
+**What the data says so far:** the parser takes 26 of the 34 requests and gets all of them right (`test_planner.py`, 150 agent tests passed at `21ee75c`, Windows 11, Python 3.12.2). That's weak evidence, because the set was written alongside the parser. On 23 extra requests probed by hand (negation, exclusions, pronouns, new phrasings), it took 9. "don't blur faces" and "blur everyone but me" correctly went to the LLM. The parser should be scored again on the full set.
 
 **One recommended change:** the mute template accepts "it" (`_MUTE`, `agent/templates.py:28`), so "mute it" and "silence it" become a whole-clip mute. No test covers this. Pronouns are the LLM's job everywhere else in the parser, and it matters more once chat history exists: "mute it" after talking about one speaker would silence everyone. The fail-safe table says to ask when the target speaker is ambiguous. **Pablo** owns this file, so raise it on the F-05 follow-up.
 
 ## Results so far
 
-Nothing here picks a model.
+These results don't support a model choice.
 
-**Preflight** (`python -m vibe.agent.bench preflight` from `paul/r1-planner-llm`, Nov 1, Windows 11 with an RTX 4060 Ti 8 GB; network not recorded; raw output in `outputs/r1-planner/preflight-20261101T205743Z.txt`, on Paul's machine only). Times are one cold first call each, not scored results.
+**Preflight** (prototype benchmark script, not on `main`; Nov 1, Windows 11 with an RTX 4060 Ti 8 GB; network not recorded; raw output kept locally on that machine). Times are one cold first call each, not scored results.
 
 | Candidate | Model found | 5-tool schema | 12-tool schema |
 | --- | --- | --- | --- |
@@ -263,73 +252,74 @@ Nothing here picks a model.
 | `openrouter-qwen3.5-9b` | Yes | Accepted, 2.54 s | Accepted, 1.90 s |
 
 - **Tokens:** Claude used about 4,480 prompt tokens and 148 to 159 output tokens per call. Qwen through OpenRouter reported 1,380 and 194. The cause of the prompt gap is unknown. "Accepted" on OpenRouter only means no error came back.
-- **Claude rejects the 12-tool schema.** All three models returned "The compiled grammar is too large, which would cause performance issues." This doesn't block R-1, which only needs five tools. Where the limit falls between 5 and 12 tools is unknown, so it matters to whoever grows the toolbox: past that point, Claude needs a looser schema with `validate_plan` doing more of the work.
+- **Claude rejects the 12-tool schema,** which is today's five tools plus seven draft future ones. All three models returned "The compiled grammar is too large, which would cause performance issues." This doesn't block R-1, which only needs five tools. Where the limit falls between 5 and 12 tools is unknown, so it matters to whoever grows the toolbox: past that point, Claude needs a looser schema with `validate_plan` doing more of the work.
+- **The preflight predates the shortlist.** It tried GPT-5.6 Terra, so GPT-6.1 Terra hasn't completed a call. Qwen3.5-4B and Gemma 4 E4B haven't run either.
 
 ## What gets built after the pick
 
-This is the F-05 LLM half, which R-1 only recommends. `paul/r1-planner-llm` has prototypes of all four, unmerged and with no team review yet (no PR).
+This is the F-05 LLM half, which R-1 only recommends.
 
 | Piece | Today on `main` | To build |
 | --- | --- | --- |
 | Let the LLM ask | The reply must have `calls` (`agent/planner.py:85`) | A `clarify` field, with no retry when it's set |
 | Reply schema | `ToolCall.args` is an open dict | One schema generated from the registry, one variant per tool |
 | Provider adapter | Protocol only (`LlmPlanner`, `LlmError`) | An adapter for the winner and one for the fallback |
-| Prompt | None. `ToolSpec` has no description until PR #16 | Built from the registry, plus few-shot examples |
+| Prompt | None. `ToolSpec` has no description field | Built from the registry, plus few-shot examples |
 
-## Plan to Nov 3
+## Comparison plan
 
-Two days are left, so the order puts what can run today first.
+The steps run in dependency order, starting with what the working Anthropic key can already do. They were written for the Nov 3 due date, so whoever the team assigns should set new dates.
 
-**Sun Nov 1 (tonight)**
+**Prepare**
 
 - [ ] Settle the four questions under "Decide these before the first scored run"
-- [ ] Post in the team chat: Chris for Gemini credits, anyone for OpenAI credits, Nickolas or Pablo for a Gemma 4 12B run, Jean to review the 24 requests
+- [ ] Request resources from the team: Gemini credits (Chris), OpenAI credits (no teammate has reported any), a Gemma 4 12B run (Nickolas or Pablo) and a review of the 24 requests (Jean)
 - [ ] Install Ollama, or check that LM Studio's server enforces a schema; pull Qwen3.5-4B and 9B
-- [ ] On `paul/r1-planner-llm`, apply the `candidates.py` changes above
+- [ ] Set the benchmark's candidates to the shortlist above
 
-**Mon Nov 2**
+**Run**
 
-- [ ] Preflight the untested candidates. If any rejects a property named `$ref`, rename it for all of them (`WIRE_REF_KEY` on that branch), so the comparison stays fair
+- [ ] Preflight the untested candidates. If any rejects a property named `$ref`, rename it for all of them, so the comparison stays fair
 - [ ] Run the Opus 5.5 ceiling once, and fix the gold results it exposes
 - [ ] Run Opus, Haiku and Sonnet, 5 runs each. These only need the Anthropic key that already works
 - [ ] Run Terra and Flash once credits arrive, then Qwen3.5-4B, 9B and Gemma 4 E4B on the 4060 Ti, labelled as such
 
-**Tue Nov 3 (due)**
+**Report**
 
-- [ ] Print the report; post the decision row to the team as a proposal
-- [ ] Update `README.md` and `docs/ARCHITECTURE.md`, write the handoff, add the branch to `docs/ROADMAP.md:160`, and open the PRs
-- [ ] Fold in team feedback; the card is marked done once the row is agreed
+- [ ] Print the report and post the decision row to the team as a proposal
+- [ ] Update `README.md` and `docs/ARCHITECTURE.md`, add the results to a handoff entry, add the branch to `docs/ROADMAP.md:160` and open the PRs
+- [ ] Incorporate team feedback and finalize the row
 
 **If time or credits run short,** drop in this order: Gemma 4 12B, Gemma 4 E4B, the consistency metric, and Sonnet if Haiku passes every gate. Never drop the 24 requests, candidate zero, the Opus ceiling, Haiku or Qwen3.5-4B. If OpenAI or Gemini credits don't arrive, run them through OpenRouter as quality-only and say in the decision row that their latency and cost weren't measured.
 
 ## Decision row draft, doc edits and risks
 
-A fill-in-the-blanks row for `docs/ARCHITECTURE.md`. Main has D-015 and D-016, and PR #17 claims D-017 and D-018, so this is **D-019** if #17 merges first. Check before the PR.
+A fill-in-the-blanks row for `docs/ARCHITECTURE.md`. The log on `main` ends at D-016. **D-0XX** stands for the next free number when the row is proposed, because open PRs may claim numbers first.
 
 ```markdown
-| D-019 | <date> | Planner LLM: <winner> (`<model id>`), schema-constrained JSON output, behind a provider adapter; <local model> as the offline fallback. Template parser takes literal requests only (fixed nouns, explicit times, mute or silence, cuts with a time) | Proposed | <validity %>, <correctness %>, <unsafe count>, p50/p95 <latency>, <$ per request> from `python -m vibe.agent.bench report` on <hardware, network>, <N> requests x 5 runs. Covers today's five tools only; re-check when `check_attribute` and chat history land |
+| D-0XX | <date> | Planner LLM: <winner> (`<model id>`), schema-constrained JSON output, behind a provider adapter; <local model> as the offline fallback. Template parser takes literal requests only (fixed nouns, explicit times, mute or silence, cuts with a time) | Proposed | <validity %>, <correctness %>, <unsafe count>, p50/p95 <latency>, <$ per request> from the benchmark report on <hardware, network>, <N> requests x 5 runs. Covers today's five tools only; re-check when `check_attribute` and chat history land |
 ```
 
 **Also for the team:** D-016 asks to be confirmed "with the F-06 owner and R-1". R-1 can confirm it: all three Claude models and Qwen returned that shape in the preflight. OpenAI, Gemini and local models haven't been tested with a property named `$ref`, so that check comes first.
 
-**Replacement lines, to apply once the row is agreed** (line numbers on `main`; PRs #16 and #17 move the later ones, so find them by their text):
+**Replacement lines, to apply once the row is agreed** (line numbers at `21ee75c`; find them by their text if they've moved):
 
-- `README.md:135`: `| Agent / planner LLM | **Proposed (D-019):** <winner>; <local model> as the offline fallback | Cloud allowed (hybrid); text and metadata only; JSON plan checked by validate_plan |`
-- `docs/ARCHITECTURE.md:40`: change `(candidate: Claude)` to `(D-019: <winner>, with <local model> offline)`
+- `README.md:135`: `| Agent / planner LLM | **Proposed (D-0XX):** <winner>; <local model> as the offline fallback | Cloud allowed (hybrid); text and metadata only; JSON plan checked by validate_plan |`
+- `docs/ARCHITECTURE.md:40`: change `(candidate: Claude)` to `(D-0XX: <winner>, with <local model> offline)`
 - `docs/ARCHITECTURE.md:41`: remove `which LLM;` from the open list
-- `docs/ARCHITECTURE.md:261`: `- Planner LLM: see D-019. Re-check the pick when check_attribute and chat history land.`
+- `docs/ARCHITECTURE.md:261`: `- Planner LLM: see D-0XX. Re-check the pick when check_attribute and chat history land.`
 
-**Risks and what to do about them:**
+**Risks and mitigations:**
 
 - **The decision covers only today's five tools.** Descriptive targeting ("the guy in the red hoodie") is a Must feature and the hardest planning case, and it can't be scored until its tools exist. A cheap model could pass now and struggle there, so keep the adapter swappable and re-run when `check_attribute` lands.
 - **R-1 compares single requests.** Follow-ups and reacting to tool results aren't tested, because the planner takes no history and no executor exists yet.
-- **The numbers depend on an unmerged branch.** The script is stacked on PR #16, and the exit check needs it to be reproducible. Keep this doc's PR separate, and open the bench's PR after #16 merges or stacked on it.
+- **The numbers depend on a script that isn't on `main`.** They have to be reproducible, so the script needs its own reviewed PR before its numbers go in the decision row.
 - **The same person wrote the requests and the gold results.** Ask Jean or another teammate to review them before the hosted runs.
 - **Claude's schema limit.** The toolbox will reach it as it grows, somewhere between 5 and 12 tools with a one-variant-per-tool schema.
-- **Data policy is only proposed (PR #17).** Hosted candidates see text only. Gemini's free tier may use that content to improve Google's products, so use a paid key or name that in the decision.
+- **Data policy isn't decided on `main`.** Hosted candidates see text only. Gemini's free tier may use that content to improve Google's products, so use a paid key or name that in the decision.
 - **Prices move.** Gemini 3.8 Flash doubles on Jan 1, 2027, so check it against the semester before calling it cheapest.
 - **Hidden reasoning tokens.** Set reasoning to the lowest level and count those tokens, or a "cheap" model can come out slower and pricier.
-- **Tool descriptions reach the LLM word for word.** PR #16's `find_objects` description includes "Stub: filters the given tracks.", so numbers only hold for the descriptions they ran with.
+- **Tool descriptions will reach the LLM word for word,** so numbers only hold for the descriptions they ran with.
 - **Three team cards are Blackwell.** Local runtimes need a CUDA 12.8+ build (`docs/ARCHITECTURE.md`, Compute), so Nickolas should check his build before running.
 - **VRAM is shared.** On the team's 8 GB cards, a resident 9B planner leaves almost no room for the vision models, so record that as a cost of the local option, not just $0.
 - **API budget.** 5 runs of 50 requests is 250 calls per hosted candidate, about $12 in total at the estimates above, before caching and retries. The 24 alone is about $6. The preflight cost about $0.04 on Claude by the script's price table.
@@ -354,7 +344,7 @@ requests = json.load(open("tests/agent/requests_draft.json"))["requests"]
 print(Counter((route(r["request"]), r["expect"]) for r in requests))
 ```
 
-Output at `21ee75c`: `{('template', 'plan'): 18, ('reaches the LLM', 'clarify'): 8, ('parser asks', 'clarify'): 8}`. Run on `requests_llm.json`, the same function sends all 16 core requests to the LLM.
+Output at `21ee75c`: `{('template', 'plan'): 18, ('reaches the LLM', 'clarify'): 8, ('parser asks', 'clarify'): 8}`. Run on the 16 new requests in step 2's table (#9 to #24), the same function sends all 16 to the LLM.
 
 **The 23 probes, through the same `parse()`.** The parser took: mute it, silence it, mute the video, "blur faces, pixelate plates" (one request), hide the plates, pixelate everyone, cut the first half, remove the second half, box faces after 1:30. Sent to the LLM: cut that, blur them, don't blur faces, do not mute 0:10 to 0:20, blur everyone but me, blur faces but not mine, blur everyone except me from 0:10 to 0:20, blur all the people in the video, undo, undo that, remove the background noise, denoise the audio, unmute the audio, from now on only I am visible.
 
@@ -362,7 +352,7 @@ Output at `21ee75c`: `{('template', 'plan'): 18, ('reaches the LLM', 'clarify'):
 
 Vendor pages were read on Nov 1, 2026.
 
-- [R-1 card on Trello](https://trello.com/c/N0JqKciB) and the team repo [AlexWS12/build2026fall](https://github.com/AlexWS12/build2026fall): `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `README.md`, `CLAUDE.md`, `backend/src/vibe/agent/`, the F-05 and R-3 handoffs, PR #16 and PR #17, and the branch `paul/r1-planner-llm`
+- [R-1 card on Trello](https://trello.com/c/N0JqKciB) and the team repo [AlexWS12/build2026fall](https://github.com/AlexWS12/build2026fall): `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `README.md`, `CLAUDE.md`, `backend/src/vibe/agent/`, and the F-05 and R-3 handoffs
 - Reference MVP [Edugre/KnightHacks-26](https://github.com/Edugre/KnightHacks-26): `README.md`, `censor/agent/planner.py`, `censor/agent/agent.py`
 - [Claude pricing](https://platform.claude.com/docs/en/about-claude/pricing) and [Claude structured outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)
 - [GPT-6.1 Terra](https://developers.openai.com/api/docs/models/gpt-6.1-terra), [GPT-5.6 Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra) and [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) model pages
