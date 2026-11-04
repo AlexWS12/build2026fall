@@ -37,8 +37,6 @@ def test_parse_timestamp_rejects_bad_input(text: str) -> None:
         ("from 0:10 to 0:20", TimeRange(start=10, end=20)),
         ("0:05-0:08", TimeRange(start=5, end=8)),
         ("between 0:10 and 0:20", TimeRange(start=10, end=20)),
-        ("for the first 5 seconds", TimeRange(start=0, end=5)),
-        ("the first 5 seconds", TimeRange(start=0, end=5)),
         ("after 1:30", TimeRange(start=90)),
         ("from 0:30 on", TimeRange(start=30)),
         ("before 0:30", TimeRange(start=0, end=30)),
@@ -57,6 +55,8 @@ def test_parse_time_phrase_gives_ranges(text: str, expected: TimeRange) -> None:
         ("for the first half", "first half"),
         ("the second half", "second half"),
         ("the last 10 seconds", "last 10 seconds"),
+        ("for the first 5 seconds", "first 5 seconds"),
+        ("the first 0:05", "first 0:05"),
     ],
 )
 def test_duration_relative_phrases_are_left_for_resolve_time(text: str, phrase: str) -> None:
@@ -70,9 +70,7 @@ def test_text_that_is_not_a_time_phrase_gives_none(text: str) -> None:
     assert parse_time_phrase(text) is None
 
 
-@pytest.mark.parametrize(
-    "text", ["0:20 to 0:10", "before 0:00", "0:10 to 0:10", "the first 0 seconds"]
-)
+@pytest.mark.parametrize("text", ["0:20 to 0:10", "before 0:00", "0:10 to 0:10"])
 def test_empty_or_backwards_ranges_raise(text: str) -> None:
     with pytest.raises(TimeParseError):
         parse_time_phrase(text)

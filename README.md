@@ -118,7 +118,7 @@ These hold whatever stack we pick.
 | **The agent never touches pixels or audio samples** | It can only call toolbox tools, which write ops to the edit timeline. Only the renderer produces output. |
 | **Every AI decision is reviewable** | Anything a model decided is visible in the timeline with its confidence. A human can override it, and every change is undoable. |
 | **Fail safe** | Privacy edits fail closed: unsure means masked. Other edits ask or preview instead of guessing, e.g. "I found two people talking about the weather, which one?". Pipeline errors are reported, never silently skipped. |
-| **Hybrid inference** | A cloud LLM is allowed for understanding requests and planning. Heavy vision and audio models run on our GPUs. Whether footage or frames may be sent to a cloud model is an **open question**; by default the LLM gets text and metadata only. |
+| **Hybrid inference** | A cloud LLM is allowed for understanding requests and planning. Heavy vision and audio models run on our GPUs. Footage stays on team machines by default and goes to a third-party service only with a per-project opt-in; the LLM gets text and metadata only (D-017, proposed). |
 | **Works on any team machine** | Hardware varies from CPU-only laptops to an RTX 5070. Every AI module can run as a stub (replaying cached results), locally, or by calling a model server on another machine, so nobody is blocked by their hardware. See "Compute" in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#compute-everyone-can-work-whatever-their-machine). |
 | **Secrets and media stay out of git** | API keys go in `.env` (gitignored). Videos, model weights and outputs are gitignored; clip sources and consent are recorded in a manifest. |
 | **Footage consent** | Test and demo clips are our own footage, filmed with the people in them agreeing, or properly licensed public video. |
@@ -200,5 +200,7 @@ npm --prefix frontend run gen:api               # writes frontend/src/api/genera
 A backend test fails if the spec is stale, and frontend CI fails if the generated types are.
 
 The video tests generate tiny clips with the [ffmpeg](https://ffmpeg.org/) command line, so install it to run them: `brew install ffmpeg` (Mac), `winget install ffmpeg` (Windows), or `sudo apt install ffmpeg` (Linux). Without it those tests are skipped; CI installs it and fails instead. The app itself reads video through PyAV, which bundles its own ffmpeg libraries. To check a clip by hand: `uv run --directory backend python -m vibe.video probe path/to/clip.mp4`.
+
+To try a toolbox tool by hand: `uv run --directory backend python -m vibe.toolbox --help` lists the tools, and `... <tool> --help` shows each one's arguments and an example.
 
 To work on the backend directly: `cd backend && uv sync`, then `uv run pytest`. Set `VIBE_BACKEND=local` or `remote` to use real models once they exist.
