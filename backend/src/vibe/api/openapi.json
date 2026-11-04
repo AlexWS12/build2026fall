@@ -53,7 +53,7 @@
           "projects"
         ],
         "summary": "Send Request",
-        "description": "Plan a chat request and reply. 409 if the project is already handling one.",
+        "description": "Plan a chat request and reply. 409 if the project is already handling one.\n\nUntil the plan executor exists, nothing is applied: a plan replies ``not_applied``.",
         "operationId": "send_request_api_projects__project_id__requests_post",
         "parameters": [
           {
@@ -239,6 +239,16 @@
             "title": "Request Id",
             "description": "Ops written for this request carry this id."
           },
+          "status": {
+            "type": "string",
+            "enum": [
+              "applied",
+              "clarify",
+              "not_applied"
+            ],
+            "title": "Status",
+            "description": "applied: the edit is in the timeline (once the plan executor exists). clarify: the reply is a question; nothing was written. not_applied: the request was planned or understood but nothing was written; the reply says why."
+          },
           "reply": {
             "type": "string",
             "title": "Reply",
@@ -249,6 +259,7 @@
         "type": "object",
         "required": [
           "request_id",
+          "status",
           "reply"
         ],
         "title": "ChatReply"

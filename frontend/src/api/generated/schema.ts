@@ -36,6 +36,8 @@ export interface paths {
         /**
          * Send Request
          * @description Plan a chat request and reply. 409 if the project is already handling one.
+         *
+         *     Until the plan executor exists, nothing is applied: a plan replies ``not_applied``.
          */
         post: operations["send_request_api_projects__project_id__requests_post"];
         delete?: never;
@@ -118,6 +120,12 @@ export interface components {
              * @description Ops written for this request carry this id.
              */
             request_id: string;
+            /**
+             * Status
+             * @description applied: the edit is in the timeline (once the plan executor exists). clarify: the reply is a question; nothing was written. not_applied: the request was planned or understood but nothing was written; the reply says why.
+             * @enum {string}
+             */
+            status: "applied" | "clarify" | "not_applied";
             /**
              * Reply
              * @description Shown to the user in the chat.
