@@ -4,7 +4,7 @@ date: 2026-11-03
 branch: luis/f10-detect-track
 features: [F-10]
 base: v0.1.0 @ b5e3c66
-head: see the PR (this entry is committed with the code)
+head: 7de88a9
 status: ready for review
 ---
 
