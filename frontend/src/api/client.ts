@@ -2,8 +2,7 @@ import type { ChatReply, Health, ProjectInfo, TimelineState } from './types'
 
 /**
  * Everything the UI asks of the backend. The shell runs against the mock by default, so it
- * works with no backend. Only `/api/health` exists on the backend today; the other routes are
- * a proposal until the API routes card settles them.
+ * works with no backend; `VITE_API_MODE=http` uses these routes (F-64).
  */
 export interface ApiClient {
   health(): Promise<Health>

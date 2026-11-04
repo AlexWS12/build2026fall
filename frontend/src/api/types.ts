@@ -7,30 +7,14 @@ import type { components } from './generated/schema'
 // When a route lands, regenerate and replace its hand-written type with the generated one.
 
 export type Health = components['schemas']['Health']
-
-// Hand-written until the project routes land.
-
-export interface VideoRef {
-  sha256: string
-  ext: string
-  original_name: string
-}
-
-export interface ProjectInfo {
-  storage_version: number
-  project_id: string
-  name: string
-  created_at: string
-  video: VideoRef
-}
-
-/** Reply to a chat request. The real shape is up to the API routes card. */
-export interface ChatReply {
-  request_id: string
-  reply: string
-}
+export type VideoRef = components['schemas']['VideoRef']
+export type ProjectInfo = components['schemas']['ProjectInfo']
+/** Reply to a chat request (`POST /api/projects/{id}/requests`). */
+export type ChatReply = components['schemas']['ChatReply']
 
 // --- Contract: derived timeline state (schema_version 1) --------------------------------
+// Still hand-written, though `GET /api/projects/{id}/state` returns it: the generated schema
+// marks fields with defaults (masks, cuts, end...) optional, but the server always sends them.
 
 /** Source time in seconds. `end: null` means until the end of the video. */
 export interface TimeRange {

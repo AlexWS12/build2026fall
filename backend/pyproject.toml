@@ -9,6 +9,7 @@ dependencies = [
     "fastapi>=0.115",
     "numpy>=2.5",
     "pydantic>=2.9",
+    "python-multipart>=0.0.9",
     "uvicorn[standard]>=0.30",
 ]
 

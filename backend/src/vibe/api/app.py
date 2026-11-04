@@ -8,8 +8,10 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from vibe import config
+from vibe.api import projects
 
 app = FastAPI(title="Vibe Editing Agent")
+app.include_router(projects.router)
 
 
 class Health(BaseModel):
