@@ -13,7 +13,7 @@ from vibe.agent.plan import Plan, ToolCall, ref
 from vibe.agent.timeparse import TimeParseError, parse_time_phrase
 from vibe.contract import WHOLE_CLIP, TimeRange
 
-_VERBS = r"blur|pixelate|black ?box|box|hide|mute|silence|cut|remove|delete"
+_VERBS = r"blur|pixelate|black ?box|box|hide|mute|silence|cut|remove|delete|denoise|reduce"
 """No "trim": it means "cut this" or "keep only this" depending on who says it, so it's asked."""
 
 _CLAUSE_SPLIT = re.compile(
@@ -26,6 +26,12 @@ _MASK = re.compile(
     r"(faces?|people|persons?|everyone|everybody|license plates?|plates?)\b(.*)"
 )
 _MUTE = re.compile(r"(?:mute|silence)(?:\s+(?:the\s+)?(?:audio|sound|video|clip|it))?\b(.*)")
+_DENOISE = re.compile(
+    r"(?:denoise(?:\s+(?:the\s+)?(?:audio|sound|video|clip|it))?"
+    r"|(?:remove|reduce|cut|delete)\s+(?:the\s+)?(?:background\s+)?(?:noise|hiss|hum)"
+    r"(?:\s+(?:in|from)\s+(?:the\s+)?(?:audio|sound|video|clip))?)\b(.*)"
+)
+"""Before ``_CUT``: "remove the noise" filters the audio, it doesn't cut the video."""
 _CUT = re.compile(r"(?:cut|remove|delete)(?:\s+out)?\b(.*)")
 
 _EFFECTS = {"blur": "blur", "hide": "blur", "pixelate": "pixelate", "box": "box"}
@@ -112,6 +118,14 @@ def _mute(match: re.Match[str], steps: _Steps) -> Matched:
     return _scope(when)
 
 
+def _denoise(match: re.Match[str], steps: _Steps) -> Matched:
+    when = _time(match.group(1))
+    if when is None:
+        return None
+    steps.add("denoise", _time_args(when, steps))
+    return _scope(when)
+
+
 def _cut(match: re.Match[str], steps: _Steps) -> Matched:
     when = _time(match.group(1))
     if when is None or when is _NO_TIME or when == WHOLE_CLIP:  # never guess what to cut
@@ -123,6 +137,7 @@ def _cut(match: re.Match[str], steps: _Steps) -> Matched:
 _TEMPLATES: tuple[tuple[re.Pattern[str], Callable[[re.Match[str], _Steps], Matched]], ...] = (
     (_MASK, _mask),
     (_MUTE, _mute),
+    (_DENOISE, _denoise),
     (_CUT, _cut),
 )
 

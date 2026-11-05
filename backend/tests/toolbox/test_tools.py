@@ -8,7 +8,7 @@ from pydantic import TypeAdapter
 
 from vibe.agent import Plan, plan_request
 from vibe.agent.plan import as_ref
-from vibe.contract import AddMask, Cut, Mute, OpLog, TimeRange, Track
+from vibe.contract import AddAudioFilter, AddMask, Cut, Mute, OpLog, TimeRange, Track
 from vibe.storage import Storage
 from vibe.toolbox import TOOLS, ToolContext, ToolError, call_tool
 from vibe.toolbox.tools import FindObjectsResult
@@ -130,6 +130,27 @@ def test_mute_without_a_time_range_mutes_the_whole_clip() -> None:
     assert op.time_range is None and op.speaker is None
 
 
+def test_denoise_appends_an_audio_filter_op() -> None:
+    log = OpLog()
+
+    call_tool("denoise", {"time_range": {"start": 5}, "strength": 0.5}, ctx(log))
+
+    (op,) = log.ops
+    assert isinstance(op, AddAudioFilter)
+    assert (op.filter, op.strength, op.time_range) == ("denoise", 0.5, TimeRange(start=5))
+    (span,) = log.state().audio_filters
+    assert (span.filter, span.start, span.end, span.strength) == ("denoise", 5, None, 0.5)
+
+
+def test_denoise_without_arguments_denoises_the_whole_clip_at_the_default_strength() -> None:
+    log = OpLog()
+
+    call_tool("denoise", {}, ctx(log))
+
+    (op,) = log.ops
+    assert op.time_range is None and op.strength is None
+
+
 def test_edit_tools_work_on_a_storage_project(tmp_path: Path) -> None:
     video = tmp_path / "clip.mp4"
     video.write_bytes(b"not really a video")
@@ -152,6 +173,9 @@ def test_edit_tool_without_a_timeline_is_an_error() -> None:
     ("tool", "args"),
     [
         ("mute", {"volume": 0}),
+        ("denoise", {"strength": 1.5}),
+        ("denoise", {"strength": -0.1}),
+        ("denoise", {"filter": "reverb"}),
         ("cut_range", {}),
         ("cut_range", {"time_range": {"start": 5, "end": 1}}),
         ("add_mask", {"targets": [], "effect": {"type": "blur"}}),

@@ -52,6 +52,35 @@ def test_mute_without_a_time_mutes_the_whole_clip() -> None:
     assert calls("mute") == [{"step_id": "s1", "tool": "mute", "args": {}}]
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "remove the background noise",
+        "reduce the noise",
+        "cut the background hiss",
+        "remove the hum from the audio",
+        "denoise",
+        "denoise the audio",
+    ],
+)
+def test_noise_requests_denoise_the_whole_clip_instead_of_cutting(text: str) -> None:
+    assert calls(text) == [{"step_id": "s1", "tool": "denoise", "args": {}}]
+
+
+def test_denoise_with_a_time_filters_only_that_range() -> None:
+    assert calls("remove the background noise from 0:10 to 0:20")[-1]["args"] == {
+        "time_range": {"start": 10.0, "end": 20.0}
+    }
+    result = calls("reduce the noise in the first half")
+    assert [c["tool"] for c in result] == ["resolve_time", "denoise"]
+
+
+def test_denoise_is_its_own_clause() -> None:
+    result = calls("mute 0:01 to 0:02 and reduce the noise after 0:30")
+
+    assert [c["tool"] for c in result] == ["mute", "denoise"]
+
+
 def test_step_ids_are_numbered_across_clauses() -> None:
     result = calls("mute 0:01 to 0:02 and then blur faces for the whole video")
 

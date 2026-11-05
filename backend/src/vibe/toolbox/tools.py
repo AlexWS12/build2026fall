@@ -9,7 +9,7 @@ import re
 
 from pydantic import Field
 
-from vibe.contract import AddMask, ContractError, Cut, Mute, Op, TimeRange
+from vibe.contract import AddAudioFilter, AddMask, ContractError, Cut, Mute, Op, TimeRange
 from vibe.contract.common import Effect, Model
 from vibe.toolbox.context import ToolContext
 from vibe.toolbox.spec import ToolError
@@ -112,6 +112,13 @@ class MuteArgs(Model):
     speaker: str | None = Field(default=None, description="Speaker id; null = all audio.")
 
 
+class DenoiseArgs(Model):
+    time_range: TimeRange | None = Field(default=None, description="Null = the whole clip.")
+    strength: float | None = Field(
+        default=None, ge=0, le=1, description="0 = off, 1 = strongest; null = strongest."
+    )
+
+
 def _end(r: TimeRange) -> str:
     return "the end" if r.end is None else f"{r.end:g}s"
 
@@ -158,3 +165,14 @@ def mute(args: MuteArgs, ctx: ToolContext) -> EditResult:
         speaker=args.speaker,
     )
     return _write("mute", op, ctx)
+
+
+def denoise(args: DenoiseArgs, ctx: ToolContext) -> EditResult:
+    op = AddAudioFilter(
+        request_id=ctx.request_id,
+        source=ctx.source,
+        filter="denoise",
+        strength=args.strength,
+        time_range=args.time_range,
+    )
+    return _write("denoise", op, ctx)
