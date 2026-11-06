@@ -42,14 +42,14 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
 | F-20 | Cut / keep a time range | Must | F-04 | idea | Source→output time mapping in the derived state |
-| F-21 | Cut by transcript ("cut where she talks about X") | Should | F-31 | idea | |
+| F-21 | Cut by transcript ("cut where she talks about X") | Should | F-31 | in progress | paul, `paul/f31-transcribe`: words only (`find_speech`, "cut / mute where he says X"); topics need the LLM. Applies once the plan executor exists |
 | F-22 | Cut by on-screen content ("cut the part with the dog") | Stretch | F-10 | idea | |
 
 ### Audio
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
 | F-30 | Mute a time range | Must | F-04 | idea | |
-| F-31 | Transcription with word timestamps | Should | F-03 | in progress | Whisper family. paul, `paul/f31-transcribe` |
+| F-31 | Transcription with word timestamps | Should | F-03 | in progress | Whisper family. paul, `paul/f31-transcribe`: module, CLI, `POST /api/projects/{id}/transcript` and the Transcript panel |
 | F-32 | Who spoke when (diarization) + mute a specific speaker | Should | F-31 | idea | Needs separation if speakers overlap |
 | F-33 | Background noise reduction | Must | F-03 | in progress | nickolas, `nickolas/f33-denoise` |
 | F-34 | Remove a specific sound ("the fan noise", "the music") | Stretch | F-33 | idea | |
