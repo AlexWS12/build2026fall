@@ -66,6 +66,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/transcript": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Transcribe Project
+         * @description The video's transcript with word timestamps (F-31), from the cache or made now.
+         *
+         *     Making one runs Whisper and can take a while; the project is busy (409) until it's done.
+         *     503 when the server can't transcribe (stub backend with no cached transcript, or no model).
+         */
+        post: operations["transcribe_project_api_projects__project_id__transcript_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -253,6 +276,20 @@ export interface components {
             time_range?: components["schemas"]["TimeRange"] | null;
         };
         /**
+         * Segment
+         * @description Same field names as F-09's ``SpeechSegment``; ``speaker`` comes with F-32.
+         */
+        Segment: {
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** Text */
+            text: string;
+            /** Words */
+            words: components["schemas"]["Word"][];
+        };
+        /**
          * TimeRange
          * @description A span of **source** time in seconds, start included, end excluded.
          *
@@ -300,6 +337,15 @@ export interface components {
              */
             rules?: components["schemas"]["Rule"][];
         };
+        /** Transcript */
+        Transcript: {
+            /** Model */
+            model: string;
+            /** Language */
+            language: string | null;
+            /** Segments */
+            segments: components["schemas"]["Segment"][];
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -324,6 +370,17 @@ export interface components {
             ext: string;
             /** Original Name */
             original_name: string;
+        };
+        /** Word */
+        Word: {
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** Text */
+            text: string;
+            /** Probability */
+            probability: number;
         };
     };
     responses: never;
@@ -420,6 +477,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TimelineState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    transcribe_project_api_projects__project_id__transcript_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Transcript"];
                 };
             };
             /** @description Validation Error */

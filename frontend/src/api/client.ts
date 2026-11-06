@@ -1,4 +1,4 @@
-import type { ChatReply, Health, ProjectInfo, TimelineState } from './types'
+import type { ChatReply, Health, ProjectInfo, TimelineState, Transcript } from './types'
 
 /**
  * Everything the UI asks of the backend. The shell runs against the mock by default, so it
@@ -11,6 +11,8 @@ export interface ApiClient {
   /** Send a chat request; the agent turns it into ops on the project's timeline. */
   sendRequest(projectId: string, text: string): Promise<ChatReply>
   getState(projectId: string): Promise<TimelineState>
+  /** The video's transcript, made on the server if it isn't cached yet (slow the first time). */
+  transcribe(projectId: string): Promise<Transcript>
 }
 
 export class ApiError extends Error {
@@ -45,4 +47,6 @@ export const httpClient: ApiClient = {
       body: JSON.stringify({ text }),
     }),
   getState: (projectId) => call(`/api/projects/${encodeURIComponent(projectId)}/state`),
+  transcribe: (projectId) =>
+    call(`/api/projects/${encodeURIComponent(projectId)}/transcript`, { method: 'POST' }),
 }
