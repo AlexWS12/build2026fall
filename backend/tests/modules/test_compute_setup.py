@@ -51,6 +51,21 @@ def test_blackwell_without_sm120_kernels_is_flagged() -> None:
     assert doctor.Gpu("NVIDIA GeForce RTX 5070", 12.0).blackwell  # from the name alone
 
 
+@pytest.mark.parametrize(
+    ("name", "blackwell"),
+    [
+        ("NVIDIA GeForce RTX 5070", True),
+        ("NVIDIA GeForce RTX 5070 Ti Laptop GPU", True),
+        ("NVIDIA GeForce RTX 5090", True),
+        ("NVIDIA RTX PRO 6000 Blackwell Workstation Edition", True),
+        ("NVIDIA RTX 5000 Ada Generation", False),
+        ("NVIDIA GeForce RTX 4050 Laptop GPU", False),
+    ],
+)
+def test_blackwell_from_the_name_alone(name: str, blackwell: bool) -> None:
+    assert Gpu(name, 16.0).blackwell is blackwell
+
+
 def test_cpu_only_torch_on_a_gpu_machine_is_flagged() -> None:
     hw = _hw(gpus=[Gpu("NVIDIA GeForce RTX 4060 Ti", 8.0, "8.9")], driver="610.60", torch="2.9.0")
     hw.torch_cuda_ok = False
@@ -113,6 +128,17 @@ def test_download_refuses_unpinned_unless_asked(tmp_path: Path) -> None:
         download(entry, tmp_path / "models")
     _, digest = download(entry, tmp_path / "models", pin=True)
     assert digest == hashlib.sha256(b"w").hexdigest()
+    # Already fetched with --pin: found again without it.
+    path, again = download(entry, tmp_path / "models")
+    assert path.read_bytes() == b"w" and again == digest
+
+
+def test_download_without_a_url_explains_itself(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    entry = replace(_entry(tmp_path, b"w", "0" * 64), url=None)
+    with pytest.raises(ModuleError, match="no url"):
+        download(entry, tmp_path / "models")
 
 
 def test_gated_and_package_models_explain_themselves(tmp_path: Path) -> None:

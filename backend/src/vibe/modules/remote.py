@@ -33,7 +33,7 @@ from urllib.parse import urlsplit
 
 from vibe import config
 from vibe.modules.backend import Analysis, make_analysis, run_analysis
-from vibe.modules.cache import ModuleError
+from vibe.modules.cache import ModuleError, read_json
 from vibe.storage import Storage, VideoRef
 
 API = "/v1"
@@ -226,9 +226,10 @@ def create_app(
     from fastapi.responses import JSONResponse
     from starlette.concurrency import run_in_threadpool
 
-    from vibe.modules.backend import registered
+    from vibe.modules.backend import load_modules, registered
 
     storage = storage or Storage()
+    load_modules()  # every @register runs, whoever started the server
     lock = threading.Lock()  # one analysis at a time: models take turns in VRAM
     app = FastAPI(title="vibe model server", docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -261,17 +262,21 @@ def create_app(
         try:
             module = str(body["module"])
             settings = dict(body.get("settings") or {})
-            video = VideoRef(
-                sha256=body["video"]["sha256"],
-                ext=body["video"].get("ext", ""),
-                original_name="remote",
-            )
-        except (KeyError, TypeError, ValueError) as e:
+            spec = body["video"]
+            if not isinstance(spec, dict):
+                raise TypeError("video must be an object")
+            video = VideoRef(sha256=spec["sha256"], ext=spec.get("ext", ""), original_name="remote")
+        except (KeyError, TypeError, ValueError, AttributeError) as e:
             raise fail(400, "bad_request", f"expected module, settings and video: {e}") from None
         analysis = make_analysis(module, settings)
+        # A result this server already has needs neither the video nor the GPU: answer it
+        # without waiting for the lock, so it never queues behind a long analysis.
+        cached = read_json(storage, video.sha256, analysis.kind, analysis.key)
+        if cached is not None:
+            return {"key": analysis.key, "data": cached, "source": "cache"}
         if not storage.video_path(video).is_file():
             raise fail(404, "video_missing", f"upload video {video.sha256[:12]} first")
-        with lock:
+        with lock:  # run_analysis checks the cache again: it may have filled while we waited
             result = run_analysis(storage, video, analysis, backend="local")
         return {"key": result.key, "data": result.data, "source": result.source}
 

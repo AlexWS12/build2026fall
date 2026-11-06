@@ -370,6 +370,63 @@ def test_server_reports_unknown_modules(tmp_path: Path) -> None:
     assert r.status_code == 422 and "unknown analysis module" in r.json()["detail"]["message"]
 
 
+@register
+class StrictSettings(Analysis):
+    """A module whose settings are real keyword arguments."""
+
+    module = "test-strict"
+    kind = "tracks"
+
+    def __init__(self, stride: int = 1) -> None:
+        super().__init__(stride=stride)
+
+    def compute(self, video_path: Path) -> object:
+        return []
+
+
+@pytest.mark.parametrize(
+    ("body", "status"),
+    [
+        ({"module": "test-counting", "video": "abc"}, 400),
+        ({"module": "test-counting", "video": {"sha256": "nope"}}, 400),
+        ({"module": "test-counting"}, 400),
+        ({"module": "test-strict", "settings": {"strid": 2}, "video": {"sha256": "a" * 64}}, 422),
+    ],
+)
+def test_server_answers_bad_requests_clearly(tmp_path: Path, body: dict, status: int) -> None:
+    http = TestClient(create_app(Storage(tmp_path / "server")))
+    r = http.post("/v1/analyze", json=body)
+    assert r.status_code == status, r.text
+    assert isinstance(r.json()["detail"], dict)
+
+
+def test_server_answers_from_its_cache_without_the_video(storage: Storage, tmp_path: Path) -> None:
+    server = Storage(tmp_path / "server")
+    video = _video(storage, tmp_path)
+    analysis = CountingAnalysis(size="l")
+    write_json(server, video.sha256, "tracks", analysis.key, TRACKS)  # e.g. a copied cache
+    uploads = []
+    client = _client(server)
+    real = client.transport
+
+    def counting(method, url, headers, body, timeout):
+        uploads.extend([url] if method == "PUT" else [])
+        return real(method, url, headers, body, timeout)
+
+    client = RemoteClient(client.url, client.allowed_hosts, client.token, transport=counting)
+    assert client.analyze(storage, video, analysis) == TRACKS
+    assert uploads == [] and CountingAnalysis.calls == 0
+    assert not server.video_path(video).exists()
+
+
+def test_server_loads_every_module_itself() -> None:
+    from vibe.modules.backend import load_modules
+
+    loaded = load_modules()
+    assert "__main__" not in loaded
+    assert {"backend", "cache", "remote"} <= set(loaded)
+
+
 # --- no GPU packages on the stub path ------------------------------------------------------
 
 

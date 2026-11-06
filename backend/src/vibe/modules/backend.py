@@ -88,12 +88,35 @@ def register[A: type[Analysis]](cls: A) -> A:
     return cls
 
 
+def load_modules() -> list[str]:
+    """Import every AI module in ``vibe.modules`` so its ``@register`` runs.
+
+    The model server calls this at startup, so it can build any analysis by name without
+    whoever starts it having to import the right files. Modules import model packages only
+    inside ``compute``, so this stays cheap and needs no GPU. Returns the names imported.
+    """
+    import importlib
+    import pkgutil
+
+    import vibe.modules as package
+
+    names = []
+    for info in pkgutil.iter_modules(package.__path__):
+        if not info.name.startswith("_"):  # skips __main__ (the CLI)
+            importlib.import_module(f"{package.__name__}.{info.name}")
+            names.append(info.name)
+    return names
+
+
 def make_analysis(module: str, settings: dict[str, object]) -> Analysis:
     cls = _REGISTRY.get(module)
     if cls is None:
         known = ", ".join(sorted(_REGISTRY)) or "none"
         raise ModuleError(f"unknown analysis module {module!r} (registered: {known})")
-    return cls(**settings)
+    try:
+        return cls(**settings)
+    except TypeError as e:
+        raise ModuleError(f"bad settings for analysis module {module!r}: {e}") from e
 
 
 def registered() -> dict[str, type[Analysis]]:

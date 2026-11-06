@@ -81,17 +81,20 @@ def download(
             f"{entry.name}: gated download, so do it by hand from {entry.url} (accept the terms "
             f"yourself) and save it as {model_path(entry, models_dir)}"
         )
+    if not entry.url:
+        raise ModuleError(f"{entry.name}: models.json gives no url to download it from")
+    target = model_path(entry, models_dir)
+    if target.is_file():
+        digest = _sha256(target)
+        # No pinned hash: the file is the one you fetched with --pin and checked yourself.
+        if entry.sha256 is None or digest == entry.sha256:
+            return target, digest
+        target.unlink()  # wrong or corrupt: fetch it again
     if entry.sha256 is None and not pin:
         raise ModuleError(
             f"{entry.name}: no sha256 pinned in models.json yet, so the download can't be "
             "checked. Run it once with --pin, check the file, then add the printed hash."
         )
-    target = model_path(entry, models_dir)
-    if target.is_file():
-        digest = _sha256(target)
-        if entry.sha256 is None or digest == entry.sha256:
-            return target, digest
-        target.unlink()  # wrong or corrupt: fetch it again
 
     target.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(dir=target.parent, prefix=f".{target.name}.", suffix=".part")

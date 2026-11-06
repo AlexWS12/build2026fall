@@ -10,6 +10,7 @@ planning who runs what, not measurements.
 
 import os
 import platform
+import re
 import shutil
 import subprocess
 from dataclasses import asdict, dataclass, field
@@ -17,6 +18,7 @@ from dataclasses import asdict, dataclass, field
 BLACKWELL_MIN_DRIVER = 570
 """PyTorch ``cu128`` wheels need CUDA 12.8, so an NVIDIA driver of 570 or later."""
 TIER2_MIN_VRAM_GB = 12.0
+_BLACKWELL_NAME = re.compile(r"\bRTX 50[5-9]0\b|BLACKWELL")
 
 
 @dataclass
@@ -30,7 +32,9 @@ class Gpu:
     def blackwell(self) -> bool:
         if self.compute_capability:
             return self.compute_capability.split(".")[0] == "12"
-        return any(s in self.name.upper() for s in ("RTX 50", "BLACKWELL"))
+        # GeForce RTX 5050-5090 (desktop and laptop), or a card named Blackwell. Not the
+        # Ada-generation "RTX 5000 Ada" workstation card.
+        return bool(_BLACKWELL_NAME.search(self.name.upper()))
 
 
 @dataclass
