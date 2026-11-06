@@ -31,7 +31,7 @@ uv run ruff check && uv run ruff format --check
 uv run python -m vibe.modules.vision detectors      # every detector with its license
 uv run python -m vibe.modules.vision analyze CLIP.mp4 -d stub:color=red,label=person
 ```
-Checked on Windows 11 (Python 3.12, no ffmpeg on PATH): on 2026-11-03 `tests/vision` 33 passed and the full suite 379 passed, 76 skipped (ffmpeg); on 2026-11-05, after the fixes below, `tests/vision` 53 passed and the full suite 473 passed, 1 skipped. Both times **1 failed: `tests/toolbox/test_toolbox_cli.py::test_writing_keeps_the_timeline_permissions`, which fails the same way on unchanged `main` on this machine** (not F-10). The tests use the stub and a stand-in for `supervision`/`trackers`: **no automated test covers the real model adapters**, which need the model packages and weights that CI doesn't have. They were run by hand, see "Step 2" below.
+Checked on Windows 11 (Python 3.12, no ffmpeg on PATH): on 2026-11-03 `tests/vision` 33 passed and the full suite 379 passed, 76 skipped (ffmpeg); on 2026-11-05, after the fixes below, `tests/vision` 53 passed and the full suite 474 passed, 1 skipped. Both times **1 failed: `tests/toolbox/test_toolbox_cli.py::test_writing_keeps_the_timeline_permissions`, which fails the same way on unchanged `main` on this machine** (not F-10). The tests use the stub and a stand-in for `supervision`/`trackers`: **no automated test covers the real model adapters**, which need the model packages and weights that CI doesn't have. They were run by hand, see "Step 2" below.
 
 ## Decisions made
 luis made these on 2026-11-03 for F-10; say on the PR if you disagree. None is architecture-level.
