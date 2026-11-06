@@ -7,7 +7,7 @@ the same frame.
 
 import logging
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -21,12 +21,17 @@ log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class RenderIssue:
-    """Something the renderer had to work around, always by masking more (fail closed)."""
+    """Something the renderer had to work around, always by masking more (fail closed).
+
+    One issue covers one unbroken stretch of frames, so a track lost twice gives two.
+    """
 
     track_id: str
     message: str
     first_seen: float
     """Source time of the first frame it happened on."""
+    last_seen: float
+    """Source time of the last frame it happened on."""
 
 
 def check_video(state: TimelineState) -> None:
@@ -53,12 +58,13 @@ class FrameRenderer:
         self._paths: dict[str, list[TrackPath]] = {}
         for track in tracks:
             self._paths.setdefault(track.track_id, []).append(TrackPath(track))
-        self._issues: dict[str, RenderIssue] = {}
+        self._issues: list[RenderIssue] = []
+        self._ongoing: dict[str, int] = {}  # track id -> its issue, if the last frame had one
 
     @property
     def issues(self) -> list[RenderIssue]:
-        """Each problem once, in the order first seen."""
-        return list(self._issues.values())
+        """Each stretch of a problem once, in the order first seen."""
+        return list(self._issues)
 
     def render(self, image: np.ndarray, t: float, until: float | None = None) -> np.ndarray:
         """``image`` (height, width, channels), shown from source time ``t``, with its masks
@@ -74,16 +80,18 @@ class FrameRenderer:
             raise ValueError(f"image must be (height, width, channels), got {image.shape}")
         out = image.copy()
         height, width = out.shape[:2]
+        previous, self._ongoing = self._ongoing, {}
         for track_id, effect in self._masks(t, until):
             paths = self._paths.get(track_id)
             if not paths:
                 # A target with no geometry can be anywhere: hide the whole frame.
-                self._report(track_id, "no track with this id, so the whole frame is masked", t)
+                message = "no track with this id, so the whole frame is masked"
+                self._report(track_id, message, t, previous)
                 apply_effect(out, (0, 0, width, height), effect)
                 continue
             placed = [path.at(t) for path in paths]
             if all(box.lost for box in placed):
-                self._report(track_id, "lost, so its nearest known box stays masked", t)
+                self._report(track_id, "lost, so its nearest known box stays masked", t, previous)
             for box in placed:
                 padding = effect.padding + box.extra_padding
                 apply_effect(out, to_pixels(box.box, padding, width, height), effect)
@@ -98,10 +106,16 @@ class FrameRenderer:
                     found.append((track_id, span.effect))
         return found
 
-    def _report(self, track_id: str, message: str, t: float) -> None:
-        if track_id not in self._issues:
-            self._issues[track_id] = RenderIssue(track_id, message, t)
+    def _report(self, track_id: str, message: str, t: float, previous: dict[str, int]) -> None:
+        """Extend the track's issue if it was ongoing on the last frame, or start a new one."""
+        position = self._ongoing.get(track_id, previous.get(track_id))
+        if position is None:
+            position = len(self._issues)
+            self._issues.append(RenderIssue(track_id, message, t, t))
             log.warning("render: %s at %.3f s: %s", track_id, t, message)
+        else:
+            self._issues[position] = replace(self._issues[position], last_seen=t)
+        self._ongoing[track_id] = position
 
 
 def render_frame(

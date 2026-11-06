@@ -140,7 +140,7 @@ def test_track_with_no_geometry_masks_the_whole_frame() -> None:
         assert not renderer.render(noise(), t).any()
     [issue] = renderer.issues  # reported once, not once per frame
     assert issue.track_id == "trk_gone"
-    assert issue.first_seen == 0.0
+    assert (issue.first_seen, issue.last_seen) == (0.0, 1.0)
 
 
 def lost_after_0(track_id: str = "trk_1") -> Track:
@@ -161,8 +161,43 @@ def test_lost_track_stays_masked_and_is_reported() -> None:
         assert not renderer.render(noise(), t)[:60, :80].any()
     [issue] = renderer.issues  # reported once, not once per frame
     assert issue.track_id == "trk_1"
-    assert issue.first_seen == 3.5
+    assert (issue.first_seen, issue.last_seen) == (3.5, 60.0)
     assert "lost" in issue.message
+
+
+def test_each_lost_stretch_gets_its_own_issue() -> None:
+    track = Track(
+        track_id="trk_1",
+        label="person",
+        source="detector",
+        keyframes=[Keyframe(t=t, box=LEFT, conf=0.9, state="detected") for t in (0.0, 5.0, 20.0)],
+    )
+    renderer = FrameRenderer(state_of(mask(["trk_1"])), [track])
+    for t in np.arange(0, 21, 0.5):
+        renderer.render(noise(), float(t))
+    stretches = [(i.track_id, i.first_seen, i.last_seen) for i in renderer.issues]
+    assert stretches == [("trk_1", 1.0, 4.0), ("trk_1", 6.0, 19.0)]
+
+
+def test_a_mask_stopping_ends_the_stretch() -> None:
+    state = state_of(
+        mask(["trk_gone"], time_range=TimeRange(start=0, end=1)),
+        mask(["trk_gone"], time_range=TimeRange(start=2, end=3)),
+    )
+    renderer = FrameRenderer(state, tracks=[])
+    for t in (0.5, 1.5, 2.5):
+        renderer.render(noise(), t)
+    assert [(i.first_seen, i.last_seen) for i in renderer.issues] == [(0.5, 0.5), (2.5, 2.5)]
+
+
+def test_two_masks_on_one_frame_give_one_issue() -> None:
+    state = state_of(
+        mask(["trk_gone"], time_range=TimeRange(start=0, end=1.01)),
+        mask(["trk_gone"], time_range=TimeRange(start=1.01, end=2)),
+    )
+    renderer = FrameRenderer(state, tracks=[])
+    renderer.render(noise(), 1.0, until=1.04)
+    assert len(renderer.issues) == 1
 
 
 def test_target_seen_by_another_track_with_its_id_is_not_lost() -> None:
