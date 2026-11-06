@@ -4,7 +4,7 @@ date: 2026-11-05
 branch: eduardo/compute-setup
 features: [F-08]
 base: v0.1.0 @ d95ede3
-head: uncommitted
+head: 7c51b1e
 status: ready for review
 ---
 
