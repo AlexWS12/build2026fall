@@ -37,6 +37,7 @@ export function createMockClient({ delayMs = 300 }: { delayMs?: number } = {}): 
       requests += 1
       return {
         request_id: `r_mock_${requests}`,
+        status: 'not_applied',
         reply: `(mock) Got "${text}". The agent (F-05) will turn requests like this into edits.`,
       }
     },
