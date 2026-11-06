@@ -51,7 +51,7 @@ A chat message, a UI action (click a target, draw a box, drag a box), or a **sta
 - **Hand edits from the UI go through the same tools**, so they land in the same op log and undo works the same way.
 - **Analysis runs once per video and is cached** (tracks, transcripts, speaker turns), so repeat requests are cheap.
 - Every tool has a CLI and a stub implementation, so it can be tested without a GPU.
-- **Built so far (F-06):** `find_objects` (stub: filters the tracks it's given; with no analysis at all it fails instead of finding nothing), `resolve_time` (real: arithmetic on the video duration), `add_mask`, `cut_range` and `mute`, the five the planner uses. The other tools above get added when a feature needs them.
+- **Built so far (F-06):** `find_objects` (stub: filters the tracks it's given; with no analysis at all it fails instead of finding nothing), `resolve_time` (real: arithmetic on the video duration), `add_mask`, `cut_range` and `mute`, the five the planner uses. F-33 adds `denoise` (writes `add_audio_filter` with `filter: "denoise"`, an optional `time_range` and `strength`). The other tools above get added when a feature needs them.
 - **One entry point:** `call_tool(name, args, ctx)` validates the arguments and runs the tool. `ToolContext` carries the `request_id`, the `source`, the timeline to write to (an `OpLog` in memory or a storage `Project` on disk), the duration and the tracks. Anything that can't be done raises `ToolError` and writes nothing.
 - **CLI:** `uv run python -m vibe.toolbox --help` lists the tools; `... <tool> --help` lists its arguments; `... <tool> --project <id> --args '{...}'` (or `--log timeline.jsonl`) runs one. It only appends to a timeline, never rewrites it.
 
@@ -59,6 +59,7 @@ A chat message, a UI action (click a target, draw a box, drag a box), or a **sta
 These are wrapped by the query tools and swappable behind them.
 - **Vision:** detection (open vocabulary), segmentation, tracking, visual questions (VLM), identity (face/person embeddings).
 - **Audio:** transcription with word timestamps, diarization (who spoke when), speaker separation, noise suppression.
+  - **Noise suppression (F-33):** `vibe.modules.denoise.denoise(samples, rate, strength)`. The `stub` backend is a numpy spectral gate (no model; it learns steady noise from the clip's quieter frames). `local` / `remote` raise until a model is chosen (candidates in the README). Takes floating-point audio only and computes in its precision. The live path `denoise_chunk(chunk, state, strength)` with a `DenoiseState` (running noise estimate and overlap tail) has its signature fixed but raises `DenoiseError` on every backend until the streaming model lands.
 - **Generative:** video inpainting (object removal), and later background replacement.
 - **The rule for every module:** expose a **whole-clip** call (offline) and, where it could ever run live, a **per-frame / per-chunk** call. Even if only the offline path is implemented at first, the interface leaves room for the other.
 - Candidates are in the README's tech stack table. Heavy models run on our GPUs, possibly behind one resident model server, as Knight Hacks did.

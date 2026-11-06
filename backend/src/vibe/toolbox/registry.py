@@ -61,6 +61,16 @@ _TOOLS = (
         run=tools.mute,
         ref_args={"time_range": "time_range"},
     ),
+    ToolSpec(
+        name="denoise",
+        kind="edit",
+        description="Reduce background noise (hiss, hum, fans) over a time range.",
+        args=tools.DenoiseArgs,
+        result=tools.EditResult,
+        returns="none",
+        run=tools.denoise,
+        ref_args={"time_range": "time_range"},
+    ),
 )
 
 TOOLS: Mapping[str, ToolSpec] = MappingProxyType({t.name: t for t in _TOOLS})
