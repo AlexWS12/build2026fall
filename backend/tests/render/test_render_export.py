@@ -1,6 +1,7 @@
 """The export path, and the F-04 exit check: a generated clip rendered with a blur, a cut and a
 mute from an example timeline (``render_session.jsonl``), checked frame by frame and by ear."""
 
+import os
 from pathlib import Path
 
 import numpy as np
@@ -165,6 +166,24 @@ def test_cutting_everything_is_an_error_and_leaves_no_file(
 def test_exports_are_mp4(pattern_clip: Path, tmp_path: Path) -> None:
     with pytest.raises(RenderError, match=".mp4"):
         export(pattern_clip, SESSION, TRACKS, tmp_path / "out.webm")
+
+
+@pytest.mark.parametrize("spelling", ["same path", "relative path", "hard link"])
+def test_export_refuses_to_overwrite_its_source(
+    spelling: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"the only copy of someone's video")
+    out = clip
+    if spelling == "relative path":
+        monkeypatch.chdir(tmp_path)
+        out = Path("clip.mp4")
+    elif spelling == "hard link":
+        out = tmp_path / "link.mp4"
+        os.link(clip, out)
+    with pytest.raises(RenderError, match="overwrite"):
+        export(clip, SESSION, TRACKS, out)
+    assert clip.read_bytes() == b"the only copy of someone's video"
 
 
 def test_missing_source_is_an_error(tmp_path: Path) -> None:

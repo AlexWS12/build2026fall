@@ -60,6 +60,8 @@ def export(
     source, out_path = Path(source), Path(out_path)
     if out_path.suffix.lower() != ".mp4":
         raise RenderError(f"exports are .mp4 files, got {out_path.name}")
+    if source.exists() and out_path.exists() and out_path.samefile(source):
+        raise RenderError(f"{out_path} is the source video: exporting there would overwrite it")
     check_video(state)
     check_audio(state)
     renderer = FrameRenderer(state, tracks)
