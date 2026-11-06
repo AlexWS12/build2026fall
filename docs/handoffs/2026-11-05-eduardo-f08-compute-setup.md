@@ -81,7 +81,7 @@ eduardo made these on 2026-11-05 for F-08. Say on the PR if you disagree. **The 
 
 ## Next steps
 1. **Heads-up in the team chat** about the shared files, then open the PR.
-2. **Alex:** run `doctor` on the 5070 and post the output. It confirms the VRAM, and the survey doc and ARCHITECTURE table get updated. If it's the 8 GB laptop version, raise whether Nickolas's 16 GB card should be the reference machine (D-008 is a team decision).
+2. **Alex and Nickolas:** both have an RTX 5070 (Nickolas's chat answer said RTX PRO 2000, 16 GB; corrected on 2026-11-05). Each runs `doctor` and posts the output, to confirm the VRAM (12 GB desktop or 8 GB laptop); then update the survey doc and the ARCHITECTURE table. R-1's hardware table still lists the RTX PRO 2000; tell Paul (its owner).
 3. **Fit the modules under `run_analysis`** (with each owner):
    - **F-10 (Luis):** after #22 merges, `vision/cache.py` can use `modules.cache`, and `load_tracks` becomes `replay(storage, sha, "tracks", key)`.
    - **F-31 (Paul):** `transcribe_video` becomes an `Analysis` with kind `transcript`.

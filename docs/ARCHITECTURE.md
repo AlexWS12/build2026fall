@@ -127,8 +127,7 @@ The team's hardware varies widely. Some people have a laptop with no usable GPU,
 
 | Tier | Who | GPU / memory |
 |---|---|---|
-| 2 | Alex W. | RTX 5070, **VRAM not confirmed** (12 GB desktop or 8 GB laptop); tier 1 if 8 GB |
-| 2 | Nickolas G. | RTX PRO 2000 Blackwell, 16 GB |
+| 2 | Alex W., Nickolas G. | RTX 5070 each, **VRAM not confirmed** (12 GB desktop or 8 GB laptop); tier 1 if 8 GB |
 | 1 | Pablo H. | Apple M5 Pro, 64 GB unified (Metal, no CUDA) |
 | 1 | Jonathan S., Paul P. | RTX 5060 Ti 8 GB; RTX 4060 Ti 8 GB |
 | 1 | Luis P. | RTX 4050 Laptop, 6 GB |
