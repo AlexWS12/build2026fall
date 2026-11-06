@@ -203,4 +203,22 @@ The video tests generate tiny clips with the [ffmpeg](https://ffmpeg.org/) comma
 
 To try a toolbox tool by hand: `uv run --directory backend python -m vibe.toolbox --help` lists the tools, and `... <tool> --help` shows each one's arguments and an example.
 
-To work on the backend directly: `cd backend && uv sync`, then `uv run pytest`. Set `VIBE_BACKEND=local` or `remote` to use real models once they exist.
+To work on the backend directly: `cd backend && uv sync`, then `uv run pytest`.
+
+#### Running models: setup per compute tier
+AI modules default to `VIBE_BACKEND=stub`, which only replays results from the analysis cache (`data/cache/<sha256>/`), so **tier 0 needs nothing more**. To use real model output on a laptop, copy a teammate's `cache/<sha256>/` folder for the same clip. First, see what your machine can run (the tiers and the team survey are in [ARCHITECTURE "Compute"](docs/ARCHITECTURE.md#compute-everyone-can-work-whatever-their-machine)):
+
+```bash
+cd backend
+uv run python -m vibe.modules doctor     # GPU, driver, PyTorch build, tier, warnings
+```
+
+| Tier | Machine | Install | Then |
+|---|---|---|---|
+| 0 | CPU only, or an Apple Mac with 8 GB | `uv sync` | `VIBE_BACKEND=stub` (default), or `remote` to a team GPU |
+| 1 | Apple Silicon 16 GB+ | `uv sync --extra cpu` (PyTorch with MPS) | `VIBE_BACKEND=local`, small models; CUDA-only libraries won't run |
+| 1–2 | NVIDIA GPU (any, incl. RTX 50 / Blackwell) | Update the NVIDIA driver to **570+**, then `uv sync --extra cu128` | `VIBE_BACKEND=local`; run `doctor` again and fix any warning |
+
+- **Model weights:** `uv run python -m vibe.modules models` lists them with license and tier; `... download NAME` fetches one into `VIBE_MODELS_DIR` (default `data/models/`) and checks its sha256. Gated weights (EgoBlur) say where to get them by hand.
+- **Model packages a module needs** (e.g. `rfdetr`, `opencv-python`) are installed by hand for now with `uv pip install`. A plain `uv sync` removes them again; use `uv sync --inexact --extra ...` to keep them.
+- **Remote backend:** on the GPU machine, `uv run python -m vibe.modules serve --host 0.0.0.0` (on a private network such as Tailscale only, with `VIBE_REMOTE_TOKEN` set in `.env`). On your laptop, set `VIBE_BACKEND=remote`, `VIBE_REMOTE_URL=http://<host>:8765`, `VIBE_REMOTE_HOSTS=<host>` and the same token. Only team-controlled hosts go in `VIBE_REMOTE_HOSTS` (D-017). The video is uploaded once, and results are cached on both machines.
