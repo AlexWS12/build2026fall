@@ -4,7 +4,7 @@ date: 2026-11-03
 branch: paulallain/f04-renderer
 features: [F-04]
 base: v0.1.0 @ d95ede3
-head: b7c5f51
+head: c2dc1c7
 status: ready for review
 ---
 
@@ -32,7 +32,7 @@ status: ready for review
     - The file's index goes at its start (`faststart`).
     - The file is written under a temporary name and renamed at the end; on failure the temporary file is deleted. Exporting over the source is refused.
     - An odd width or height loses its last row or column (yuv420p).
-  - **Refused before anything is written** (`UnsupportedEdit`): standing rules (F-51), muting one speaker (F-32) and audio filters (F-33). The error names the card.
+  - **Refused before anything is written** (`UnsupportedEdit`): standing rules (F-51), muting one speaker (F-32) and audio filters. The error says why.
   - `__main__.py`: the CLI. `export CLIP --log timeline.jsonl [--tracks t.json] -o out.mp4`, or `export --project <id>`, which writes a new file in the project's `exports/` every time.
 - **`backend/tests/render/`:** 123 tests.
   - `test_render_export.py` holds **the exit check.** It renders a 3 s ffmpeg-made clip with `render_session.jsonl` (blur 0–2 s, cut 1–1.5 s, mute 2–2.5 s) and checks:
@@ -127,7 +127,9 @@ F-04 details, not decisions-log material; say on the PR if you disagree:
 - **F-20 / F-30 (cut, mute):** the renderer already applies cuts and all-audio mutes. Those cards connect toolbox → API → UI → export, and the preview.
 - **An export route (F-64 follow-up):** call `export(storage.video_path(project.info.video), project.state(), tracks, project.exports_dir / <new name>)`, as the CLI's `--project` does, with a new file name each time.
 - **F-08 / F-10:** detector tracks from the analysis cache aren't loaded yet. `--project` uses the project's hand-drawn tracks plus `--tracks`. Add cache tracks once their format exists.
-- **F-51 / F-32 / F-33:** replace the matching refusal in `check_video` / `check_audio` when each lands.
+- **F-51 / F-32:** replace the matching refusal in `check_video` / `check_audio` when each lands.
+- **Denoise in the renderer has no owner.** F-33 merged the `denoise` tool and module, but nothing applies `audio_filters` in a render, so exports with denoise are refused. No Trello card covers it, and it's part of the Sprint 3 goal. `denoise()` learns the noise from a whole clip while export works in 0.1 s chunks, so it needs a design, not just a call.
+- **F-11 (`jonathan/f11-mask-effects`):** `mask_report.py` models the old behaviour: an `off_screen` kind after the hold, and a 0.5 s gap. Here a mask in effect always has a box, and the gap limit is `MAX_GAP_SECONDS` (1 s), so the two need aligning.
 
 ## Gotchas
 - **A held box is the last known position, not a guarantee.** A lost target can move out of it, so this still isn't fully fail-closed. That's why it's reported. Masking the whole frame would be, at the cost of blurring the rest of the edit whenever anyone leaves the shot.

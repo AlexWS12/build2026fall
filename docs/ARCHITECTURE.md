@@ -90,7 +90,7 @@ See [The contract](#the-contract-edit-timeline-v1-in-code) below. Everything ups
     - The file's index goes at its start (`faststart`), so a browser can play it while it downloads.
     - The file is written under a temporary name and renamed when complete. Exporting over the source is refused.
     - An odd width or height loses its last row or column (yuv420p needs even sizes).
-  - **Refused before anything is written** (`UnsupportedEdit`): standing rules (F-51), muting one speaker (F-32) and audio filters (F-33). These are errors rather than skips, so a refused edit is never silently left out of an output.
+  - **Refused before anything is written** (`UnsupportedEdit`): standing rules (F-51), muting one speaker (F-32) and audio filters (F-33 writes the op, but nothing applies it in a render yet). These are errors rather than skips, so a refused edit is never silently left out of an output.
   - **CLI:** `uv run python -m vibe.render export clip.mp4 --log timeline.jsonl [--tracks tracks.json] -o out.mp4`. With `--project <id>`, it renders a project into a new file in its `exports/` each time.
 
 ## Code layout
