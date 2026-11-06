@@ -66,6 +66,32 @@ describe('App shell', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Upload failed: 413 too large')
   })
 
+  test('transcribing shows the transcript with its times', async () => {
+    render(<App api={mock()} />)
+    const button = screen.getByRole('button', { name: 'Transcribe' })
+    expect(button).toBeDisabled()
+
+    upload()
+    await screen.findByText('street')
+    fireEvent.click(button)
+
+    const segments = within(await screen.findByRole('list', { name: 'Transcript segments' }))
+    expect(segments.getByText('0:01.20')).toBeInTheDocument()
+    expect(segments.getByText(/Hello there\./)).toBeInTheDocument()
+  })
+
+  test('a failed transcription shows an error', async () => {
+    const failing: ApiClient = {
+      ...mock(),
+      transcribe: () => Promise.reject(new Error('503')),
+    }
+    render(<App api={failing} />)
+    upload()
+    await screen.findByText('street')
+    fireEvent.click(screen.getByRole('button', { name: 'Transcribe' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Transcription failed: 503')
+  })
+
   test('sending a request shows it and the reply', async () => {
     render(<App api={mock()} />)
     upload()
