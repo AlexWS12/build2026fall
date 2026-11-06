@@ -63,6 +63,7 @@ These are wrapped by the query tools and swappable behind them.
 - **Generative:** video inpainting (object removal), and later background replacement.
 - **The rule for every module:** expose a **whole-clip** call (offline) and, where it could ever run live, a **per-frame / per-chunk** call. Even if only the offline path is implemented at first, the interface leaves room for the other.
 - Candidates are in the README's tech stack table. Heavy models run on our GPUs, possibly behind one resident model server, as Knight Hacks did.
+- **Built so far, vision (F-10):** [`backend/src/vibe/modules/vision/`](../backend/src/vibe/modules/vision/). A `Detector` takes one RGB frame and returns normalized boxes; a tracker links them into contract `Track`s; both are cached per video as `cache/<sha256>/detections/<key>.json` and `cache/<sha256>/tracks/<key>.json`, the shape the F-09 report scores. Track ids carry the key's hash, so two analyses never share an id. `project_tracks()` is what the toolbox gets as `ToolContext.tracks` (`None` when the video was never analysed). CLI: `uv run python -m vibe.modules.vision --help`.
 
 ### 5. Edit timeline (the contract)
 See [The contract](#the-contract-edit-timeline-v1-in-code) below. Everything upstream writes to it and everything downstream reads from it. **It's the one interface that lets 10 people build in parallel against stubs.**
