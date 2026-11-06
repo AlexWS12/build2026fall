@@ -22,7 +22,8 @@ def check_audio(state: TimelineState) -> None:
     if state.audio_filters:
         filters = sorted({f.filter for f in state.audio_filters})
         raise UnsupportedEdit(
-            f"the timeline has audio filters ({', '.join(filters)}); denoise comes with F-33"
+            f"the timeline has audio filters ({', '.join(filters)}), and the renderer doesn't "
+            "apply them yet"
         )
 
 

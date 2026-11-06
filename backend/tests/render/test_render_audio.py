@@ -102,5 +102,5 @@ def test_speaker_mute_is_refused() -> None:
 
 def test_audio_filter_is_refused() -> None:
     denoise = AddAudioFilter(request_id="r", source="agent", filter="denoise")
-    with pytest.raises(UnsupportedEdit, match="F-33"):
+    with pytest.raises(UnsupportedEdit, match="doesn't apply them yet"):
         render_audio(SAMPLES, RATE, state_of(denoise))
