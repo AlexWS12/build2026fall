@@ -42,29 +42,34 @@ def iter_audio_chunks(
     chunk_seconds: float = 1.0,
     sample_rate: int = DEFAULT_SAMPLE_RATE,
     mono: bool = True,
+    layout: str | None = None,
 ) -> Iterator[AudioChunk]:
     """The audio track in consecutive chunks of ``chunk_seconds``; the last may be shorter.
 
     Decodes as it goes, so memory stays at about one chunk whatever the clip's length.
+
+    ``layout`` converts to that channel layout (e.g. ``"stereo"``) and overrides ``mono``:
+    chunks are then always shaped (n, channels), even for ``"mono"``.
     """
     if chunk_seconds <= 0:
         raise ValueError(f"chunk_seconds must be positive, got {chunk_seconds}")
     size = round(chunk_seconds * sample_rate)
     if size < 1:
         raise ValueError(f"chunk_seconds={chunk_seconds} is under one sample at {sample_rate} Hz")
+    squeeze = mono and layout is None
     pending: list[np.ndarray] = []
     buffered = 0
     emitted = 0
-    for block in _blocks(Path(path), sample_rate, mono):
+    for block in _blocks(Path(path), sample_rate, mono, layout):
         pending.append(block)
         buffered += len(block)
         while buffered >= size:
             data = np.concatenate(pending)
-            yield AudioChunk(emitted / sample_rate, _shape(data[:size], mono))
+            yield AudioChunk(emitted / sample_rate, _shape(data[:size], squeeze))
             emitted += size
             pending, buffered = [data[size:]], len(data) - size
     if buffered:
-        yield AudioChunk(emitted / sample_rate, _shape(np.concatenate(pending), mono))
+        yield AudioChunk(emitted / sample_rate, _shape(np.concatenate(pending), squeeze))
 
 
 def write_wav(path: str | Path, samples: np.ndarray, sample_rate: int) -> None:
@@ -85,7 +90,9 @@ def _shape(data: np.ndarray, mono: bool) -> np.ndarray:
     return data[:, 0] if mono else data
 
 
-def _blocks(path: Path, sample_rate: int, mono: bool) -> Iterator[np.ndarray]:
+def _blocks(
+    path: Path, sample_rate: int, mono: bool, layout: str | None = None
+) -> Iterator[np.ndarray]:
     """Resampled audio as (n, channels) float32 blocks, aligned so sample 0 is at time 0.
 
     The first block is always empty, so callers can concatenate without a special case.
@@ -99,7 +106,7 @@ def _blocks(path: Path, sample_rate: int, mono: bool) -> Iterator[np.ndarray]:
             video = container.streams.video[0]
             if video.start_time is not None and video.time_base is not None:
                 origin = float(video.start_time * video.time_base)
-        layout = "mono" if mono else stream.layout.name
+        layout = layout or ("mono" if mono else stream.layout.name)
         resampler = av.AudioResampler(format="flt", layout=layout, rate=sample_rate)
         channels = len(av.AudioLayout(layout).channels)
         yield np.zeros((0, channels), np.float32)

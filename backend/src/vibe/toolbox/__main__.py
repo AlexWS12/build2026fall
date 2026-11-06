@@ -29,6 +29,7 @@ EXAMPLES = {
     '"time_range": {"start": 0, "end": 5}}',
     "cut_range": '{"time_range": {"start": 10, "end": 20}}',
     "mute": '{"time_range": {"start": 10, "end": 20}}',
+    "denoise": '{"time_range": {"start": 10, "end": 20}, "strength": 0.5}',
 }
 
 

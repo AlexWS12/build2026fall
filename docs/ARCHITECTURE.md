@@ -51,7 +51,7 @@ A chat message, a UI action (click a target, draw a box, drag a box), or a **sta
 - **Hand edits from the UI go through the same tools**, so they land in the same op log and undo works the same way.
 - **Analysis runs once per video and is cached** (tracks, transcripts, speaker turns), so repeat requests are cheap.
 - Every tool has a CLI and a stub implementation, so it can be tested without a GPU.
-- **Built so far (F-06):** `find_objects` (stub: filters the tracks it's given; with no analysis at all it fails instead of finding nothing), `resolve_time` (real: arithmetic on the video duration), `add_mask`, `cut_range` and `mute`, the five the planner uses. The other tools above get added when a feature needs them.
+- **Built so far (F-06):** `find_objects` (stub: filters the tracks it's given; with no analysis at all it fails instead of finding nothing), `resolve_time` (real: arithmetic on the video duration), `add_mask`, `cut_range` and `mute`, the five the planner uses. F-33 adds `denoise` (writes `add_audio_filter` with `filter: "denoise"`, an optional `time_range` and `strength`). The other tools above get added when a feature needs them.
 - **One entry point:** `call_tool(name, args, ctx)` validates the arguments and runs the tool. `ToolContext` carries the `request_id`, the `source`, the timeline to write to (an `OpLog` in memory or a storage `Project` on disk), the duration and the tracks. Anything that can't be done raises `ToolError` and writes nothing.
 - **CLI:** `uv run python -m vibe.toolbox --help` lists the tools; `... <tool> --help` lists its arguments; `... <tool> --project <id> --args '{...}'` (or `--log timeline.jsonl`) runs one. It only appends to a timeline, never rewrites it.
 
@@ -59,17 +59,41 @@ A chat message, a UI action (click a target, draw a box, drag a box), or a **sta
 These are wrapped by the query tools and swappable behind them.
 - **Vision:** detection (open vocabulary), segmentation, tracking, visual questions (VLM), identity (face/person embeddings).
 - **Audio:** transcription with word timestamps, diarization (who spoke when), speaker separation, noise suppression.
+  - **Noise suppression (F-33):** `vibe.modules.denoise.denoise(samples, rate, strength)`. The `stub` backend is a numpy spectral gate (no model; it learns steady noise from the clip's quieter frames). `local` / `remote` raise until a model is chosen (candidates in the README). Takes floating-point audio only and computes in its precision. The live path `denoise_chunk(chunk, state, strength)` with a `DenoiseState` (running noise estimate and overlap tail) has its signature fixed but raises `DenoiseError` on every backend until the streaming model lands.
 - **Generative:** video inpainting (object removal), and later background replacement.
 - **The rule for every module:** expose a **whole-clip** call (offline) and, where it could ever run live, a **per-frame / per-chunk** call. Even if only the offline path is implemented at first, the interface leaves room for the other.
 - Candidates are in the README's tech stack table. Heavy models run on our GPUs, possibly behind one resident model server, as Knight Hacks did.
+- **Built so far, vision (F-10):** [`backend/src/vibe/modules/vision/`](../backend/src/vibe/modules/vision/). A `Detector` takes one RGB frame and returns normalized boxes; a tracker links them into contract `Track`s; both are cached per video as `cache/<sha256>/detections/<key>.json` and `cache/<sha256>/tracks/<key>.json`, the shape the F-09 report scores. Track ids carry the key's hash, so two analyses never share an id. `project_tracks()` is what the toolbox gets as `ToolContext.tracks` (`None` when the video was never analysed). CLI: `uv run python -m vibe.modules.vision --help`.
 
 ### 5. Edit timeline (the contract)
 See [The contract](#the-contract-edit-timeline-v1-in-code) below. Everything upstream writes to it and everything downstream reads from it. **It's the one interface that lets 10 people build in parallel against stubs.**
 
 ### 6. Renderer
+> Code: [`backend/src/vibe/render/`](../backend/src/vibe/render/) (F-04). Encoding: D-019 (proposed).
+
 - **It's deterministic:** the same timeline and the same source always give the same output.
-- **It applies the fail-safe rules:** interpolate boxes between keyframes, hold a lost track's mask for a few frames and grow it, pad uncertain masks more, and on an error mask the whole affected segment and log it, never skip it.
-- **Two paths:** **export** (whole file, through ffmpeg) and **frame by frame** (preview and live). They share the same masking and effect code, so preview, export and live look identical.
+- **It applies the fail-safe rules:** interpolate boxes between keyframes, keep a lost track's mask for as long as the edit lasts, growing it up to a limit, and flag it, pad uncertain masks more, and on an error mask the whole affected segment and log it, never skip it.
+- **Two paths:** **export** (whole file, encoded by the ffmpeg libraries inside PyAV, D-019) and **frame by frame** (preview and live). They share the same masking and effect code, so preview, export and live look identical.
+- **Built so far (F-04):**
+  - **Per-frame:** `FrameRenderer(state, tracks).render(image, t)` (or `render_frame`) applies every mask in effect at source time `t`. Export also passes `until`, the next frame's time, so a mask that starts while a frame is on screen covers that frame.
+    - Boxes move linearly between keyframes up to 1 s apart. Across a longer gap, nothing saw the target, so the box covers both keyframes and the space between them.
+    - Past either end of a track, the nearest box is held for as long as the mask lasts, growing up to a limit. More than 0.5 s from any keyframe, the target counts as lost, and each lost stretch gets an entry in `issues`.
+    - **A held box is the last known position, not a guarantee:** a lost target can move out of it, which is why it's reported. Held boxes can also leave masked patches where nobody is. F-11 tunes this on real detections.
+    - `uncertain` keyframes get extra padding.
+    - A masked track id with no track masks the whole frame, and is reported in `issues`.
+    - Pure: no files, cache or network.
+  - **Effects:** blur, pixelate and black box, numpy only. Their sizes scale with the target, with a floor, so strength 0 still hides it. The numbers are starting points for F-11.
+  - **Audio:** `render_audio` silences all-audio mutes, then removes cuts. `apply_audio_edits` does the same for one chunk.
+  - **Export:** `export(source, state, tracks, out_path)`.
+    - Every frame that isn't cut goes through the per-frame path, timed with `source_to_output`, into an H.264 + AAC MP4.
+    - Output is BT.709 and tagged as such, so players show HD colours correctly.
+    - Sound is edited and encoded in chunks alongside the picture, so memory stays small on long clips.
+    - Audio comes out mono or stereo, whatever the source has, at the source's sample rate, or 48 kHz if AAC can't use it.
+    - The file's index goes at its start (`faststart`), so a browser can play it while it downloads.
+    - The file is written under a temporary name and renamed when complete. Exporting over the source is refused.
+    - An odd width or height loses its last row or column (yuv420p needs even sizes).
+  - **Refused before anything is written** (`UnsupportedEdit`): standing rules (F-51), muting one speaker (F-32) and audio filters (F-33 writes the op, but nothing applies it in a render yet). These are errors rather than skips, so a refused edit is never silently left out of an output.
+  - **CLI:** `uv run python -m vibe.render export clip.mp4 --log timeline.jsonl [--tracks tracks.json] -o out.mp4`. With `--project <id>`, it renders a project into a new file in its `exports/` each time.
 
 ## Code layout
 One repo, with the backend and frontend side by side, each with its own toolchain (D-011). A frontend-only person never needs Python, and a backend-only person never needs Node beyond the root scripts.
@@ -264,6 +288,7 @@ Add a row when something gets decided. **"Accepted" means "what we're going with
 | D-016 | 2026-10-28 | Planner plan format (F-05): a plan is a list of tool calls `{step_id, tool, args}`; an argument may be `{"$ref": "<earlier step_id>"}` to use that step's result (e.g. track ids from `find_objects`, a range from `resolve_time`). The template parser and the LLM write the same shape, and both go through `validate_plan` against the tool registry before anything runs; mask targets must be a `$ref`. Builds on D-006 | Proposed | One JSON shape for every planner keeps the LLM swappable and testable offline; refs let one LLM call write the whole plan (Knight Hacks lesson) while code checks every step. Confirm on the F-05 PR, with the F-06 owner and R-1 |
 | D-017 | 2026-10-29 | Data policy (R-4), local-first. Three data classes: **text and metadata** (request, video metadata, tool summaries, transcript excerpts), **media** (frames, crops, clips, audio), **biometric** (face embeddings, identity templates). Text and metadata may go anywhere, including a cloud LLM. Media may go to team-controlled machines (e.g. the 5070 through a `remote` backend); to a third-party service (LLM/VLM API, rented GPU, Colab/Kaggle) only with a per-project opt-in, off by default, and only for clips whose recorded consent covers it. Biometric data never leaves its machine: bystander embeddings are matched in memory against the enrolled user's template and discarded, never written to the shared analysis cache. The planner never sees pixels; a VLM on a team machine answers per-track questions. Live mode: no network on the per-frame path. Missing opt-in fails closed (the edit stops and says why). Logs carry ids, not media | Proposed | Bystanders never consented, and face embeddings are biometric data under laws like BIPA and GDPR Art. 9; live mode can't use the network anyway; models already run locally (D-002, D-015), so it costs little now, and the opt-in keeps tier 3 possible for our own consented clips. Write-up: `docs/research/r4-data-policy-and-target-shape.md` |
 | D-018 | 2026-10-29 | Target shape (R-4): **boxes now, masks later.** v1 targets are tracks of normalized, padded boxes (as in D-013). F-15 adds an optional per-keyframe reference to a mask stored in the analysis cache (e.g. COCO RLE); masks never go in the op log or inline in tracks. The box stays required: the renderer uses the mask when a frame has one and isn't `uncertain`, otherwise the padded box. The op log format doesn't change, but new tracks break old readers (`extra="forbid"`), so F-15 is a shared-file change and likely bumps `schema_version` | Proposed | The whole Sprint 2–3 pipeline (F-04, F-10, F-11) is box-based; a padded box fails closed while a slightly-off mask leaks; masks need a GPU (SAM 2.1, D-015) and live masks are a stretch. Masks are still needed for object removal (F-16) and overlapping people, so the contract leaves room for them. Write-up: `docs/research/r4-data-policy-and-target-shape.md` |
+| D-019 | 2026-11-03 | Renderer export (F-04) encodes with PyAV: H.264 (`libx264`, yuv420p, tagged BT.709, CRF 18) + AAC in an MP4, using the ffmpeg libraries bundled in its wheel. The ffmpeg command line is only used by tests to generate clips. Builds on F-03 reading video with PyAV | Proposed | Nobody has to install ffmpeg to export; one library reads and writes video in the same process, with no subprocess pipes; the frames the per-frame path makes go straight to the encoder. Confirm on the F-04 PR |
 
 ## Open questions
 - **Compute:** confirm the 5070's VRAM (12 GB desktop or 8 GB laptop). Does anyone else have a GPU worth listing? Are university HPC, club hardware or cloud credits available for tier 3? Should the 5070 host a shared model server, and when would it be on?
