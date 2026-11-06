@@ -8,6 +8,7 @@ is committed.
 import os
 import shutil
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -81,11 +82,11 @@ def hd_red_clip(render_clip_dir: Path) -> Path:
     return path
 
 
-def _clip_with_audio(path: Path, *audio_args: str) -> Path:
+def _clip_with_audio(path: Path, *audio_args: str, rate: int = SAMPLE_RATE) -> Path:
     """One second of the pattern (lossless, so MKV holds it) plus the tone, encoded as asked."""
     _ffmpeg(
         "-f", "lavfi", "-i", f"testsrc2=s={WIDTH}x{HEIGHT}:r={FPS}:d=1",
-        "-f", "lavfi", "-i", f"sine=f={TONE_HZ}:r={SAMPLE_RATE}:d=1",
+        "-f", "lavfi", "-i", f"sine=f={TONE_HZ}:r={rate}:d=1",
         "-c:v", "ffv1", *audio_args, "-shortest",
         str(path),
     )  # fmt: skip
@@ -109,6 +110,17 @@ def surround_clip(render_clip_dir: Path) -> Path:
     return _clip_with_audio(
         render_clip_dir / "surround.mkv", "-af", "aformat=channel_layouts=7.1", "-c:a", "flac"
     )
+
+
+@pytest.fixture(scope="session")
+def clip_at_rate(render_clip_dir: Path) -> Callable[[int], Path]:
+    """Makes a clip whose PCM audio is at the sample rate asked for."""
+
+    def make(rate: int) -> Path:
+        path = render_clip_dir / f"rate_{rate}.mkv"
+        return _clip_with_audio(path, "-c:a", "pcm_s16le", rate=rate)
+
+    return make
 
 
 @pytest.fixture(scope="session")

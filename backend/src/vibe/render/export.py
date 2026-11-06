@@ -38,6 +38,9 @@ BT709_TAG = 1
 """The number for BT.709 in a stream's colour primaries and transfer tags."""
 
 AUDIO_CODEC = "aac"
+FALLBACK_SAMPLE_RATE = 48000
+"""Used when the AAC encoder can't take the source's rate (e.g. 192 kHz)."""
+
 AUDIO_CHUNK_SECONDS = 0.1
 """How much sound is decoded, edited and encoded at a time."""
 
@@ -144,6 +147,11 @@ def _to_bt709(image: np.ndarray) -> av.VideoFrame:
     return frame
 
 
+def _encodable_rate(rate: int) -> int:
+    rates = av.codec.Codec(AUDIO_CODEC, "w").audio_rates
+    return FALLBACK_SAMPLE_RATE if rates and rate not in rates else rate
+
+
 class _AudioWriter:
     """Encodes a clip's sound a chunk at a time, called along with the picture."""
 
@@ -156,7 +164,7 @@ class _AudioWriter:
         state: TimelineState,
     ) -> None:
         self._out = out
-        self._rate = audio.sample_rate
+        self._rate = _encodable_rate(audio.sample_rate)
         # The AAC encoder refuses some layouts, and some files don't name theirs ("2 channels"),
         # so the output is always mono or stereo.
         self._layout = "mono" if audio.channels == 1 else "stereo"

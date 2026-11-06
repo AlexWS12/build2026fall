@@ -3,6 +3,7 @@ mute from an example timeline (``render_session.jsonl``), checked frame by frame
 
 import os
 import re
+from collections.abc import Callable
 from pathlib import Path
 
 import av
@@ -157,6 +158,22 @@ def test_sound_and_picture_are_stored_together(long_clip: Path, tmp_path: Path) 
     order = stream_order(result.path)
     assert "a" in order[:FPS]
     assert max(len(run) for run in re.findall("v+", order)) < FPS  # under a second at a time
+
+
+@pytest.mark.parametrize(
+    ("source_rate", "output_rate"), [(22050, 22050), (37800, 48000), (192000, 48000)]
+)
+def test_rates_aac_cant_use_become_48_khz(
+    source_rate: int, output_rate: int, clip_at_rate: Callable[[int], Path], tmp_path: Path
+) -> None:
+    mute = Mute(request_id="r", source="agent", time_range=TimeRange(start=0.4, end=0.8))
+    result = export(clip_at_rate(source_rate), state_of(mute), [], tmp_path / "out.mp4")
+    assert probe(result.path).audio.sample_rate == output_rate
+
+    samples, rate = extract_audio(result.path)
+    # The mute stays at the same time whatever the rate.
+    assert rms(samples[round(0.5 * rate) : round(0.7 * rate)]) < 0.005
+    assert rms(samples[round(0.1 * rate) : round(0.3 * rate)]) == pytest.approx(TONE_RMS, rel=0.2)
 
 
 def first_frame_luma(path: Path) -> float:
