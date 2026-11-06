@@ -1,0 +1,13 @@
+[
+  {
+    "track_id": "trk_1",
+    "label": "person",
+    "source": "detector",
+    "keyframes": [
+      {"t": 0.0, "box": [0.25, 0.25, 0.75, 0.75], "conf": 0.9, "state": "detected"},
+      {"t": 1.0, "box": [0.25, 0.25, 0.75, 0.75], "conf": 0.9, "state": "detected"},
+      {"t": 2.0, "box": [0.25, 0.25, 0.75, 0.75], "conf": 0.9, "state": "detected"},
+      {"t": 3.0, "box": [0.25, 0.25, 0.75, 0.75], "conf": 0.9, "state": "detected"}
+    ]
+  }
+]

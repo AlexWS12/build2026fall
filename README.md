@@ -203,4 +203,6 @@ The video tests generate tiny clips with the [ffmpeg](https://ffmpeg.org/) comma
 
 To try a toolbox tool by hand: `uv run --directory backend python -m vibe.toolbox --help` lists the tools, and `... <tool> --help` shows each one's arguments and an example.
 
+To render a timeline by hand: `uv run --directory backend python -m vibe.render export clip.mp4 --log timeline.jsonl --tracks tracks.json -o out.mp4`, or `... export --project <id>` to render a project into a new file in its `exports/` folder. Exporting needs no ffmpeg install: PyAV brings its own.
+
 To work on the backend directly: `cd backend && uv sync`, then `uv run pytest`. Set `VIBE_BACKEND=local` or `remote` to use real models once they exist.
