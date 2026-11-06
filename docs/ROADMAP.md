@@ -31,7 +31,7 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
 | F-10 | Find and track people, faces, plates, named objects (cached per video) | Must | F-03, F-08 | in progress | Knight Hacks: EgoBlur + YOLOE; D-015 proposes RF-DETR + EgoBlur + ByteTrack (no AGPL). Pipeline, stub, cache and detector adapters on `luis/f10-detect-track`; model comparison next |
-| F-11 | Blur / pixelate / black-box targets | Must | F-04, F-10 | idea | |
+| F-11 | Blur / pixelate / black-box targets | Must | F-04, F-10 | in progress | jonathan, christopher, `jonathan/f11-mask-effects` |
 | F-12 | Time-bounded edits ("first half", "after 0:30") | Must | F-05 | idea | `resolve_time` |
 | F-13 | Targeting by description ("the person in red", "everyone except me") | Must | F-10 | idea | VLM yes/no per track |
 | F-14 | Click / draw a box to target, tracked through the clip | Should | F-10 | idea | |
