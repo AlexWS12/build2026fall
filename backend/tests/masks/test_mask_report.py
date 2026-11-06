@@ -5,10 +5,12 @@ import math
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 from mask_helpers import TRACKS, scenario_expected, scenario_state, scenario_tracks
 
 import vibe.contract
+import vibe.render.geometry as geometry
 import vibe.render.mask_report as mask_report
 from vibe.contract import (
     AddMask,
@@ -22,9 +24,11 @@ from vibe.contract import (
     TimeRange,
     Track,
 )
-from vibe.render.mask_report import GAP_SECONDS, MaskAudit, Stretch, audit_masks
+from vibe.render import FrameRenderer
+from vibe.render.mask_report import MaskAudit, audit_masks
 
 BOX = (0.1, 0.1, 0.3, 0.4)
+FPS = 30
 EXAMPLES = Path(vibe.contract.__file__).parent / "examples"
 
 
@@ -50,22 +54,16 @@ def masked(*ops: object, target: str = "trk_1", time_range: TimeRange | None = N
     return log
 
 
-def audit(
-    state: TimelineState,
-    tracks: list[Track],
-    duration: float = 10,
-    hold: float = 0.5,
-    gap: float = 0.5,
-) -> MaskAudit:
-    return audit_masks(state, tracks, duration=duration, hold_seconds=hold, gap_seconds=gap)
+def audit(state: TimelineState, tracks: list[Track], duration: float = 10) -> MaskAudit:
+    return audit_masks(state, tracks, duration=duration)
 
 
 def stretches(result: MaskAudit) -> list[tuple[str, float, float]]:
     return [(s.kind, s.start, s.end) for span in result.spans for s in span.stretches]
 
 
-def scenario(hold: float = 0.5) -> MaskAudit:
-    return audit(scenario_state(), scenario_tracks(), hold=hold)
+def scenario() -> MaskAudit:
+    return audit(scenario_state(), scenario_tracks())
 
 
 # --- The scenario -------------------------------------------------------------------------
@@ -90,16 +88,11 @@ def test_scenario_matches_the_hand_worked_totals() -> None:
     assert scenario().totals == scenario_expected()["totals"]
 
 
-def test_scenario_uses_the_settings_written_in_the_expected_file() -> None:
+def test_the_expected_file_was_worked_out_with_the_renderers_settings() -> None:
     expected = scenario_expected()
-    result = audit_masks(
-        scenario_state(),
-        scenario_tracks(),
-        duration=expected["duration"],
-        hold_seconds=expected["hold_seconds"],
-        gap_seconds=expected["gap_seconds"],
-    )
-    assert result == scenario()
+    assert expected["duration"] == 10
+    assert expected["hold_seconds"] == geometry.HOLD_SECONDS, "rework the answers by hand"
+    assert expected["max_gap_seconds"] == geometry.MAX_GAP_SECONDS, "rework the answers by hand"
 
 
 def test_scenario_is_not_clean() -> None:
@@ -114,76 +107,83 @@ def test_the_contract_example_shows_a_mask_outlasting_its_track() -> None:
     log = OpLog.from_jsonl((EXAMPLES / "blur_first_half.jsonl").read_text(encoding="utf-8"))
     tracks = TRACKS.validate_json((EXAMPLES / "street.tracks.json").read_bytes())
     result = audit(log.state(), tracks, duration=15)
-    assert stretches(result) == [("covered", 0, 1), ("held", 1, 1.5), ("off_screen", 1.5, 15)]
+    assert stretches(result) == [("covered", 0, 1), ("held", 1, 1.5), ("lost", 1.5, 15)]
 
 
 # --- Hold ---------------------------------------------------------------------------------
 
 
-def test_hold_zero_is_the_rule_with_nothing_past_the_keyframes() -> None:
-    result = scenario(hold=0)
-    assert result.totals["held"] == 0
-    (ends_early,) = [s for s in result.spans if s.track_id == "trk_ends_early"]
-    assert ends_early.stretches == (
-        Stretch("covered", 0, 4),
-        Stretch("off_screen", 4, 7),
-        Stretch("off_screen", 8, 10),
-    )
-
-
-def test_a_single_keyframe_with_no_hold_is_off_screen_throughout() -> None:
-    result = audit(masked().state(), [track("trk_1", 5)], hold=0)
-    assert stretches(result) == [("off_screen", 0, 10)]
+def test_a_single_keyframe_is_lost_away_from_its_hold() -> None:
+    result = audit(masked().state(), [track("trk_1", 5)])
+    assert stretches(result) == [("lost", 0, 4.5), ("held", 4.5, 5.5), ("lost", 5.5, 10)]
 
 
 def test_a_hold_before_time_zero_is_clipped() -> None:
     result = audit(masked().state(), [track("trk_1", 0.2)], duration=1)
-    assert stretches(result) == [("held", 0, 0.7), ("off_screen", 0.7, 1)]
+    assert stretches(result) == [("held", 0, 0.7), ("lost", 0.7, 1)]
 
 
 def test_a_held_box_by_an_uncertain_keyframe_is_uncertain() -> None:
     result = audit(masked().state(), [track("trk_1", 0, states={0: "uncertain"})], duration=1)
-    assert stretches(result) == [("uncertain", 0, 0.5), ("off_screen", 0.5, 1)]
+    assert stretches(result) == [("uncertain", 0, 0.5), ("lost", 0.5, 1)]
 
 
 # --- Gaps and uncertain keyframes ---------------------------------------------------------
 
 
-def test_keyframes_exactly_gap_seconds_apart_are_covered() -> None:
-    result = audit(masked().state(), [track("trk_1", 0, 0.5)], duration=0.5)
-    assert stretches(result) == [("covered", 0, 0.5)]
+def test_keyframes_exactly_the_limit_apart_are_covered() -> None:
+    result = audit(masked().state(), [track("trk_1", 0, 1)], duration=1)
+    assert stretches(result) == [("covered", 0, 1)]
 
 
-def test_keyframes_just_past_gap_seconds_are_a_gap() -> None:
-    result = audit(masked().state(), [track("trk_1", 0, 0.51)], duration=0.51)
-    assert stretches(result) == [("gap", 0, 0.51)]
+def test_keyframes_just_past_the_limit_are_a_gap_with_a_lost_middle() -> None:
+    result = audit(masked().state(), [track("trk_1", 0, 1.01)], duration=1.01)
+    assert stretches(result) == [
+        ("gap", 0, 0.5),
+        ("lost", 0.5, pytest.approx(0.51)),
+        ("gap", pytest.approx(0.51), 1.01),
+    ]
 
 
-def test_the_gap_default_is_the_labelled_placeholder() -> None:
-    assert GAP_SECONDS == 0.5
-    assert "UNMEASURED PLACEHOLDER" in Path(mask_report.__file__).read_text(encoding="utf-8")
-    state, tracks = masked().state(), [track("trk_1", 0, 0.6)]
-    result = audit_masks(state, tracks, duration=0.6, hold_seconds=0.5)
-    assert stretches(result) == [("gap", 0, pytest.approx(0.6))]
+def test_a_long_gap_is_lost_only_away_from_both_keyframes() -> None:
+    result = audit(masked().state(), [track("trk_1", 0, 3)], duration=3)
+    assert stretches(result) == [("gap", 0, 0.5), ("lost", 0.5, 2.5), ("gap", 2.5, 3)]
 
 
-def test_a_long_gap_next_to_an_uncertain_keyframe_is_uncertain() -> None:
+def test_a_long_gap_next_to_an_uncertain_keyframe_is_uncertain_then_lost() -> None:
     tracks = [track("trk_1", 0, 3, states={3: "uncertain"})]
     result = audit(masked().state(), tracks, duration=3)
-    assert stretches(result) == [("uncertain", 0, 3)]
+    assert stretches(result) == [
+        ("uncertain", 0, 0.5),
+        ("lost", 0.5, 2.5),
+        ("uncertain", 2.5, 3),
+    ]
+
+
+def test_a_gap_within_the_hold_of_its_keyframes_has_no_lost_middle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(mask_report, "HOLD_SECONDS", 1.0)
+    monkeypatch.setattr(geometry, "HOLD_SECONDS", 1.0)
+    state, tracks = masked().state(), [track("trk_1", 0, 1.5)]
+    result = audit(state, tracks, duration=1.5)
+    assert stretches(result) == [("gap", 0, 1.5)]
+    assert flagged_by_renderer(state, tracks, 1.5) == set()
 
 
 # --- Shared ids ---------------------------------------------------------------------------
 
 
-def test_shared_ids_are_off_screen_only_when_every_track_is_absent() -> None:
+def test_shared_ids_are_lost_only_when_every_track_is() -> None:
     tracks = [track("trk_1", 0, 0.5), track("trk_1", 3, 3.5)]
-    result = audit(masked().state(), tracks, duration=4, hold=0)
+    result = audit(masked().state(), tracks, duration=4)
     assert stretches(result) == [
         ("covered", 0, 0.5),
-        ("off_screen", 0.5, 3),
+        ("held", 0.5, 1),
+        ("lost", 1, 2.5),
+        ("held", 2.5, 3),
         ("covered", 3, 3.5),
-        ("off_screen", 3.5, 4),
+        ("held", 3.5, 4),
     ]
 
 
@@ -235,6 +235,20 @@ def test_a_fully_covered_mask_is_clean() -> None:
     assert result.clean
 
 
+def test_a_held_box_is_clean_because_the_renderer_reports_nothing() -> None:
+    result = audit(masked().state(), [track("trk_1", 0, 0.5)], duration=1)
+    assert result.totals["held"] == 0.5
+    assert result.clean
+
+
+def test_a_lost_target_is_not_clean() -> None:
+    assert not audit(masked().state(), [track("trk_1", 0, 0.5)], duration=2).clean
+
+
+def test_a_mask_with_no_track_is_not_clean() -> None:
+    assert not audit(masked().state(), [], duration=1).clean
+
+
 # --- Rules --------------------------------------------------------------------------------
 
 
@@ -244,6 +258,79 @@ def test_standing_rules_are_listed_and_stop_it_being_clean() -> None:
     result = audit(log.state(), [track("trk_1", 0, 0.5, 1)], duration=1)
     assert result.rules_not_audited == ("rule_1",)
     assert not result.clean
+
+
+# --- Against the real renderer -------------------------------------------------------------
+
+
+def shown_frames(state: TimelineState, duration: float) -> list[float]:
+    """Frame times halfway through each 1/FPS step, so none lands on a stretch boundary. A frame
+    exactly on one isn't lost yet in the renderer, while a stretch includes its start."""
+    times = [(i + 0.5) / FPS for i in range(round(duration * FPS))]
+    return [t for t in times if not state.is_cut(t)]
+
+
+def flagged_by_renderer(
+    state: TimelineState, tracks: list[Track], duration: float
+) -> set[tuple[str, float]]:
+    """Each (track id, frame) the renderer reports, skipping cut frames as export does."""
+    renderer = FrameRenderer(state, tracks)
+    times = shown_frames(state, duration)
+    for t in times:
+        renderer.render(np.zeros((4, 4, 3), np.uint8), t)
+    return {
+        (issue.track_id, t)
+        for issue in renderer.issues
+        for t in times
+        if issue.first_seen <= t <= issue.last_seen
+    }
+
+
+def flagged_by_audit(
+    state: TimelineState, tracks: list[Track], duration: float
+) -> set[tuple[str, float]]:
+    return {
+        (span.track_id, t)
+        for span in audit(state, tracks, duration).spans
+        for stretch in span.stretches
+        if stretch.kind in ("lost", "no_track")
+        for t in shown_frames(state, duration)
+        if stretch.start <= t < stretch.end
+    }
+
+
+def test_the_audit_flags_the_same_frames_as_the_renderer_on_the_scenario() -> None:
+    state, tracks = scenario_state(), scenario_tracks()
+    flagged = flagged_by_renderer(state, tracks, 10)
+    assert {track_id for track_id, _ in flagged} == {
+        "trk_ends_early",
+        "trk_frag_a",
+        "trk_frag_b",
+        "trk_gap",
+        "trk_missing",
+        "trk_shared",
+        "trk_starts_late",
+        "trk_user_single",
+    }
+    assert flagged_by_audit(state, tracks, 10) == flagged
+
+
+@pytest.mark.parametrize(
+    "tracks",
+    [
+        [track("trk_1", 5)],
+        [track("trk_1", 2, 8)],
+        [track("trk_1", 0, 3, states={3: "uncertain"})],
+        [track("trk_1", 0, 2), track("trk_1", 1, 6)],
+        [track("trk_1", 0, 0.5), track("trk_1", 3, 3.5), track("trk_1", 9)],
+    ],
+    ids=["one keyframe", "long gap", "uncertain gap", "overlapping gaps", "three tracks"],
+)
+def test_the_audit_flags_the_same_frames_as_the_renderer(tracks: list[Track]) -> None:
+    state = masked().state()
+    flagged = flagged_by_renderer(state, tracks, 10)
+    assert flagged
+    assert flagged_by_audit(state, tracks, 10) == flagged
 
 
 # --- Purity and bad input -----------------------------------------------------------------
@@ -266,15 +353,7 @@ def test_a_bad_duration_is_an_error(duration: float) -> None:
         audit(masked().state(), [], duration=duration)
 
 
-@pytest.mark.parametrize("value", [-1, math.nan, math.inf])
-def test_bad_settings_are_errors(value: float) -> None:
-    with pytest.raises(ValueError, match="hold_seconds"):
-        audit(masked().state(), [], hold=value)
-    with pytest.raises(ValueError, match="gap_seconds"):
-        audit(masked().state(), [], gap=value)
-
-
-def test_it_imports_only_the_contract_and_the_standard_library() -> None:
+def test_it_imports_only_the_contract_the_geometry_and_the_standard_library() -> None:
     tree = ast.parse(Path(mask_report.__file__).read_text(encoding="utf-8"))
     modules: set[str] = set()
     for node in ast.walk(tree):
@@ -283,4 +362,4 @@ def test_it_imports_only_the_contract_and_the_standard_library() -> None:
         elif isinstance(node, ast.ImportFrom):
             modules.add(node.module or "")
     outside = {m for m in modules if m.split(".")[0] not in sys.stdlib_module_names}
-    assert outside == {"vibe.contract"}
+    assert outside == {"vibe.contract", "vibe.render.geometry"}

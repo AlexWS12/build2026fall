@@ -1,9 +1,13 @@
 """Whole-clip audit of the masks: what happens during each masked stretch, without any pixels.
 
-A mask in the timeline only hides something while its track has a box. This compares the two,
-from the timeline state and the tracks alone, so it can run before a render. It says where a
-target is hidden by a normal box, where the box is a guess (``held``, ``gap``, ``uncertain``),
-and where a mask hides nothing at all (``off_screen``). F-41 can list the guesses for review.
+A mask in effect always has a box (``render/geometry.py``), but the box isn't always on the
+target. This works out how far to trust it, from the timeline state and the tracks alone, so it
+can run before a render. It says where a target is hidden by a normal box, where the box is a
+guess (``held``, ``gap``, ``uncertain``), and where the target may have left it (``lost``). F-41
+can list the guesses for review.
+
+``lost`` and ``no_track`` are the stretches the renderer reports in its issues, sampled there
+frame by frame. A test keeps the two in step, because this repeats the renderer's rules.
 
 Pure: no files, no video and no network. Times are source seconds, start included, end
 excluded, like ``Span.contains``. Cut ranges are left out, because nobody sees them.
@@ -17,16 +21,14 @@ from itertools import pairwise
 from typing import Literal, get_args
 
 from vibe.contract import Effect, Keyframe, MaskSpan, TimelineState, TimeRange, Track
+from vibe.render.geometry import HOLD_SECONDS, MAX_GAP_SECONDS
 
-GAP_SECONDS = 0.5
-"""UNMEASURED PLACEHOLDER: keyframes further apart than this count as a ``gap``. Chosen to match
-the renderer's hold, not from data. Tune it with F-09 once there are real tracks."""
-
-StretchKind = Literal["covered", "held", "gap", "uncertain", "off_screen", "no_track"]
+StretchKind = Literal["covered", "held", "gap", "uncertain", "lost", "no_track"]
 """``covered``: a normal box between two keyframes. ``held``: past either end of a track, within
-the hold. ``gap``: between keyframes further apart than ``gap_seconds``. ``uncertain``: next to an
-``uncertain`` keyframe. ``off_screen``: masked in the timeline, but no box, so nothing is hidden.
-``no_track``: no track has this id, so the renderer masks the whole frame."""
+``HOLD_SECONDS``. ``gap``: between keyframes more than ``MAX_GAP_SECONDS`` apart, within
+``HOLD_SECONDS`` of one, under a box covering both. ``uncertain``: next to an ``uncertain``
+keyframe. ``lost``: further than ``HOLD_SECONDS`` from any detection, so a box stays masked but
+the target may have left it. ``no_track``: no track has this id, so the whole frame is masked."""
 
 _CAUTION: dict[StretchKind, int] = {"covered": 0, "held": 1, "gap": 2, "uncertain": 3}
 """Which kind to report when several apply, e.g. two tracks sharing an id. Higher wins."""
@@ -75,34 +77,19 @@ class MaskAudit:
 
     @property
     def clean(self) -> bool:
-        """True when every masked stretch has a box and there are no rules left unchecked."""
+        """True when the renderer would report nothing and there are no rules left unchecked."""
         totals = self.totals
-        return not (totals["off_screen"] or totals["no_track"] or self.rules_not_audited)
+        return not (totals["lost"] or totals["no_track"] or self.rules_not_audited)
 
 
-def audit_masks(
-    state: TimelineState,
-    tracks: Iterable[Track],
-    *,
-    duration: float,
-    hold_seconds: float,
-    gap_seconds: float = GAP_SECONDS,
-) -> MaskAudit:
-    """Audit every mask in ``state`` against ``tracks``, for a video ``duration`` seconds long.
-
-    ``hold_seconds`` is how long the renderer keeps a box past the ends of its track. It's
-    required so this can't drift from the renderer unnoticed; 0 means no hold at all.
-    """
-    for name, value in (("hold_seconds", hold_seconds), ("gap_seconds", gap_seconds)):
-        if not (math.isfinite(value) and value >= 0):
-            raise ValueError(f"{name} must be finite and not negative, got {value}")
+def audit_masks(state: TimelineState, tracks: Iterable[Track], *, duration: float) -> MaskAudit:
+    """Audit every mask in ``state`` against ``tracks``, for a video ``duration`` seconds long."""
     if not (math.isfinite(duration) and duration > 0):
         raise ValueError(f"duration must be finite and above 0, got {duration}")
 
     paths: dict[str, list[list[_Piece]]] = {}
     for track in tracks:
-        pieces = _pieces(track, hold_seconds, gap_seconds)
-        paths.setdefault(track.track_id, []).append(pieces)
+        paths.setdefault(track.track_id, []).append(_pieces(track))
 
     spans = []
     for track_id in sorted(state.masks):
@@ -115,21 +102,22 @@ def audit_masks(
     return MaskAudit(tuple(spans), tuple(r.rule_id for r in state.rules))
 
 
-def _pieces(track: Track, hold: float, gap: float) -> list[_Piece]:
-    """Where ``track`` has a box, as sorted pieces that don't overlap."""
+def _pieces(track: Track) -> list[_Piece]:
+    """Where ``track`` isn't lost, as sorted pieces that don't overlap. Anywhere else, it is."""
     keyframes = track.keyframes
     first, last = keyframes[0], keyframes[-1]
-    pieces: list[_Piece] = []
-    if hold > 0:
-        pieces.append((first.t - hold, first.t, _held_kind(first)))
+    pieces: list[_Piece] = [(first.t - HOLD_SECONDS, first.t, _held_kind(first))]
     for a, b in pairwise(keyframes):
+        long_gap = b.t - a.t > MAX_GAP_SECONDS
         if "uncertain" in (a.state, b.state):
             kind: StretchKind = "uncertain"
         else:
-            kind = "gap" if b.t - a.t > gap else "covered"
-        pieces.append((a.t, b.t, kind))
-    if hold > 0:
-        pieces.append((last.t, last.t + hold, _held_kind(last)))
+            kind = "gap" if long_gap else "covered"
+        if long_gap and b.t - a.t > 2 * HOLD_SECONDS:
+            pieces += [(a.t, a.t + HOLD_SECONDS, kind), (b.t - HOLD_SECONDS, b.t, kind)]
+        else:
+            pieces.append((a.t, b.t, kind))
+    pieces.append((last.t, last.t + HOLD_SECONDS, _held_kind(last)))
     return pieces
 
 
@@ -191,10 +179,11 @@ def _classify(window: tuple[float, float], paths: list[list[_Piece]]) -> list[St
 
 
 def _kind_at(t: float, lookups: list[tuple[list[_Piece], list[float]]]) -> StretchKind:
-    """The most cautious kind at ``t``. It's ``off_screen`` only if every track is absent."""
+    """The most cautious kind at ``t``. It's ``lost`` only if every track is, as in the renderer:
+    one track still seeing the target is enough."""
     kinds: list[StretchKind] = []
     for pieces, starts in lookups:
         i = bisect_right(starts, t) - 1
         if i >= 0 and t < pieces[i][1]:
             kinds.append(pieces[i][2])
-    return max(kinds, key=_CAUTION.__getitem__, default="off_screen")
+    return max(kinds, key=_CAUTION.__getitem__, default="lost")
