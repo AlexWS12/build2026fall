@@ -9,6 +9,8 @@ an edit doesn't click. The fades sit outside the edited range: a muted span stay
 silent, and the samples a cut keeps are the same ones.
 """
 
+from collections.abc import Callable
+
 import numpy as np
 
 from vibe.contract import TimelineState
@@ -58,8 +60,7 @@ def apply_audio_edits(
     edges = [(span.start, span.end) for span in (*state.mutes, *state.cuts)]
     gain = _fades(edges, sample_rate, first_sample, n)
     if gain is not None:
-        scaled = out * (gain if out.ndim == 1 else gain[:, None])
-        out = scaled.astype(out.dtype, copy=False)
+        np.multiply(out, gain if out.ndim == 1 else gain[:, None], out=out, casting="unsafe")
     keep = np.ones(n, dtype=bool)
     for cut in state.cuts:
         start, end = _samples(cut.start, cut.end, sample_rate, first_sample, n)
@@ -82,23 +83,33 @@ def _fades(
     """Per-sample gain for a chunk: a linear fade down to each edited range and back up after.
 
     Worked out from each sample's number in the whole clip, so chunks rendered one at a time
-    fade exactly like the whole clip rendered at once. None when nothing in the chunk fades.
+    fade exactly like the whole clip rendered at once. Each edge only touches its own ramps
+    and range (sliced to the chunk), never the whole chunk. None when nothing in the chunk
+    fades.
     """
     fade = round(FADE_SECONDS * sample_rate)
     if fade == 0 or not edges:
         return None
-    index = np.arange(first_sample, first_sample + n, dtype=np.float64)
-    gain = np.ones(n, dtype=np.float64)
-    touched = False
+    chunk_end = first_sample + n
+    gain: np.ndarray | None = None
+
+    def ramp(lo: int, hi: int, value: Callable[[np.ndarray], np.ndarray]) -> None:
+        """Lower the gain of clip samples ``[lo, hi)`` (clamped to the chunk) to ``value``."""
+        nonlocal gain
+        lo, hi = max(lo, first_sample), min(hi, chunk_end)
+        if lo >= hi:
+            return
+        if gain is None:
+            gain = np.ones(n, dtype=np.float64)
+        window = gain[lo - first_sample : hi - first_sample]
+        np.minimum(window, value(np.arange(lo, hi, dtype=np.float64)), out=window)
+
     for start, end in edges:
         first = round(start * sample_rate)
-        last = None if end is None else round(end * sample_rate)
-        if first - fade >= first_sample + n or (last is not None and last + fade <= first_sample):
-            continue  # this range and its fades are outside the chunk
-        # How far each sample is from the range, in samples: 1 right next to it, <= 0 inside.
-        before = first - index
-        after = index - last + 1 if last is not None else np.full(n, -np.inf)
-        distance = np.maximum(before, after)
-        gain = np.minimum(gain, np.clip(distance / (fade + 1), 0.0, 1.0))
-        touched = True
-    return gain if touched else None
+        last = chunk_end if end is None else round(end * sample_rate)
+        # Gain is the distance to the range in samples over fade + 1: 1 right next to it.
+        ramp(first - fade, first, lambda i, first=first: (first - i) / (fade + 1))
+        ramp(first, last, np.zeros_like)
+        if end is not None:
+            ramp(last, last + fade, lambda i, last=last: (i - last + 1) / (fade + 1))
+    return gain

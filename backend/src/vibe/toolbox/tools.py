@@ -11,6 +11,7 @@ from pydantic import Field
 
 from vibe.contract import AddAudioFilter, AddMask, ContractError, Cut, Mute, Op, TimeRange, Unmute
 from vibe.contract.common import Effect, Model
+from vibe.contract.state import MuteSpan
 from vibe.toolbox.context import ToolContext
 from vibe.toolbox.spec import ToolError
 from vibe.toolbox.timecodes import TimeParseError, is_bare_number, parse_timestamp
@@ -119,6 +120,13 @@ class UnmuteArgs(Model):
     )
 
 
+class UnmuteResult(EditResult):
+    still_muted: list[str] = Field(
+        description="Speakers still muted somewhere in the range; an all-audio unmute keeps "
+        "them, so the agent says so instead of reporting that all the sound is back."
+    )
+
+
 class DenoiseArgs(Model):
     time_range: TimeRange | None = Field(default=None, description="Null = the whole clip.")
     strength: float | None = Field(
@@ -174,16 +182,47 @@ def mute(args: MuteArgs, ctx: ToolContext) -> EditResult:
     return _write("mute", op, ctx)
 
 
-def unmute(args: UnmuteArgs, ctx: ToolContext) -> EditResult:
+def unmute(args: UnmuteArgs, ctx: ToolContext) -> UnmuteResult:
     """Bring the sound back over a range, for the same ``speaker`` a mute was for. Unlike undo,
-    it can lift part of a mute ("unmute 0:12 to 0:15") or one made by an earlier request."""
+    it can lift part of a mute ("unmute 0:12 to 0:15") or one made by an earlier request.
+
+    Refuses when no mute for ``speaker`` overlaps the range, so "unmute" never reports success
+    for an edit that changes nothing.
+    """
+    if ctx.log is None:
+        raise ToolError("unmute: needs a timeline to write to")
+    try:
+        mutes = [m for m in ctx.log.state().mutes if _overlaps(m, args.time_range)]
+    except OSError as exc:
+        raise ToolError(f"unmute: can't read the timeline: {exc}") from None
+    except (ContractError, ValueError) as exc:
+        raise ToolError(f"unmute: the stored timeline is unreadable: {exc}") from None
+    others = sorted(
+        {m.speaker for m in mutes if m.speaker is not None and m.speaker != args.speaker}
+    )
+    if not any(m.speaker == args.speaker for m in mutes):
+        where = "anywhere" if args.time_range is None else f"from {_range(args.time_range)}"
+        who = "all audio" if args.speaker is None else f"speaker {args.speaker!r}"
+        hint = f"; only {', '.join(others)} muted there, say which to unmute" if others else ""
+        raise ToolError(f"unmute: {who} isn't muted {where}{hint}")
     op = Unmute(
         request_id=ctx.request_id,
         source=ctx.source,
         time_range=args.time_range,
         speaker=args.speaker,
     )
-    return _write("unmute", op, ctx)
+    result = _write("unmute", op, ctx)
+    return UnmuteResult(op_ids=result.op_ids, still_muted=others)
+
+
+def _overlaps(span: MuteSpan, r: TimeRange | None) -> bool:
+    if r is None:
+        return True
+    return (r.end is None or span.start < r.end) and (span.end is None or span.end > r.start)
+
+
+def _range(r: TimeRange) -> str:
+    return f"{r.start:g}s to {_end(r)}"
 
 
 def denoise(args: DenoiseArgs, ctx: ToolContext) -> EditResult:

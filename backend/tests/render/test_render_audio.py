@@ -156,3 +156,11 @@ def test_stereo_fades_every_channel_the_same() -> None:
     out = render_audio(stereo, FADE_RATE, state_of(mute(1.0, 2.0)))
     assert np.array_equal(out[:, 0], -out[:, 1])
     assert out.dtype == np.float32
+
+
+def test_fades_of_close_edits_take_the_lower_gain() -> None:
+    # 5 samples between two mutes, less than one fade: the gap dips but never reaches 1.
+    out = render_audio(TONE, FADE_RATE, state_of(mute(1.0, 1.5), mute(1.505, 2.0)))
+    gap = out[1500:1505]
+    expected = np.minimum(np.arange(1, 6), np.arange(5, 0, -1)) / 11
+    assert np.allclose(gap, expected)
