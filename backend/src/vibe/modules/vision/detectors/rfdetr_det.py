@@ -20,13 +20,22 @@ class RFDetrDetector:
         try:
             import rfdetr
             from PIL import Image
-            from rfdetr.util.coco_classes import COCO_CLASSES
         except ImportError as e:
             raise NotInstalled(f"rf-detr needs `uv pip install rfdetr` ({e})") from e
+        try:
+            from rfdetr.assets.coco_classes import COCO_CLASSES  # rfdetr >= 1.9
+        except ImportError:
+            try:
+                from rfdetr.util.coco_classes import COCO_CLASSES  # older 1.x
+            except ImportError as e:
+                raise NotInstalled(f"this rfdetr version has no COCO class names ({e})") from e
         model_class = getattr(rfdetr, SIZES[size], None)
         if model_class is None:
             raise NotInstalled(f"this rfdetr version has no {SIZES[size]}; upgrade rfdetr")
         self._model = model_class()
+        # rfdetr picks CUDA itself and moves the weights on the first predict; report it so the
+        # CLI doesn't claim "cpu" for an adapter that has no `device` attribute.
+        self.device = str(getattr(getattr(self._model, "model", None), "device", "cpu"))
         self._image = Image
         self._classes = COCO_CLASSES
         self.name = f"rfdetr-{size}"

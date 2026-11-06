@@ -42,7 +42,10 @@ class EgoBlurDetector:
             raise NotInstalled(f"egoblur-{kind} needs torchvision for NMS ({e})") from e
         self._torch, self._nms = torch, torchvision.ops.nms
         self.device = device(torch, device_name)
-        self._model = torch.jit.load(weights, map_location=self.device).eval()
+        # Load on the CPU, then move: the TorchScript has CPU constants baked in, so
+        # map_location=cuda fails at the first frame ("tensors on cuda:0 and cpu"). Same order
+        # as Meta's own script.
+        self._model = torch.jit.load(weights, map_location="cpu").to(self.device).eval()
         self._label = KINDS[kind]
         self._threshold, self._nms_iou, self._bgr = threshold, nms_iou, bgr
         self.name = f"egoblur-{kind}-{Path(weights).stem}"
