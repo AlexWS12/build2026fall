@@ -7,8 +7,8 @@
 - ``detectors``: the models, by name (``DETECTORS``, ``make_detector``), with their licenses.
 - ``tracking``: trackers that link detections into tracks (``iou`` built in, ``bytetrack``).
 - ``analyze``: the pipeline over a video, and ``retrack`` from cached detections.
-- ``cache``: reading and writing ``cache/<sha256>/{detections,tracks}/<key>.json``, and
-  ``project_tracks`` for the toolbox's ``ToolContext.tracks``.
+- ``cache``: reading and writing ``cache/<sha256>/{detections,tracks}/<key>.json``, the video's
+  default tracks, and ``project_tracks`` for the toolbox's ``ToolContext.tracks``.
 
 CLI: ``uv run python -m vibe.modules.vision --help``.
 
@@ -21,10 +21,12 @@ optional group is a shared-file change for after the F-10 comparison (HANDOFF.md
 from vibe.modules.vision.analyze import Analysis, analyze_frames, analyze_video, retrack
 from vibe.modules.vision.cache import (
     AmbiguousAnalysis,
+    CacheError,
     load_tracks,
     project_tracks,
     save_detections,
     save_tracks,
+    set_default_tracks,
 )
 from vibe.modules.vision.detection import Detection, Detector, NotInstalled
 from vibe.modules.vision.detectors import DETECTORS, make_detector
@@ -35,6 +37,7 @@ __all__ = [
     "TRACKERS",
     "AmbiguousAnalysis",
     "Analysis",
+    "CacheError",
     "Detection",
     "Detector",
     "IouTracker",
@@ -48,4 +51,5 @@ __all__ = [
     "retrack",
     "save_detections",
     "save_tracks",
+    "set_default_tracks",
 ]

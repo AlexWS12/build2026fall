@@ -6,8 +6,13 @@ Two kinds per video, each one JSON file per cache key:
 - ``cache/<sha256>/tracks/<key>.json``: a JSON list of contract ``Track``s, the shape the F-09
   benchmark scores, so ``python -m vibe.benchmark report`` compares every cached key side by side.
 
+Plus ``cache/<sha256>/default/tracks.json``, which names the tracks key the app should use when
+a video has several (``set_default_tracks``). It's a separate kind, so the benchmark never reads
+it as a track set.
+
 A key names the detectors and the stride and ends with a hash of every setting, so changing a
-model, a threshold or the tracker never serves a stale result (D-014).
+model, a threshold or the tracker never serves a stale result (D-014). A tracks key's hash also
+covers its detections key.
 """
 
 import hashlib
@@ -31,8 +36,24 @@ _UNSAFE = re.compile(r"[^A-Za-z0-9._@-]+")
 _MAX_KEY = 128  # Storage allows 1-128 letters, digits and . _ @ -
 
 
-class AmbiguousAnalysis(Exception):
-    """Several track sets are cached for a video and the caller didn't say which one to use."""
+class CacheError(Exception):
+    """The analysis cache can't answer: an ambiguous or stale choice of track set."""
+
+
+class AmbiguousAnalysis(CacheError):
+    """Several track sets are cached for a video and none is marked as the default."""
+
+
+def video_sha256(path: Path) -> str:
+    """The content hash that keys a video's cache, without storing a copy of the video.
+
+    Same digest as ``Storage.add_video`` (sha256 of the bytes), so the keys line up.
+    """
+    h = hashlib.sha256()
+    with Path(path).open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def _digest(value: object) -> str:
@@ -53,8 +74,16 @@ def detections_key(detectors: Sequence[Detector], every: int) -> str:
 
 
 def tracks_key(detections_key: str, tracker: str, settings: TrackerSettings) -> str:
-    """E.g. ``rfdetr-l_egoblur-face-k1-3f9a1c2e-iou-7b0d4e11``."""
-    return _key(f"{detections_key}-{tracker}", {"tracker": tracker, **settings.model_dump()})
+    """E.g. ``rfdetr-l_egoblur-face-k1-3f9a1c2e-iou-7b0d4e11``.
+
+    The final hash covers the whole detections key, not only the tracker: it becomes the prefix of
+    every track id (``namespaced``), so two detector runs must never share it, and a long key that
+    gets cut to fit the 128 characters still ends in a hash that tells the runs apart.
+    """
+    return _key(
+        f"{detections_key}-{tracker}",
+        {"detections": detections_key, "tracker": tracker, **settings.model_dump()},
+    )
 
 
 def _write(path: Path, text: str) -> None:
@@ -120,21 +149,58 @@ def track_keys(storage: Storage, sha256: str) -> list[str]:
     return _keys(storage, sha256, "tracks")
 
 
+def default_tracks_key(storage: Storage, sha256: str) -> str | None:
+    """The track set marked as this video's default, or ``None`` if none is."""
+    path = storage.cache_path(sha256, "default", "tracks")
+    if not path.exists():
+        return None
+    try:
+        key = json.loads(path.read_text(encoding="utf-8"))["tracks_key"]
+    except (ValueError, KeyError, TypeError) as e:
+        raise CacheError(f"{path} is not a default marker ({e}); delete it or set it again") from e
+    if not isinstance(key, str):
+        raise CacheError(f"{path} is not a default marker: tracks_key is not a string")
+    return key
+
+
+def set_default_tracks(storage: Storage, sha256: str, key: str) -> Path:
+    """Mark a cached track set as the one every project on this video uses.
+
+    The cache is shared by every project on a video, so after a comparison leaves several track
+    sets, the default is how the app knows which one to read. It lives in the cache (it's a fact
+    about the video's analysis), so copying ``cache/<sha256>/`` carries it along.
+    """
+    if not storage.cache_path(sha256, "tracks", key).exists():
+        raise CacheError(f"no cached tracks {key!r} for video {sha256[:12]}")
+    path = storage.cache_path(sha256, "default", "tracks")
+    _write(path, json.dumps({"tracks_key": key}) + "\n")
+    return path
+
+
 def load_tracks(storage: Storage, sha256: str, key: str | None = None) -> list[Track] | None:
     """The cached tracks for a video, or ``None`` if it was never analysed.
 
     ``None`` is not ``[]``: the toolbox fails "blur all faces" on ``None`` instead of masking
-    nothing (privacy fails closed). With no ``key``, the one cached set is used; if there are
-    several (e.g. during a model comparison) the caller must pick, so it raises instead of
-    guessing.
+    nothing (privacy fails closed). With no ``key``: the video's default if one is marked, else
+    the one cached set. With several and no default (e.g. during a model comparison) it raises
+    ``AmbiguousAnalysis`` instead of guessing, and a default pointing at a deleted set raises
+    ``CacheError`` (it isn't "never analysed").
     """
+    if key is None:
+        key = default_tracks_key(storage, sha256)
+        if key is not None and not storage.cache_path(sha256, "tracks", key).exists():
+            raise CacheError(
+                f"the default tracks {key!r} for video {sha256[:12]} are no longer cached; "
+                "set the default again"
+            )
     if key is None:
         keys = track_keys(storage, sha256)
         if not keys:
             return None
         if len(keys) > 1:
             raise AmbiguousAnalysis(
-                f"{len(keys)} track sets are cached for video {sha256[:12]}; pick one of: "
+                f"{len(keys)} track sets are cached for video {sha256[:12]} and none is the "
+                "default; set one (`python -m vibe.modules.vision default`) or pick one of: "
                 + ", ".join(keys)
             )
         key = keys[0]

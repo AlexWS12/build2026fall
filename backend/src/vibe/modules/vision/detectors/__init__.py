@@ -6,8 +6,10 @@ A detector is picked with a spec string: ``name`` or ``name:option=value,option=
 listing detectors needs nothing installed.
 """
 
+import inspect
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import get_args
 
 from vibe.modules.vision.detection import Detector
 from vibe.modules.vision.detectors.egoblur_det import EgoBlurDetector
@@ -91,39 +93,57 @@ DETECTORS: dict[str, DetectorInfo] = {
 }
 
 
-def _value(text: str) -> object:
-    if text.lower() in {"true", "false"}:
-        return text.lower() == "true"
-    for kind in (int, float):
-        try:
-            return kind(text)
-        except ValueError:
-            pass
-    return text
-
-
-def parse_spec(spec: str) -> tuple[str, dict[str, object]]:
-    """``"yolo:weights=yolo11m.pt,threshold=0.2"`` -> ``("yolo", {"weights": ..., ...})``."""
+def parse_spec(spec: str) -> tuple[str, dict[str, str]]:
+    """``"yolo:weights=yolo11m.pt,threshold=0.2"`` -> ``("yolo", {"weights": "yolo11m.pt",
+    "threshold": "0.2"})``. Values stay text: only the detector knows what type each option is."""
     name, _, rest = spec.partition(":")
-    options: dict[str, object] = {}
+    options: dict[str, str] = {}
     for part in rest.split(","):
         if not part.strip():
             continue
         key, eq, value = part.partition("=")
         if not eq or not key.strip():
             raise ValueError(f"detector option {part!r} in {spec!r} must look like name=value")
-        options[key.strip()] = _value(value.strip())
+        options[key.strip()] = value.strip()
     return name.strip(), options
+
+
+def _convert(detector: str, option: str, text: str, annotation: object) -> object:
+    """``text`` as the type the detector's parameter is declared with (``str | None`` is str)."""
+    kinds = [a for a in get_args(annotation) if a is not type(None)] or [annotation]
+    kind = str if kinds[0] is inspect.Parameter.empty else kinds[0]
+    if kind is str:
+        return text  # a prompt or a weights file named "1984" is still text
+    try:
+        if kind is bool:
+            if text.lower() not in {"true", "false"}:
+                raise ValueError(text)
+            return text.lower() == "true"
+        return kind(text)
+    except ValueError:
+        raise ValueError(
+            f"bad options for detector {detector!r}: {option}={text!r} is not a {kind.__name__}"
+        ) from None
+
+
+def resolve_options(name: str, raw: dict[str, str]) -> dict[str, object]:
+    """Convert a spec's text options by the declared types of the detector's parameters."""
+    info = DETECTORS[name]
+    params = inspect.signature(info.make).parameters
+    unknown = [k for k in raw if k not in params]
+    if unknown:
+        raise ValueError(
+            f"bad options for detector {name!r}: unknown {', '.join(unknown)} "
+            f"(options: {', '.join(params)})"
+        )
+    return {k: _convert(name, k, v, params[k].annotation) for k, v in raw.items()}
 
 
 def make_detector(spec: str) -> Detector:
     """Build a detector from a spec. Raises ``NotInstalled`` if its package or weights are
-    missing, ``ValueError`` for an unknown name or option."""
-    name, options = parse_spec(spec)
+    missing, ``ValueError`` for an unknown name or a bad option."""
+    name, raw = parse_spec(spec)
     info = DETECTORS.get(name)
     if info is None:
         raise ValueError(f"unknown detector {name!r}; known: {', '.join(DETECTORS)}")
-    try:
-        return info.make(**{**info.defaults, **options})
-    except TypeError as e:
-        raise ValueError(f"bad options for detector {name!r}: {e}") from None
+    return info.make(**{**info.defaults, **resolve_options(name, raw)})

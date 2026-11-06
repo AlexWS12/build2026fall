@@ -121,6 +121,75 @@ def test_several_cached_analyses_need_an_explicit_key(storage):
     assert len(cache.load_tracks(store, ref.sha256, "two-bbbb2222")) == 1
 
 
+def test_the_default_marks_which_of_several_track_sets_the_app_reads(storage):
+    store, ref = storage
+    analysis = analyze_frames(as_frames(square_frames()), detectors(), IouTracker())
+    cache.save_tracks(store, ref.sha256, "one-aaaa1111", analysis.tracks)
+    cache.save_tracks(store, ref.sha256, "two-bbbb2222", analysis.tracks[:1])
+    assert cache.default_tracks_key(store, ref.sha256) is None
+
+    cache.set_default_tracks(store, ref.sha256, "two-bbbb2222")
+    assert cache.default_tracks_key(store, ref.sha256) == "two-bbbb2222"
+    assert len(cache.load_tracks(store, ref.sha256)) == 1
+    # An explicit key still wins, and the marker is not mistaken for a track set.
+    assert len(cache.load_tracks(store, ref.sha256, "one-aaaa1111")) == 2
+    assert cache.track_keys(store, ref.sha256) == ["one-aaaa1111", "two-bbbb2222"]
+
+
+def test_a_default_cannot_name_tracks_that_are_not_cached(storage):
+    store, ref = storage
+    with pytest.raises(cache.CacheError, match="no cached tracks"):
+        cache.set_default_tracks(store, ref.sha256, "missing-00000000")
+
+
+def test_a_default_whose_tracks_were_deleted_is_an_error_not_never_analysed(storage):
+    store, ref = storage
+    cache.save_tracks(store, ref.sha256, "one-aaaa1111", [])
+    cache.set_default_tracks(store, ref.sha256, "one-aaaa1111")
+    store.cache_path(ref.sha256, "tracks", "one-aaaa1111").unlink()
+    # None would read as "never analysed"; a stale marker must not hide that tracks existed.
+    with pytest.raises(cache.CacheError, match="no longer cached"):
+        cache.load_tracks(store, ref.sha256)
+
+
+def test_a_damaged_default_marker_is_a_clear_error(storage):
+    store, ref = storage
+    marker = store.cache_path(ref.sha256, "default", "tracks")
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text("{not json", encoding="utf-8")
+    with pytest.raises(cache.CacheError, match="not a default marker"):
+        cache.load_tracks(store, ref.sha256)
+
+
+def test_tracks_keys_of_different_detector_runs_never_share_their_id_hash():
+    a = cache.detections_key([ColorDetector(label="face", color="red")], 1)
+    b = cache.detections_key([ColorDetector(label="face", color="blue")], 1)
+    settings = TrackerSettings()
+    ka, kb = cache.tracks_key(a, "iou", settings), cache.tracks_key(b, "iou", settings)
+    # The id prefix is the last hash; it used to depend on the tracker settings alone.
+    assert ka.rsplit("-", 1)[-1] != kb.rsplit("-", 1)[-1]
+
+
+def test_long_detections_keys_still_give_distinct_tracks_keys():
+    many = [ColorDetector(label="person", color="red", tolerance=i) for i in range(30)]
+    for i, det in enumerate(many):
+        det.name = f"a-rather-long-detector-name-{i}"
+    other = [*many[:-1], ColorDetector(tolerance=99)]
+    other[-1].name = many[-1].name
+    keys = [
+        cache.tracks_key(cache.detections_key(d, 1), "iou", TrackerSettings())
+        for d in (many, other)
+    ]
+    assert all(_SAFE_KEY.match(k) for k in keys)
+    assert keys[0] != keys[1]
+    assert keys[0].rsplit("-", 1)[-1] != keys[1].rsplit("-", 1)[-1]
+
+
+def test_video_sha256_matches_storage_without_copying_the_video(tmp_path, square_clip):
+    store = Storage(tmp_path / "data")
+    assert cache.video_sha256(square_clip) == store.add_video(square_clip).sha256
+
+
 def test_project_tracks_adds_hand_drawn_tracks_but_needs_an_analysis(tmp_path, square_clip):
     store = Storage(tmp_path / "data")
     project = store.create_project(square_clip)

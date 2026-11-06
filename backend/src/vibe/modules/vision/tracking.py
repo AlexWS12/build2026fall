@@ -6,7 +6,8 @@ face missed for a few frames is still covered as long as its track continues.
 
 Privacy fails closed here too: faces and plates are kept at a much lower confidence than other
 labels, low-confidence keyframes are marked ``uncertain`` (masked with extra padding and flagged
-for review) instead of dropped, and a detection the tracker can't link starts its own track.
+for review) instead of dropped, and a detection the tracker can't link starts its own track, which
+later detections of the same object continue.
 """
 
 from collections import defaultdict
@@ -121,32 +122,25 @@ class _Live:
         self.box, self.t = box, t
 
 
-class IouTracker:
-    """Greedy overlap matching with a constant-velocity guess. No packages, fully deterministic.
+class _Linker:
+    """Greedy overlap matching with a constant-velocity guess: continues a live track with the
+    detection that overlaps its predicted box most, and starts a new track for the rest. Each
+    label is linked separately (a face never continues a person's track)."""
 
-    The baseline every other tracker is compared with, and what tests and the stub use. Each
-    label is tracked separately (a face never continues a person's track).
-    """
-
-    name = "iou"
-
-    def __init__(self, settings: TrackerSettings | None = None) -> None:
-        self.settings = settings or TrackerSettings()
-        self._builder = _TrackBuilder(self.settings)
+    def __init__(self, settings: TrackerSettings, builder: _TrackBuilder) -> None:
+        self._settings = settings
+        self._builder = builder
         self._live: list[_Live] = []
-        self._last_t: float | None = None
 
-    def update(self, t: float, detections: Sequence[Detection], size: tuple[int, int]) -> None:
-        _check_time(self._last_t, t)
-        self._last_t = t
-        s = self.settings
+    def link(self, t: float, detections: Sequence[Detection]) -> None:
+        """Link the detections of the frame at ``t`` (already filtered with ``keeps``). Call it
+        on every frame, even with none, so tracks that went unseen for ``max_gap`` end."""
+        s = self._settings
         self._live = [lv for lv in self._live if t - lv.t <= s.max_gap]
-        kept = [d for d in detections if s.keeps(d)]
-
         pairs = []
         for li, lv in enumerate(self._live):
             guess = lv.predict(t)
-            for di, d in enumerate(kept):
+            for di, d in enumerate(detections):
                 if d.label == lv.label and (overlap := iou(guess, d.box)) >= s.iou_match:
                     pairs.append((overlap, li, di))
         used_live: set[int] = set()
@@ -156,15 +150,44 @@ class IouTracker:
                 continue
             used_live.add(li)
             used_det.add(di)
-            lv, d = self._live[li], kept[di]
+            lv, d = self._live[li], detections[di]
             lv.move(t, d.box)
             self._builder.add(lv.key, t, d)
 
-        for di, d in enumerate(kept):
+        for di, d in enumerate(detections):
             if di not in used_det:
                 lv = _Live(key=self._builder.new(d.label), label=d.label, box=d.box, t=t)
                 self._live.append(lv)
                 self._builder.add(lv.key, t, d)
+
+    def retire_covered(self, t: float, label: str, boxes: Sequence[Box], threshold: float) -> None:
+        """Stop extending live ``label`` tracks that one of ``boxes`` now covers: another tracker
+        has taken over that object, so continuing both would only draw it twice."""
+        self._live = [
+            lv
+            for lv in self._live
+            if lv.label != label or all(iou(lv.predict(t), b) < threshold for b in boxes)
+        ]
+
+
+class IouTracker:
+    """Greedy overlap matching with a constant-velocity guess. No packages, fully deterministic.
+
+    The baseline every other tracker is compared with, and what tests and the stub use.
+    """
+
+    name = "iou"
+
+    def __init__(self, settings: TrackerSettings | None = None) -> None:
+        self.settings = settings or TrackerSettings()
+        self._builder = _TrackBuilder(self.settings)
+        self._linker = _Linker(self.settings, self._builder)
+        self._last_t: float | None = None
+
+    def update(self, t: float, detections: Sequence[Detection], size: tuple[int, int]) -> None:
+        _check_time(self._last_t, t)
+        self._last_t = t
+        self._linker.link(t, [d for d in detections if self.settings.keeps(d)])
 
     def tracks(self) -> list[Track]:
         return self._builder.tracks()
@@ -173,12 +196,25 @@ class IouTracker:
 class ByteTracker:
     """ByteTrack from Roboflow ``trackers`` (Apache 2.0; D-015), one instance per label.
 
-    **Not run in CI**, and written against the ``trackers`` 2.x API without being executed here:
-    check it against the installed version before trusting its numbers. Install with
-    ``uv pip install trackers supervision``. Not BoxMOT: that one is AGPL.
+    Run against ``trackers`` 2.7.0 and ``supervision`` 0.31.5 (see the handoff); the API can
+    change between versions. Install with ``uv pip install trackers supervision`` (``rfdetr``
+    pulls both in). Not BoxMOT: that one is AGPL. The unit tests run it against a stand-in for
+    the library, which checks this glue code and nothing about ByteTrack.
+
+    ByteTrack confirms a track only after a few sightings, and ignores weak detections. Privacy
+    fails closed, so every kept detection it didn't return is linked by overlap (the same
+    matching as ``IouTracker``) into its own track, and that track ends once ByteTrack returns
+    a box over the same object.
+
+    ``max_gap`` also sets ByteTrack's lost-track buffer, in seconds (each update carries its
+    timestamp), so it means the same with any ``--every N``. ``iou_match`` configures only the
+    fallback linking; ByteTrack's own matching and thresholds (it starts a track from a detection
+    of at least 0.7 confidence) stay at the library's defaults. Tuning them is for the benchmark.
     """
 
     name = "bytetrack"
+    CONFIRMED_OVERLAP = 0.5
+    """A kept detection this much covered by a returned box counts as confirmed."""
 
     def __init__(self, settings: TrackerSettings | None = None) -> None:
         try:
@@ -189,9 +225,14 @@ class ByteTracker:
                 f"the bytetrack tracker needs `uv pip install trackers supervision` ({e})"
             ) from e
         self._sv = sv
-        self._make = ByteTrackTracker
         self.settings = settings or TrackerSettings()
+        # With a timestamp on every update, ByteTrack measures its buffer in seconds:
+        # lost_track_buffer / 30 s (trackers 2.7). So max_gap seconds = max_gap * 30, whatever
+        # the stride, and the Kalman step is the real elapsed time.
+        buffer = max(1, round(self.settings.max_gap * 30))
+        self._make = lambda: ByteTrackTracker(lost_track_buffer=buffer)
         self._builder = _TrackBuilder(self.settings)
+        self._linker = _Linker(self.settings, self._builder)
         self._per_label: dict[str, Any] = {}
         self._keys: dict[tuple[str, int], int] = {}
         self._last_t: float | None = None
@@ -204,6 +245,7 @@ class ByteTracker:
         for d in detections:
             if self.settings.keeps(d):
                 by_label[d.label].append(d)
+        unconfirmed: list[Detection] = []
         # Labels seen before get an empty update too, so their tracks age like ByteTrack expects.
         for label in sorted(set(by_label) | set(self._per_label)):
             dets = by_label.get(label, [])
@@ -221,12 +263,14 @@ class ByteTracker:
                 )
             else:
                 inputs = sv.Detections.empty()
-            out = tracker.update(inputs)
-            self._collect(label, t, dets, out, width, height)
+            out = tracker.update(inputs, timestamp=t)
+            unconfirmed += self._collect(label, t, dets, out, width, height)
+        self._linker.link(t, unconfirmed)
 
     def _collect(
         self, label: str, t: float, dets: list[Detection], out: Any, width: int, height: int
-    ) -> None:
+    ) -> list[Detection]:
+        """Add what ByteTrack returned as keyframes. Return the kept detections it didn't."""
         returned: list[Box] = []
         ids = getattr(out, "tracker_id", None)
         for i in range(len(out)):
@@ -240,10 +284,10 @@ class ByteTracker:
                 key = self._keys[(label, tid)] = self._builder.new(label)
             self._builder.add(key, t, Detection(label, box, conf))
             returned.append(box)
-        # Fail closed: a kept detection ByteTrack didn't confirm still gets its own track.
-        for d in dets:
-            if not any(iou(d.box, b) >= 0.5 for b in returned):
-                self._builder.add(self._builder.new(label), t, d)
+        self._linker.retire_covered(t, label, returned, self.CONFIRMED_OVERLAP)
+        return [
+            d for d in dets if not any(iou(d.box, b) >= self.CONFIRMED_OVERLAP for b in returned)
+        ]
 
     def tracks(self) -> list[Track]:
         return self._builder.tracks()

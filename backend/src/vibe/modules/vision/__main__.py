@@ -4,9 +4,13 @@
     analyze VIDEO -d SPEC ...     detect + track, write detections and tracks to the cache
     retrack VIDEO --from KEY      new tracks from cached detections (other tracker or settings)
     list VIDEO                    the cached detection and track keys for a video
+    default VIDEO --key KEY       mark a cached track set as the one the app uses for this video
 
 Every cached track set is a column in ``python -m vibe.benchmark report``, which is how models
 are compared. Times printed here are wall time on this machine, for orientation only.
+
+The cache is keyed by the video's hash, so these commands read the video to hash it (and
+``analyze`` to decode it) but never copy it into the data folder.
 """
 
 import argparse
@@ -76,6 +80,10 @@ def _parser() -> argparse.ArgumentParser:
 
     listing = commands.add_parser("list", help="cached keys for a video")
     listing.add_argument("video", type=Path)
+
+    default = commands.add_parser("default", help="mark a track set as the video's default")
+    default.add_argument("video", type=Path)
+    default.add_argument("--key", required=True, help="a tracks cache key (see `list`)")
     return parser
 
 
@@ -98,7 +106,7 @@ def _detectors() -> int:
 
 
 def _analyze(storage: Storage, args: argparse.Namespace) -> int:
-    ref = storage.add_video(args.video)
+    # Detectors and tracker first: missing weights or packages fail before any video is read.
     detectors = [make_detector(spec) for spec in args.detector]
     for spec, det in zip(args.detector, detectors, strict=True):
         info = DETECTORS[spec.partition(":")[0].strip()]
@@ -106,12 +114,13 @@ def _analyze(storage: Storage, args: argparse.Namespace) -> int:
             print(f"warning: {det.name} is {info.license}", file=sys.stderr)
         print(f"detector {det.name} on {getattr(det, 'device', 'cpu')}")
     tracker = _tracker(args)
-    analysis = analyze_video(storage.video_path(ref), detectors, tracker, every=args.every)
+    sha = cache.video_sha256(args.video)
+    analysis = analyze_video(args.video, detectors, tracker, every=args.every)
     det_key = cache.detections_key(detectors, args.every)
     trk_key = cache.tracks_key(det_key, tracker.name, tracker.settings)
-    cache.save_detections(storage, ref.sha256, det_key, analysis.detections)
-    tracks = cache.save_tracks(storage, ref.sha256, trk_key, analysis.tracks)
-    print(f"video:   {ref.original_name} ({ref.sha256[:12]})")
+    cache.save_detections(storage, sha, det_key, analysis.detections)
+    tracks = cache.save_tracks(storage, sha, trk_key, analysis.tracks)
+    print(f"video:   {args.video.name} ({sha[:12]})")
     print(f"detections key: {det_key}")
     print(f"tracks key:     {trk_key}")
     _summary(tracks, analysis.seconds, analysis.frames)
@@ -119,26 +128,34 @@ def _analyze(storage: Storage, args: argparse.Namespace) -> int:
 
 
 def _retrack(storage: Storage, args: argparse.Namespace) -> int:
-    ref = storage.add_video(args.video)
-    detections = cache.load_detections(storage, ref.sha256, args.key)
+    sha = cache.video_sha256(args.video)
+    detections = cache.load_detections(storage, sha, args.key)
     tracker = _tracker(args)
     tracks = retrack(detections, tracker)
     trk_key = cache.tracks_key(args.key, tracker.name, tracker.settings)
-    tracks = cache.save_tracks(storage, ref.sha256, trk_key, tracks)
+    tracks = cache.save_tracks(storage, sha, trk_key, tracks)
     print(f"tracks key: {trk_key}")
     _summary(tracks, None, len(detections.frames))
     return 0
 
 
 def _list(storage: Storage, args: argparse.Namespace) -> int:
-    ref = storage.add_video(args.video)
+    sha = cache.video_sha256(args.video)
+    default = cache.default_tracks_key(storage, sha)
     for kind, keys in (
-        ("detections", cache.detection_keys(storage, ref.sha256)),
-        ("tracks", cache.track_keys(storage, ref.sha256)),
+        ("detections", cache.detection_keys(storage, sha)),
+        ("tracks", cache.track_keys(storage, sha)),
     ):
         print(f"{kind}:")
         for key in keys or ["(none)"]:
-            print(f"  {key}")
+            print(f"  {key}{'  (default)' if kind == 'tracks' and key == default else ''}")
+    return 0
+
+
+def _default(storage: Storage, args: argparse.Namespace) -> int:
+    sha = cache.video_sha256(args.video)
+    cache.set_default_tracks(storage, sha, args.key)
+    print(f"default tracks for {args.video.name} ({sha[:12]}): {args.key}")
     return 0
 
 
@@ -147,13 +164,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "detectors":
         return _detectors()
     storage = Storage(args.data_dir)
-    run = {"analyze": _analyze, "retrack": _retrack, "list": _list}[args.command]
+    run = {"analyze": _analyze, "retrack": _retrack, "list": _list, "default": _default}[
+        args.command
+    ]
     try:
         return run(storage, args)
-    except (NotInstalled, StorageError, VideoError, ValidationError, ValueError) as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 1
-    except FileNotFoundError as e:
+    except (
+        NotInstalled,
+        cache.CacheError,
+        StorageError,
+        VideoError,
+        ValidationError,
+        ValueError,
+        FileNotFoundError,
+    ) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
 

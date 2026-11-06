@@ -18,7 +18,7 @@ from pathlib import Path
 
 import numpy as np
 
-from vibe.modules.vision.detection import Detection, NotInstalled
+from vibe.modules.vision.detection import Detection, NotInstalled, normalize_box
 
 LICENSE_NOTE = "AGPL-3.0, comparison only (D-015)"
 
@@ -68,7 +68,7 @@ class UltralyticsDetector:
         for (x1, y1, x2, y2), score, cls in zip(
             boxes.xyxyn.tolist(), boxes.conf.tolist(), boxes.cls.tolist(), strict=True
         ):
-            x1, y1, x2, y2 = (round(min(max(v, 0.0), 1.0), 6) for v in (x1, y1, x2, y2))
-            if x2 > x1 and y2 > y1:
-                found.append(Detection(result.names[int(cls)], (x1, y1, x2, y2), float(score)))
+            box = normalize_box(x1, y1, x2, y2, 1, 1)  # already normalized: clip and drop empty
+            if box is not None:
+                found.append(Detection(result.names[int(cls)], box, float(score)))
         return found
