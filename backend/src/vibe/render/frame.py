@@ -77,12 +77,12 @@ class FrameRenderer:
                 self._report(track_id, "no track with this id, so the whole frame is masked", t)
                 apply_effect(out, (0, 0, width, height), span.effect)
                 continue
-            for path in paths:
-                placed = path.at(t)
-                if placed is None:
-                    continue  # off screen: past the hold at either end of the track
-                padding = span.effect.padding + placed.extra_padding
-                apply_effect(out, to_pixels(placed.box, padding, width, height), span.effect)
+            placed = [path.at(t) for path in paths]
+            if all(box.lost for box in placed):
+                self._report(track_id, "lost, so its nearest known box stays masked", t)
+            for box in placed:
+                padding = span.effect.padding + box.extra_padding
+                apply_effect(out, to_pixels(box.box, padding, width, height), span.effect)
         return out
 
     def _report(self, track_id: str, message: str, t: float) -> None:

@@ -1,9 +1,10 @@
 """Where a track's box is at a given time, and that box in pixels.
 
 Tracks give normalized ``[x1, y1, x2, y2]`` boxes at keyframes (``contract/tracks.py``). Between
-two keyframes the box moves linearly. Past either end of a track, the nearest box is held for
-``HOLD_SECONDS`` and grows while it's held: a detector losing a target doesn't mean the target
-left (docs/ARCHITECTURE.md, "Renderer"). After that, the track is off screen.
+two keyframes the box moves linearly. Past either end of a track, the nearest box is held and
+grows, up to a limit: a detector losing a target doesn't mean the target left, so a mask in
+effect never just stops (docs/ARCHITECTURE.md, "Renderer"). A box held for more than
+``HOLD_SECONDS`` is marked ``lost``, because the target may have moved out of it.
 
 The constants are starting points; F-11 tunes them on real detections.
 """
@@ -15,10 +16,13 @@ from dataclasses import dataclass
 from vibe.contract import Keyframe, Track
 
 HOLD_SECONDS = 0.5
-"""How long a box stays after its track's last keyframe, and before its first."""
+"""How long a box can be held from a keyframe before the target counts as lost."""
 
 HOLD_GROWTH = 0.5
 """How fast a held box grows, as a fraction of its size per second held (0.5 s → +25%)."""
+
+MAX_HOLD_GROWTH = 0.5
+"""The most a held box grows, so a target lost for a long time doesn't hide the whole frame."""
 
 UNCERTAIN_PADDING = 0.25
 """Padding added on top of the effect's own, next to an ``uncertain`` keyframe."""
@@ -35,6 +39,8 @@ class PlacedBox:
 
     box: Box
     extra_padding: float
+    lost: bool = False
+    """No detection near this moment, so the target may not be inside the box."""
 
 
 class TrackPath:
@@ -44,8 +50,8 @@ class TrackPath:
         self.track = track
         self._times = [k.t for k in track.keyframes]
 
-    def at(self, t: float) -> PlacedBox | None:
-        """The box at source time ``t``, or ``None`` when the track isn't on screen."""
+    def at(self, t: float) -> PlacedBox:
+        """The box at source time ``t``. There's always one: a mask in effect never stops."""
         keyframes = self.track.keyframes
         first, last = keyframes[0], keyframes[-1]
         if t < first.t:
@@ -67,11 +73,10 @@ class TrackPath:
         return PlacedBox(box, UNCERTAIN_PADDING if uncertain else 0.0)
 
 
-def _held(keyframe: Keyframe, held: float) -> PlacedBox | None:
-    if held > HOLD_SECONDS:
-        return None
+def _held(keyframe: Keyframe, held: float) -> PlacedBox:
+    growth = min(HOLD_GROWTH * held, MAX_HOLD_GROWTH)
     uncertain = UNCERTAIN_PADDING if keyframe.state == "uncertain" else 0.0
-    return PlacedBox(keyframe.box, HOLD_GROWTH * held + uncertain)
+    return PlacedBox(keyframe.box, growth + uncertain, lost=held > HOLD_SECONDS)
 
 
 def to_pixels(box: Box, padding: float, width: int, height: int) -> Rect:

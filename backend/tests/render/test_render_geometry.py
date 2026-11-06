@@ -6,6 +6,7 @@ from vibe.contract import Keyframe, Track
 from vibe.render.geometry import (
     HOLD_GROWTH,
     HOLD_SECONDS,
+    MAX_HOLD_GROWTH,
     UNCERTAIN_PADDING,
     TrackPath,
     to_pixels,
@@ -26,9 +27,9 @@ MOVING = track((1.0, (0.0, 0.0, 0.2, 0.2), "detected"), (2.0, (0.4, 0.2, 0.6, 0.
 
 def test_box_moves_linearly_between_keyframes() -> None:
     placed = TrackPath(MOVING).at(1.5)
-    assert placed is not None
     assert placed.box == pytest.approx((0.2, 0.1, 0.4, 0.4))
     assert placed.extra_padding == 0
+    assert not placed.lost
 
 
 def test_box_at_a_keyframe_is_that_keyframe() -> None:
@@ -40,22 +41,30 @@ def test_box_at_a_keyframe_is_that_keyframe() -> None:
 @pytest.mark.parametrize(("t", "held"), [(0.75, 0.25), (2.25, 0.25), (2.5, 0.5)])
 def test_box_is_held_and_grows_past_the_ends(t: float, held: float) -> None:
     placed = TrackPath(MOVING).at(t)
-    assert placed is not None
     nearest = MOVING.keyframes[0] if t < 1 else MOVING.keyframes[-1]
     assert placed.box == nearest.box
     assert placed.extra_padding == pytest.approx(HOLD_GROWTH * held)
+    assert not placed.lost
 
 
-@pytest.mark.parametrize("t", [1.0 - HOLD_SECONDS - 0.01, 2.0 + HOLD_SECONDS + 0.01, 10.0])
-def test_track_is_off_screen_after_the_hold(t: float) -> None:
-    assert TrackPath(MOVING).at(t) is None
+@pytest.mark.parametrize("t", [1.0 - HOLD_SECONDS - 0.01, 2.0 + HOLD_SECONDS + 0.01, 100.0])
+def test_a_lost_target_keeps_its_box_and_is_marked_lost(t: float) -> None:
+    placed = TrackPath(MOVING).at(t)
+    nearest = MOVING.keyframes[0] if t < 1 else MOVING.keyframes[-1]
+    assert placed.box == nearest.box
+    assert placed.lost
 
 
-def test_single_keyframe_track_is_held_around_it() -> None:
+def test_a_held_box_stops_growing() -> None:
+    assert TrackPath(MOVING).at(100.0).extra_padding == MAX_HOLD_GROWTH
+
+
+def test_single_keyframe_track_is_held_for_good() -> None:
     path = TrackPath(track((0.0, (0.1, 0.1, 0.2, 0.2), "user")))
     assert path.at(0.0).box == (0.1, 0.1, 0.2, 0.2)
-    assert path.at(HOLD_SECONDS) is not None
-    assert path.at(HOLD_SECONDS + 0.01) is None
+    assert not path.at(HOLD_SECONDS).lost
+    assert path.at(60.0).box == (0.1, 0.1, 0.2, 0.2)
+    assert path.at(60.0).lost
 
 
 @pytest.mark.parametrize("states", [("uncertain", "detected"), ("detected", "uncertain")])

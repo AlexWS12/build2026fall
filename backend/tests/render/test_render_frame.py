@@ -109,16 +109,34 @@ def test_track_with_no_geometry_masks_the_whole_frame() -> None:
     assert issue.first_seen == 0.0
 
 
-def test_off_screen_track_masks_nothing() -> None:
-    track = Track(
-        track_id="trk_1",
+def lost_after_0(track_id: str = "trk_1") -> Track:
+    return Track(
+        track_id=track_id,
         label="person",
         source="detector",
         keyframes=[Keyframe(t=0.0, box=LEFT, conf=0.9, state="detected")],
     )
-    renderer = FrameRenderer(state_of(mask(["trk_1"])), [track])
-    image = noise()
-    assert np.array_equal(renderer.render(image, 5.0), image)
+
+
+def test_lost_track_stays_masked_and_is_reported() -> None:
+    renderer = FrameRenderer(state_of(mask(["trk_1"])), [lost_after_0()])
+    assert not renderer.render(noise(), 0.25)[:60, :80].any()
+    assert renderer.issues == []  # a short hold is normal, so it isn't reported
+
+    for t in (3.5, 5.0, 60.0):
+        assert not renderer.render(noise(), t)[:60, :80].any()
+    [issue] = renderer.issues  # reported once, not once per frame
+    assert issue.track_id == "trk_1"
+    assert issue.first_seen == 3.5
+    assert "lost" in issue.message
+
+
+def test_target_seen_by_another_track_with_its_id_is_not_lost() -> None:
+    tracks = [lost_after_0(), box_track("trk_1", (0.75, 0.75, 1.0, 1.0))]
+    renderer = FrameRenderer(state_of(mask(["trk_1"])), tracks)
+    out = renderer.render(noise(), 5.0)
+    assert not out[:60, :80].any()  # both stay masked, to be safe
+    assert not out[180:, 240:].any()
     assert renderer.issues == []
 
 
