@@ -9,7 +9,7 @@ import re
 
 from pydantic import Field
 
-from vibe.contract import AddAudioFilter, AddMask, ContractError, Cut, Mute, Op, TimeRange
+from vibe.contract import AddAudioFilter, AddMask, ContractError, Cut, Mute, Op, TimeRange, Unmute
 from vibe.contract.common import Effect, Model
 from vibe.toolbox.context import ToolContext
 from vibe.toolbox.spec import ToolError
@@ -112,6 +112,13 @@ class MuteArgs(Model):
     speaker: str | None = Field(default=None, description="Speaker id; null = all audio.")
 
 
+class UnmuteArgs(Model):
+    time_range: TimeRange | None = Field(default=None, description="Null = the whole clip.")
+    speaker: str | None = Field(
+        default=None, description="Speaker id; null = the all-audio mute, not every speaker."
+    )
+
+
 class DenoiseArgs(Model):
     time_range: TimeRange | None = Field(default=None, description="Null = the whole clip.")
     strength: float | None = Field(
@@ -165,6 +172,18 @@ def mute(args: MuteArgs, ctx: ToolContext) -> EditResult:
         speaker=args.speaker,
     )
     return _write("mute", op, ctx)
+
+
+def unmute(args: UnmuteArgs, ctx: ToolContext) -> EditResult:
+    """Bring the sound back over a range, for the same ``speaker`` a mute was for. Unlike undo,
+    it can lift part of a mute ("unmute 0:12 to 0:15") or one made by an earlier request."""
+    op = Unmute(
+        request_id=ctx.request_id,
+        source=ctx.source,
+        time_range=args.time_range,
+        speaker=args.speaker,
+    )
+    return _write("unmute", op, ctx)
 
 
 def denoise(args: DenoiseArgs, ctx: ToolContext) -> EditResult:

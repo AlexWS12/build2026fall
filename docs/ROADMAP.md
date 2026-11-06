@@ -48,7 +48,7 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 ### Audio
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
-| F-30 | Mute a time range | Must | F-04 | idea | |
+| F-30 | Mute a time range | Must | F-04 | in progress | eduardo, `eduardo/f30-mute` |
 | F-31 | Transcription with word timestamps | Should | F-03 | idea | Whisper family |
 | F-32 | Who spoke when (diarization) + mute a specific speaker | Should | F-31 | idea | Needs separation if speakers overlap |
 | F-33 | Background noise reduction | Must | F-03 | in progress | nickolas, `nickolas/f33-denoise` |

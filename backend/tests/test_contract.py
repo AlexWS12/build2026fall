@@ -214,6 +214,20 @@ def test_speaker_mutes_are_separate_from_all_audio_mutes() -> None:
     assert [(m.speaker, m.start, m.end) for m in fold(ops).mutes] == [("spk_1", 0, 10)]
 
 
+def test_mutes_at_answers_per_frame() -> None:
+    state = fold(
+        [
+            Mute(request_id="r_1", source="agent", speaker="spk_1", time_range=tr(0, 10)),
+            Mute(request_id="r_2", source="agent", time_range=tr(5, 6)),
+            Mute(request_id="r_3", source="agent", time_range=tr(8)),
+        ]
+    )
+    assert [m.speaker for m in state.mutes_at(5.5)] == ["spk_1", None]
+    assert [m.speaker for m in state.mutes_at(6)] == ["spk_1"]  # the end is excluded
+    assert [m.request_id for m in state.mutes_at(50)] == ["r_3"]  # open-ended
+    assert state.mutes_at(-1) == []
+
+
 def test_audio_filter_add_and_remove() -> None:
     ops = [
         AddAudioFilter(request_id="r_1", source="agent", filter="denoise", strength=0.5),

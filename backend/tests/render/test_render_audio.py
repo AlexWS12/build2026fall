@@ -104,3 +104,55 @@ def test_audio_filter_is_refused() -> None:
     denoise = AddAudioFilter(request_id="r", source="agent", filter="denoise")
     with pytest.raises(UnsupportedEdit, match="doesn't apply them yet"):
         render_audio(SAMPLES, RATE, state_of(denoise))
+
+
+# --- Fades at the edges (RATE above is too low for a fade, so these use 1 kHz) ------------
+
+FADE_RATE = 1000  # FADE_SECONDS (10 ms) is 10 samples
+TONE = np.ones(3000, dtype=np.float32)  # 3 s of a constant level, so the gain is what's left
+
+
+def test_mute_fades_out_before_and_in_after_and_stays_silent_inside() -> None:
+    out = render_audio(TONE, FADE_RATE, state_of(mute(1.0, 2.0)))
+    assert not out[1000:2000].any()  # the muted span is exactly silent
+    fade_out, fade_in = out[990:1000], out[2000:2010]
+    assert np.all(np.diff(fade_out) < 0) and 0 < fade_out.min() and fade_out.max() < 1
+    assert np.all(np.diff(fade_in) > 0) and 0 < fade_in.min() and fade_in.max() < 1
+    assert np.all(out[:990] == 1) and np.all(out[2010:] == 1)  # the rest is untouched
+
+
+def test_cut_join_fades_on_both_sides_and_keeps_the_same_samples() -> None:
+    out = render_audio(TONE, FADE_RATE, state_of(cut(1.0, 2.0)))
+    assert len(out) == 2000  # the fade doesn't change what's kept
+    join = out[990:1010]  # the last 10 kept samples before the cut, then the first 10 after
+    assert join.max() < 1 and join.min() > 0
+    assert np.all(out[:990] == 1) and np.all(out[1010:] == 1)
+
+
+def test_no_fade_at_the_ends_of_the_clip() -> None:
+    out = render_audio(TONE, FADE_RATE, state_of(mute(0.0, 1.0), mute(2.5, None)))
+    assert not out[:1000].any() and not out[2500:].any()
+    assert np.all(out[1010:2490] == 1)
+
+
+def test_back_to_back_mutes_dont_fade_in_between() -> None:
+    out = render_audio(TONE, FADE_RATE, state_of(mute(1.0, 1.5), mute(1.5, 2.0)))
+    assert not out[1000:2000].any()
+
+
+def test_fades_are_the_same_chunk_by_chunk() -> None:
+    state = state_of(mute(0.5, 1.0), cut(1.2, 1.7), mute(2.4, None))
+    whole = render_audio(TONE, FADE_RATE, state)
+    for size in (1, 7, 100, 1003):
+        chunks = [
+            apply_audio_edits(TONE[i : i + size], FADE_RATE, state, first_sample=i)
+            for i in range(0, len(TONE), size)
+        ]
+        assert np.array_equal(np.concatenate(chunks), whole), size
+
+
+def test_stereo_fades_every_channel_the_same() -> None:
+    stereo = np.stack([TONE, -TONE], axis=1)
+    out = render_audio(stereo, FADE_RATE, state_of(mute(1.0, 2.0)))
+    assert np.array_equal(out[:, 0], -out[:, 1])
+    assert out.dtype == np.float32

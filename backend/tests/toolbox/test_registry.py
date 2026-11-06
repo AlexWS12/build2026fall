@@ -14,6 +14,7 @@ def test_the_registry_has_the_planners_tools() -> None:
         "add_mask",
         "cut_range",
         "mute",
+        "unmute",
         "denoise",
     }
 
