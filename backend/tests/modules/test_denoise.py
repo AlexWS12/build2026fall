@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from vibe.modules.denoise import DenoiseError, denoise
+from vibe.modules.denoise import DenoiseError, DenoiseState, denoise, denoise_chunk
 
 RATE = 16000
 
@@ -120,8 +120,59 @@ def test_backends_that_arent_built_fail_instead_of_returning_noisy_audio(backend
         (np.zeros(RATE, dtype=np.float32), RATE, -0.1),
         (np.zeros(RATE, dtype=np.float32), 0, None),
         (np.zeros((2, 2, 2), dtype=np.float32), RATE, None),
+        (np.zeros(RATE, dtype=np.int16), RATE, None),
+        (np.zeros(RATE, dtype=np.int32), RATE, None),
     ],
 )
 def test_bad_arguments_raise(samples: np.ndarray, rate: int, strength: float | None) -> None:
     with pytest.raises(ValueError):
         denoise(samples, rate, strength, backend="stub")
+
+
+@pytest.mark.parametrize("rate", [1, 8, 60, 1000, 8000])
+def test_low_sample_rates_work(rate: int) -> None:
+    noisy = tone_with_gaps(seconds=4.0, rate=max(rate, 1000))[0][: 4 * rate] + noise(4 * rate)
+
+    out = denoise(noisy, rate, backend="stub")
+
+    assert out.shape == noisy.shape and np.isfinite(out).all()
+
+
+def test_small_strength_changes_the_audio_only_a_little() -> None:
+    noisy = tone_with_gaps()[0] + noise(4 * RATE)
+
+    out = denoise(noisy, RATE, strength=0.01, backend="stub")
+
+    assert db(out - noisy) < db(noisy) - 35  # 1% of the effect, not the full gate
+
+
+def test_float64_is_computed_in_float64() -> None:
+    noisy = (tone_with_gaps()[0] + noise(4 * RATE)).astype(np.float64)
+
+    out = denoise(noisy, RATE, strength=1e-9, backend="stub")
+
+    assert out.dtype == np.float64
+    assert np.max(np.abs(out - noisy)) < 1e-10  # float32 math would be off by ~1e-8
+
+
+def test_float16_comes_back_float16() -> None:
+    noisy = (tone_with_gaps()[0] + noise(4 * RATE)).astype(np.float16)
+
+    assert denoise(noisy, RATE, backend="stub").dtype == np.float16
+
+
+@pytest.mark.parametrize("backend", ["stub", "local", "remote"])
+def test_per_chunk_denoise_has_its_shape_but_isnt_built(backend: str) -> None:
+    state = DenoiseState(sample_rate=RATE, channels=1)
+
+    with pytest.raises(DenoiseError, match="per-chunk"):
+        denoise_chunk(noise(RATE // 10), state, backend=backend)  # type: ignore[arg-type]
+
+
+def test_per_chunk_denoise_checks_its_arguments_first() -> None:
+    state = DenoiseState(sample_rate=RATE, channels=2)
+
+    with pytest.raises(ValueError, match="channels"):
+        denoise_chunk(noise(RATE // 10), state, backend="stub")
+    with pytest.raises(ValueError, match="floating"):
+        denoise_chunk(np.zeros((160, 2), dtype=np.int16), state, backend="stub")

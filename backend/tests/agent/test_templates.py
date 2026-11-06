@@ -59,12 +59,27 @@ def test_mute_without_a_time_mutes_the_whole_clip() -> None:
         "reduce the noise",
         "cut the background hiss",
         "remove the hum from the audio",
+        "remove the background noises",
+        "reduce the hums",
+        "cut the hisses",
         "denoise",
         "denoise the audio",
     ],
 )
 def test_noise_requests_denoise_the_whole_clip_instead_of_cutting(text: str) -> None:
     assert calls(text) == [{"step_id": "s1", "tool": "denoise", "args": {}}]
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["cut the noise from 0:10 to 0:20", "delete the background hiss in the first half"],
+)
+def test_cutting_noise_over_a_range_is_asked_not_guessed(text: str) -> None:
+    assert parse(text) is None  # cut that part out, or filter it?
+
+
+def test_removing_noise_over_a_range_still_denoises() -> None:
+    assert [c["tool"] for c in calls("remove the noise from 0:10 to 0:20")] == ["denoise"]
 
 
 def test_denoise_with_a_time_filters_only_that_range() -> None:

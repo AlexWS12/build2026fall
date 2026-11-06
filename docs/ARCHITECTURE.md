@@ -59,7 +59,7 @@ A chat message, a UI action (click a target, draw a box, drag a box), or a **sta
 These are wrapped by the query tools and swappable behind them.
 - **Vision:** detection (open vocabulary), segmentation, tracking, visual questions (VLM), identity (face/person embeddings).
 - **Audio:** transcription with word timestamps, diarization (who spoke when), speaker separation, noise suppression.
-  - **Noise suppression (F-33):** `vibe.modules.denoise.denoise(samples, rate, strength)`. The `stub` backend is a numpy spectral gate (no model; it learns steady noise from the clip's quieter frames). `local` / `remote` raise until a model is chosen (candidates in the README). Whole-clip only so far; the per-chunk path comes with the model.
+  - **Noise suppression (F-33):** `vibe.modules.denoise.denoise(samples, rate, strength)`. The `stub` backend is a numpy spectral gate (no model; it learns steady noise from the clip's quieter frames). `local` / `remote` raise until a model is chosen (candidates in the README). Takes floating-point audio only and computes in its precision. The live path `denoise_chunk(chunk, state, strength)` with a `DenoiseState` (running noise estimate and overlap tail) has its signature fixed but raises `DenoiseError` on every backend until the streaming model lands.
 - **Generative:** video inpainting (object removal), and later background replacement.
 - **The rule for every module:** expose a **whole-clip** call (offline) and, where it could ever run live, a **per-frame / per-chunk** call. Even if only the offline path is implemented at first, the interface leaves room for the other.
 - Candidates are in the README's tech stack table. Heavy models run on our GPUs, possibly behind one resident model server, as Knight Hacks did.

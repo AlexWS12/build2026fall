@@ -12,7 +12,7 @@ from typing import Any, Protocol
 from pydantic import ValidationError
 
 from vibe.agent.plan import Clarify, Plan, PlannerResult
-from vibe.agent.templates import MixedTimeError, normalize, parse
+from vibe.agent.templates import NOISE_WORDS, MixedTimeError, normalize, parse
 from vibe.agent.timeparse import TimeParseError
 from vibe.agent.validate import validate_plan
 from vibe.toolbox import TOOLS, ToolSpec
@@ -101,6 +101,17 @@ def _question_for(text: str) -> str:
     """A question that tells the user what the planner needs to go ahead."""
     words = normalize(text).split()
     verb = words[0] if words else ""
+    noisy = not NOISE_WORDS.isdisjoint(words)
+    if noisy and verb in ("cut", "delete"):
+        return (
+            "Should I reduce the noise in that part, or cut that part out? Say 'reduce the noise "
+            "from 0:10 to 0:20' or 'cut 0:10 to 0:20'."
+        )
+    if noisy or verb in ("denoise", "reduce"):
+        return (
+            "When should I reduce the noise? Give a time range like 0:10 to 0:20, or say "
+            "'reduce the noise' for the whole video."
+        )
     if verb == "cut":
         return "Which part should I cut? Give a time range like 0:10 to 0:20."
     if verb in ("mute", "silence"):
