@@ -19,6 +19,7 @@ import av
 import av.error
 import numpy as np
 from av.container import OutputContainer
+from av.video.reformatter import ColorRange, Colorspace
 
 from vibe.contract import TimelineState, Track
 from vibe.render.audio import apply_audio_edits, check_audio
@@ -30,6 +31,11 @@ VIDEO_CODEC = "libx264"
 PIX_FMT = "yuv420p"
 CRF = 18
 """x264 quality: 18 looks close to lossless. Lower is better and bigger."""
+
+COLORSPACE = Colorspace.ITU709
+COLOR_RANGE = ColorRange.MPEG
+BT709_TAG = 1
+"""The number for BT.709 in a stream's colour primaries and transfer tags."""
 
 AUDIO_CODEC = "aac"
 AUDIO_CHUNK_SECONDS = 0.1
@@ -97,6 +103,9 @@ def _write(
             # Output timestamps in the source's time base keep variable-frame-rate timing.
             video.codec_context.time_base = info.time_base
             video.options = {"crf": str(CRF)}
+            context = video.codec_context
+            context.colorspace, context.color_range = COLORSPACE, COLOR_RANGE
+            context.color_primaries, context.color_trc = BT709_TAG, BT709_TAG
             sound = None
             if info.audio is not None:
                 sound = _AudioWriter(out, source, info.audio, index.end, state)
@@ -106,7 +115,7 @@ def _write(
                 if state.is_cut(frame.time):
                     continue
                 image = renderer.render(frame.image, frame.time)[:height, :width]
-                encoded = av.VideoFrame.from_ndarray(np.ascontiguousarray(image), format="rgb24")
+                encoded = _to_bt709(image)
                 encoded.time_base = info.time_base
                 output_time = state.source_to_output(frame.time)
                 # Rounding after a cut could land on the previous frame's tick: keep it after.
@@ -123,6 +132,16 @@ def _write(
     except av.error.FFmpegError as e:
         raise RenderError(f"encoding {path.name} failed: {e}") from e
     return frames, state.source_to_output(index.end)
+
+
+def _to_bt709(image: np.ndarray) -> av.VideoFrame:
+    """An RGB image as a tagged BT.709 frame. Left to itself, the conversion to yuv420p uses
+    BT.601 and tags nothing, and players then show HD video with the wrong colours."""
+    frame = av.VideoFrame.from_ndarray(np.ascontiguousarray(image), format="rgb24").reformat(
+        format=PIX_FMT, dst_colorspace=COLORSPACE, dst_color_range=COLOR_RANGE
+    )
+    frame.colorspace, frame.color_range = COLORSPACE, COLOR_RANGE
+    return frame
 
 
 class _AudioWriter:

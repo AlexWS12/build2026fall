@@ -8,6 +8,7 @@ from pathlib import Path
 import av
 import numpy as np
 import pytest
+from av.video.reformatter import ColorRange, Colorspace
 from pydantic import TypeAdapter
 from render_clip import FPS, FRAMES, HEIGHT, TONE_RMS, WIDTH
 
@@ -156,6 +157,24 @@ def test_sound_and_picture_are_stored_together(long_clip: Path, tmp_path: Path) 
     order = stream_order(result.path)
     assert "a" in order[:FPS]
     assert max(len(run) for run in re.findall("v+", order)) < FPS  # under a second at a time
+
+
+def first_frame_luma(path: Path) -> float:
+    with av.open(str(path)) as container:
+        frame = next(container.decode(video=0))
+        return float(frame.to_ndarray(format="yuv420p")[: frame.height].mean())
+
+
+def test_hd_keeps_its_colours_and_says_which_they_are(hd_red_clip: Path, tmp_path: Path) -> None:
+    # Players assume BT.709 for HD, so HD written in BT.601 and left untagged looks wrong.
+    result = export(hd_red_clip, state_of(), [], tmp_path / "out.mp4")
+    assert first_frame_luma(result.path) == pytest.approx(first_frame_luma(hd_red_clip), abs=2)
+    with av.open(str(result.path)) as container:
+        frame = next(container.decode(video=0))
+        context = container.streams.video[0].codec_context
+        assert frame.colorspace == Colorspace.ITU709
+        assert frame.color_range == ColorRange.MPEG
+        assert (context.color_primaries, context.color_trc) == (1, 1)  # 1 is BT.709
 
 
 def test_odd_size_is_cropped_to_even(odd_size_clip: Path, tmp_path: Path) -> None:

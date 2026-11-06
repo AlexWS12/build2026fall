@@ -67,6 +67,20 @@ def long_clip(render_clip_dir: Path) -> Path:
     return path
 
 
+@pytest.fixture(scope="session")
+def hd_red_clip(render_clip_dir: Path) -> Path:
+    """Flat red at 1280×720, in BT.709 and tagged so, like a phone's footage."""
+    path = render_clip_dir / "hd_red.mp4"
+    _ffmpeg(
+        "-f", "lavfi", "-i", f"color=c=red:s=1280x720:r={FPS}:d=0.2",
+        "-vf", "scale=out_color_matrix=bt709,format=yuv420p",
+        "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
+        "-c:v", "libx264", "-qp", "0",
+        str(path),
+    )  # fmt: skip
+    return path
+
+
 def _clip_with_audio(path: Path, *audio_args: str) -> Path:
     """One second of the pattern (lossless, so MKV holds it) plus the tone, encoded as asked."""
     _ffmpeg(
