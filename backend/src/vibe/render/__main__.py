@@ -83,7 +83,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         result = _run(args)
-    except (CliError, RenderError, VideoError, FileNotFoundError) as exc:
+    except (CliError, RenderError, VideoError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     summary = dataclasses.asdict(result) | {"path": str(result.path)}

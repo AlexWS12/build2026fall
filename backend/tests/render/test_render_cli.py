@@ -91,6 +91,31 @@ def test_bad_input_is_an_error_not_a_traceback(
     assert not (tmp_path / "out.mp4").exists()
 
 
+def test_output_that_cant_be_written_is_an_error(
+    capsys: pytest.CaptureFixture[str], pattern_clip: Path, tmp_path: Path
+) -> None:
+    out_path = tmp_path / "out.mp4"
+    out_path.mkdir()  # a folder in the way: PermissionError or IsADirectoryError, by platform
+    code, _, err = run(
+        capsys, "export", str(pattern_clip), "--log", str(SESSION), "--tracks", str(TRACKS),
+        "-o", str(out_path),
+    )  # fmt: skip
+    assert code == 1
+    assert err.startswith("error: ")
+    assert [p.name for p in tmp_path.iterdir()] == ["out.mp4"]  # no temporary file left behind
+
+
+def test_overwriting_the_source_is_an_error(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"a video")
+    code, _, err = run(capsys, "export", str(clip), "--log", str(SESSION), "-o", str(clip))
+    assert code == 1
+    assert "overwrite" in err
+    assert clip.read_bytes() == b"a video"
+
+
 def test_bad_tracks_file_is_an_error(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     bad = tmp_path / "tracks.json"
     bad.write_text('[{"track_id": "trk_1"}]')
