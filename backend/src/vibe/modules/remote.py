@@ -20,6 +20,7 @@ This is the offline path only: nothing per-frame (live mode) calls the network.
 import hashlib
 import hmac
 import json
+import os
 import tempfile
 import threading
 import urllib.error
@@ -33,7 +34,7 @@ from urllib.parse import urlsplit
 from vibe import config
 from vibe.modules.backend import Analysis, make_analysis, run_analysis
 from vibe.modules.cache import ModuleError
-from vibe.storage import Storage, StorageError, VideoRef
+from vibe.storage import Storage, VideoRef
 
 API = "/v1"
 
@@ -223,6 +224,7 @@ def create_app(
     """The model server's FastAPI app. ``token``: require ``Authorization: Bearer <token>``."""
     from fastapi import Depends, FastAPI, HTTPException, Request
     from fastapi.responses import JSONResponse
+    from starlette.concurrency import run_in_threadpool
 
     from vibe.modules.backend import registered
 
@@ -279,26 +281,30 @@ def create_app(
             expected = VideoRef(sha256=sha256, ext=ext, original_name="remote")
         except ValueError:
             raise fail(400, "bad_request", "bad sha256 or ext") from None
-        if storage.video_path(expected).is_file():
+        target = storage.video_path(expected)
+        if target.is_file():
             return {"sha256": sha256, "stored": False}
-        storage.videos_dir.mkdir(parents=True, exist_ok=True)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # Hash while streaming, write off the event loop, then rename the verified file into
+        # place: one pass over the bytes, and other requests keep being served meanwhile.
         digest = hashlib.sha256()
         size = 0
-        with tempfile.TemporaryDirectory(dir=storage.root) as tmpdir:
-            tmp = Path(tmpdir) / f"upload{ext}"
-            with tmp.open("wb") as f:
+        fd, tmp_name = tempfile.mkstemp(dir=target.parent, prefix=".upload.", suffix=".tmp")
+        tmp = Path(tmp_name)
+        try:
+            with os.fdopen(fd, "wb") as f:
                 async for chunk in request.stream():
                     size += len(chunk)
                     if size > MAX_UPLOAD_BYTES:
                         raise fail(413, "too_large", "video is larger than the server allows")
                     digest.update(chunk)
-                    f.write(chunk)
+                    await run_in_threadpool(f.write, chunk)
+                await run_in_threadpool(os.fsync, f.fileno())
             if digest.hexdigest() != sha256:
                 raise fail(400, "hash_mismatch", "uploaded bytes don't match the sha256")
-            try:
-                storage.add_video(tmp)
-            except StorageError as e:
-                raise fail(400, "bad_video", str(e)) from None
+            os.replace(tmp, target)
+        finally:
+            tmp.unlink(missing_ok=True)
         return {"sha256": sha256, "stored": True}
 
     return app

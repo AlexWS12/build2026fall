@@ -23,10 +23,12 @@ from typing import ClassVar, Literal
 from vibe import config
 from vibe.config import Backend
 from vibe.modules.cache import (
+    BiometricRefused,
     ModuleError,
     NoAnalysis,
     cache_key,
     cached_keys,
+    check_kind,
     pick_key,
     read_json,
     write_json,
@@ -48,6 +50,10 @@ class Analysis(ABC):
     """Cache folder, e.g. ``"tracks"`` or ``"transcript"``."""
     version: ClassVar[int] = 1
     """Bump when the code or the output format changes in a way ``settings`` doesn't show."""
+    biometric: ClassVar[bool] = False
+    """True if the output is biometric (face embeddings, voiceprints...). Such an analysis never
+    goes through :func:`run_analysis`, whatever its ``kind`` is called: keep it in memory
+    (D-017)."""
 
     def __init__(self, **settings: object) -> None:
         self.settings: dict[str, object] = dict(settings)
@@ -130,6 +136,13 @@ def run_analysis(
 
     ``backend`` defaults to ``VIBE_BACKEND`` (``stub`` unless set).
     """
+    # Before any cache read, upload or model run: biometric output never enters the cache.
+    if analysis.biometric:
+        raise BiometricRefused(
+            f"{analysis.module} is biometric: run it in memory on its machine, never through "
+            "run_analysis and the shared cache (D-017)"
+        )
+    check_kind(analysis.kind)
     backend = backend or config.model_backend()
     key = analysis.key
     path = storage.cache_path(video.sha256, analysis.kind, key)

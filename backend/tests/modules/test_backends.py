@@ -181,10 +181,52 @@ def test_replay_picks_the_only_result_and_refuses_to_guess(
     assert replay(storage, video.sha256, "tracks", key="fake-l-00000002").data == []
 
 
-@pytest.mark.parametrize("kind", ["embeddings", "identity", "face_embeddings", "Biometric"])
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "embeddings",
+        "identity",
+        "face_embeddings",
+        "Biometric",
+        "face-embeddings",
+        "speaker_embedding",
+        "Identities",
+        "voiceprints",
+    ],
+)
 def test_biometric_kinds_never_reach_the_shared_cache(storage: Storage, kind: str) -> None:
     with pytest.raises(BiometricRefused, match="D-017"):
         write_json(storage, "0" * 64, kind, "sface-00000000", [[0.1, 0.2]])
+    assert not storage.cache_dir.exists()
+
+
+class BiometricFlagged(Analysis):
+    module = "test-biometric-flag"
+    kind = "faces"  # an innocent-looking kind: the flag alone must refuse it
+    biometric = True
+    calls = 0
+
+    def compute(self, video_path: Path) -> object:
+        type(self).calls += 1
+        return [[0.1, 0.2]]
+
+
+class BiometricByKind(BiometricFlagged):
+    module = "test-biometric-kind"
+    kind = "face-embeddings"
+    biometric = False
+
+
+@pytest.mark.parametrize("cls", [BiometricFlagged, BiometricByKind])
+@pytest.mark.parametrize("backend", ["stub", "local", "remote"])
+def test_biometric_analyses_are_refused_before_any_work(
+    storage: Storage, tmp_path: Path, cls: type[Analysis], backend: str
+) -> None:
+    video = _video(storage, tmp_path)
+    cls.calls = 0
+    with pytest.raises(BiometricRefused, match="D-017"):
+        run_analysis(storage, video, cls(), backend=backend)  # remote: never reaches the env
+    assert cls.calls == 0
     assert not storage.cache_dir.exists()
 
 
@@ -308,6 +350,18 @@ def test_server_checks_the_uploaded_hash(tmp_path: Path) -> None:
     assert not (tmp_path / "server" / "videos" / f"{'a' * 64}.mp4").exists()
 
 
+def test_server_upload_leaves_no_temp_files(storage: Storage, tmp_path: Path) -> None:
+    server = Storage(tmp_path / "server")
+    video = _video(storage, tmp_path, b"x" * 300_000)  # several stream chunks
+    http = TestClient(create_app(server))
+    url = f"/v1/videos/{video.sha256}?ext={video.ext}"
+    r = http.put(url, content=storage.video_path(video).read_bytes())
+    assert r.status_code == 200 and r.json()["stored"] is True
+    assert server.video_path(video).read_bytes() == storage.video_path(video).read_bytes()
+    http.put(f"/v1/videos/{'a' * 64}?ext=.mp4", content=b"bad")  # hash mismatch
+    assert sorted(p.name for p in server.videos_dir.iterdir()) == [video.filename]
+
+
 def test_server_reports_unknown_modules(tmp_path: Path) -> None:
     http = TestClient(create_app(Storage(tmp_path / "server")))
     r = http.post(
@@ -339,3 +393,26 @@ def test_cli_cache_lists_keys(storage: Storage, tmp_path: Path, monkeypatch, cap
     assert main(["cache", video.sha256]) == 0
     assert capsys.readouterr().out.strip() == "tracks/fake-s-00000001"
     assert json.loads(storage.cache_path(video.sha256, "tracks", "fake-s-00000001").read_text())
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "192.168.1.20"])
+def test_cli_serve_refuses_an_open_network_server_without_a_token(
+    monkeypatch, capsys, host: str
+) -> None:
+    import uvicorn
+
+    from vibe.modules.__main__ import main
+
+    ran = []
+    monkeypatch.delenv("VIBE_REMOTE_TOKEN", raising=False)
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: ran.append(kw))
+    assert main(["serve", "--host", host]) == 2
+    assert "refusing" in capsys.readouterr().err and ran == []
+
+    assert main(["serve", "--host", host, "--insecure"]) == 0
+    assert ran == [{"host": host, "port": 8765}]
+
+    monkeypatch.setenv("VIBE_REMOTE_TOKEN", "s3cret")
+    assert main(["serve", "--host", host]) == 0
+    assert main(["serve"]) == 0  # localhost needs no token
+    assert len(ran) == 3

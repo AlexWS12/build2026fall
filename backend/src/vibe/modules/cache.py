@@ -22,8 +22,10 @@ from pathlib import Path
 
 from vibe.storage import Storage
 
-BIOMETRIC_KINDS = frozenset({"biometric", "embeddings", "face_embeddings", "identity"})
-"""Kinds the shared cache refuses: biometric data stays in memory on its machine (D-017)."""
+BIOMETRIC_MARKERS = ("biometric", "embedding", "identit", "faceprint", "voiceprint")
+"""A kind containing any of these (any case or separator) is biometric, and the shared cache
+refuses it: biometric data stays in memory on its machine (D-017). Matching parts of the name,
+not exact names, so ``face-embeddings`` or ``speaker_embedding`` fail closed too."""
 
 _UNSAFE = re.compile(r"[^A-Za-z0-9._@-]+")
 _MAX_KEY = 128  # Storage allows 1-128 letters, digits and . _ @ -
@@ -67,8 +69,14 @@ def cache_key(name: str, version: int, settings: dict[str, object]) -> str:
     return f"{readable[: _MAX_KEY - _DIGEST - 1]}-{digest}"
 
 
-def _check_kind(kind: str) -> None:
-    if kind.lower() in BIOMETRIC_KINDS:
+def is_biometric_kind(kind: str) -> bool:
+    folded = kind.lower()
+    return any(marker in folded for marker in BIOMETRIC_MARKERS)
+
+
+def check_kind(kind: str) -> None:
+    """Raise :class:`BiometricRefused` if ``kind`` is biometric (D-017)."""
+    if is_biometric_kind(kind):
         raise BiometricRefused(
             f"refusing to write {kind!r} to the shared analysis cache: biometric data stays on "
             "its machine (D-017). Keep it in memory and discard it after matching."
@@ -77,7 +85,7 @@ def _check_kind(kind: str) -> None:
 
 def write_json(storage: Storage, sha256: str, kind: str, key: str, data: object) -> Path:
     """Write ``data`` as JSON to the cache, atomically (temp file, fsync, rename)."""
-    _check_kind(kind)
+    check_kind(kind)
     path = storage.cache_path(sha256, kind, key)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")

@@ -4,7 +4,8 @@ doctor [--json]                 what this machine can run: GPU, driver, PyTorch,
 models                          the weights `download` knows, with license and tier
 download NAME... [--pin]        fetch weights into VIBE_MODELS_DIR, checking sha256
 cache SHA256 [KIND]             what's cached for a video (kinds, keys)
-serve [--host H] [--port P]     run the model server for the `remote` backend
+serve [--host H] [--port P]     run the model server for the `remote` backend (beyond
+                                localhost it needs VIBE_REMOTE_TOKEN, or --insecure)
 """
 
 import argparse
@@ -12,6 +13,8 @@ import json
 import sys
 
 from vibe.modules.cache import ModuleError
+
+LOOPBACK = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
 def _doctor(args: argparse.Namespace) -> int:
@@ -86,10 +89,17 @@ def _serve(args: argparse.Namespace) -> int:
     from vibe.modules.remote import create_app
 
     token = config.remote_token()
-    if args.host not in {"127.0.0.1", "localhost", "::1"} and token is None:
+    if args.host not in LOOPBACK and token is None:
+        if not args.insecure:
+            print(
+                f"error: refusing to listen on {args.host} with no VIBE_REMOTE_TOKEN: anyone who "
+                "can reach this machine could upload files and read cached analyses. Set a "
+                "token in .env (same on both ends), or pass --insecure on a network you trust.",
+                file=sys.stderr,
+            )
+            return 2
         print(
-            "warning: listening beyond this machine with no VIBE_REMOTE_TOKEN; only do this on "
-            "a private network (e.g. Tailscale) and set a token in .env",
+            f"warning: listening on {args.host} with no VIBE_REMOTE_TOKEN (--insecure)",
             file=sys.stderr,
         )
     app = create_app(token=token, hardware=lambda: doctor.probe().as_dict())
@@ -123,6 +133,11 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("serve", help="run the model server for the remote backend")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8765)
+    p.add_argument(
+        "--insecure",
+        action="store_true",
+        help="allow listening beyond this machine without VIBE_REMOTE_TOKEN",
+    )
     p.set_defaults(run=_serve)
 
     args = parser.parse_args(argv)
