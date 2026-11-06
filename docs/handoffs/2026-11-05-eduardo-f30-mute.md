@@ -3,9 +3,9 @@ author: eduardo
 date: 2026-11-05
 branch: eduardo/f30-mute
 features: [F-30]
-base: v0.1.0 @ 85eef1c
-head: (filled in at commit)
-status: in progress
+base: v0.1.0 @ 6dd4cc8
+head: 2817d53
+status: ready for review
 ---
 
 # F-30 mute a time range: edge fades, an `unmute` tool, "mute it" no longer mutes the whole clip
@@ -31,7 +31,7 @@ Most of F-30 was already in place before this branch: the `mute` / `unmute` ops 
 
 ## How to check it
 From `backend/`:
-- `uv run pytest -q`: 672 passed, 1 warning (macOS, Python 3.12, ffmpeg on PATH, no GPU).
+- `uv run pytest -q`: 725 passed, 1 warning (macOS, Python 3.12, ffmpeg on PATH, no GPU).
 - `uv run ruff check` and `uv run ruff format --check`: clean.
 - `uv run pytest -q tests/render/test_mute_end_to_end.py tests/render/test_render_audio.py` for just the F-30 parts.
 - `uv run python -m vibe.toolbox unmute --help`.
