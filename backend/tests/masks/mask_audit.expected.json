@@ -1,0 +1,48 @@
+{
+  "about": "Worked out by hand from mask_audit.tracks.json and mask_audit.jsonl, not copied from the code. Keyframes are 0.5 s apart unless a track says otherwise. The cut at 7-8 s splits every stretch that crosses it.",
+  "duration": 10,
+  "hold_seconds": 0.5,
+  "gap_seconds": 0.5,
+  "spans": [
+    {"track_id": "trk_bounded", "op_id": "op_2", "request_id": "r_2", "effect": "pixelate", "stretches": [
+      ["covered", 2, 5]
+    ]},
+    {"track_id": "trk_edge", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["covered", 0, 7], ["covered", 8, 10]
+    ]},
+    {"track_id": "trk_ends_early", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["covered", 0, 4], ["held", 4, 4.5], ["off_screen", 4.5, 7], ["off_screen", 8, 10]
+    ]},
+    {"track_id": "trk_frag_a", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["covered", 0, 3], ["held", 3, 3.5], ["off_screen", 3.5, 7], ["off_screen", 8, 10]
+    ]},
+    {"track_id": "trk_frag_b", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["off_screen", 0, 5.5], ["held", 5.5, 6], ["covered", 6, 7], ["covered", 8, 10]
+    ]},
+    {"track_id": "trk_gap", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["covered", 0, 3], ["gap", 3, 6], ["covered", 6, 7], ["covered", 8, 10]
+    ]},
+    {"track_id": "trk_missing", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["no_track", 0, 7], ["no_track", 8, 10]
+    ]},
+    {"track_id": "trk_open", "op_id": "op_3", "request_id": "r_3", "effect": "box", "stretches": [
+      ["covered", 6, 7], ["covered", 8, 10]
+    ]},
+    {"track_id": "trk_shared", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["covered", 0, 4], ["held", 4, 4.5], ["off_screen", 4.5, 5.5], ["held", 5.5, 6], ["covered", 6, 7], ["covered", 8, 10]
+    ]},
+    {"track_id": "trk_starts_late", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["off_screen", 0, 5.5], ["held", 5.5, 6], ["covered", 6, 7], ["covered", 8, 10]
+    ]},
+    {"track_id": "trk_steady", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["covered", 0, 7], ["covered", 8, 10]
+    ]},
+    {"track_id": "trk_uncertain", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["covered", 0, 2.5], ["uncertain", 2.5, 3.5], ["covered", 3.5, 7], ["covered", 8, 10]
+    ]},
+    {"track_id": "trk_user_single", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["off_screen", 0, 4.5], ["held", 4.5, 5.5], ["off_screen", 5.5, 7], ["off_screen", 8, 10]
+    ]}
+  ],
+  "totals": {"covered": 58, "held": 4, "gap": 3, "uncertain": 1, "off_screen": 30, "no_track": 9}
+}

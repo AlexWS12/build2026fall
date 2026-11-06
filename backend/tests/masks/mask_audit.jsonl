@@ -1,0 +1,5 @@
+{"schema_version": 1}
+{"kind": "add_mask", "op_id": "op_1", "request_id": "r_1", "source": "agent", "targets": ["trk_steady", "trk_edge", "trk_uncertain", "trk_gap", "trk_ends_early", "trk_starts_late", "trk_user_single", "trk_shared", "trk_missing", "trk_frag_a", "trk_frag_b"], "effect": {"type": "blur"}}
+{"kind": "add_mask", "op_id": "op_2", "request_id": "r_2", "source": "agent", "targets": ["trk_bounded"], "effect": {"type": "pixelate"}, "time_range": {"start": 2, "end": 5}}
+{"kind": "add_mask", "op_id": "op_3", "request_id": "r_3", "source": "user", "targets": ["trk_open"], "effect": {"type": "box"}, "time_range": {"start": 6}}
+{"kind": "cut", "op_id": "op_4", "request_id": "r_4", "source": "agent", "time_range": {"start": 7, "end": 8}}
