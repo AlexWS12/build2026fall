@@ -6,6 +6,7 @@ ops and append them to the timeline; they never touch pixels or audio.
 
 import math
 import re
+import unicodedata
 
 from pydantic import Field
 
@@ -88,6 +89,62 @@ def resolve_time(args: ResolveTimeArgs, ctx: ToolContext) -> ResolveTimeResult:
     if match.group(1) == "first":
         return ResolveTimeResult(time_range=TimeRange(start=0, end=seconds))
     return ResolveTimeResult(time_range=TimeRange(start=d - seconds))
+
+
+# --- find_speech --------------------------------------------------------------------------
+
+SPEECH_PAD = 0.15
+"""Seconds added on each side of a spoken phrase, because Whisper's word times are approximate
+and a clipped word stays audible. shortcut: not measured, tune with F-09 speech labels."""
+
+
+class FindSpeechArgs(Model):
+    text: str = Field(min_length=1, description='Words as spoken, e.g. "hola" or "hello world".')
+
+
+class FindSpeechResult(Model):
+    time_range: TimeRange
+
+
+def _plain_words(text: str) -> list[str]:
+    """Lowercase words without accents or punctuation, so "que" finds "¿Qué"."""
+    text = unicodedata.normalize("NFKD", text.casefold())
+    return re.findall(r"\w+", "".join(c for c in text if not unicodedata.combining(c)))
+
+
+def find_speech(args: FindSpeechArgs, ctx: ToolContext) -> FindSpeechResult:
+    """When ``text`` is said, from the video's transcript (F-31), padded by ``SPEECH_PAD``.
+
+    Said more than once is an error that lists the times, so the user picks one instead of
+    the tool guessing.
+    """
+    if ctx.transcript is None:
+        raise ToolError("find_speech: this video has no transcript yet; transcribe it first")
+    wanted = _plain_words(args.text)
+    if not wanted:
+        raise ToolError(f"find_speech: {args.text!r} has no words to look for")
+    said = [
+        (plain, word)
+        for segment in ctx.transcript.segments
+        for word in segment.words
+        for plain in _plain_words(word.text)
+    ]
+    n = len(wanted)
+    hits = [said[i : i + n] for i in range(len(said) - n + 1)]
+    hits = [h for h in hits if [plain for plain, _ in h] == wanted]
+    if not hits:
+        raise ToolError(f"find_speech: {args.text!r} isn't said in the transcript")
+    if len(hits) > 1:
+        times = ", ".join(f"{h[0][1].start:.2f}s" for h in hits)
+        raise ToolError(
+            f"find_speech: {args.text!r} is said {len(hits)} times (at {times}); "
+            "give a time range for the one you mean"
+        )
+    start = max(0.0, hits[0][0][1].start - SPEECH_PAD)
+    end = hits[0][-1][1].end + SPEECH_PAD
+    if ctx.duration is not None:
+        end = min(end, ctx.duration)
+    return FindSpeechResult(time_range=TimeRange(start=start, end=end))
 
 
 # --- Edit tools ---------------------------------------------------------------------------

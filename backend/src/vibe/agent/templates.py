@@ -37,6 +37,12 @@ _DENOISE = re.compile(
 and "delete" are asked about instead (see ``_denoise``)."""
 NOISE_WORDS = frozenset({"noise", "noises", "hiss", "hisses", "hum", "hums"})
 _CUT = re.compile(r"(?:cut|remove|delete)(?:\s+out)?\b(.*)")
+_SPOKEN = re.compile(
+    r"(?:the\s+(?:part|bit|section)\s+)?(?:where|when)\s+"
+    r"(?:(?:he|she|they|i|you|we|someone|somebody)\s+)?(?:says?|said)\s+(.+)"
+    r"|the\s+words?\s+(.+)"
+)
+"""Where words are said (F-21, words only: "where she talks about X" is a topic, for the LLM)."""
 
 _EFFECTS = {"blur": "blur", "hide": "blur", "pixelate": "pixelate", "box": "box"}
 _LABELS = {
@@ -114,7 +120,19 @@ def _mask(match: re.Match[str], steps: _Steps) -> Matched:
     return _scope(when)
 
 
+def _spoken(rest: str, steps: _Steps) -> dict[str, Any] | None:
+    """``{"time_range": $ref}`` to a ``find_speech`` step for "where he says X", else None."""
+    match = _SPOKEN.fullmatch(rest.strip())
+    words = (match.group(1) or match.group(2)).strip("\"' ") if match else ""
+    if not words:
+        return None
+    return {"time_range": ref(steps.add("find_speech", {"text": words}))}
+
+
 def _mute(match: re.Match[str], steps: _Steps) -> Matched:
+    if (spoken := _spoken(match.group(1), steps)) is not None:
+        steps.add("mute", spoken)
+        return "timed"
     when = _time(match.group(1))
     if when is None:
         return None
@@ -134,6 +152,9 @@ def _denoise(match: re.Match[str], steps: _Steps) -> Matched:
 
 
 def _cut(match: re.Match[str], steps: _Steps) -> Matched:
+    if (spoken := _spoken(match.group(1), steps)) is not None:
+        steps.add("cut_range", spoken)
+        return "timed"
     when = _time(match.group(1))
     if when is None or when is _NO_TIME or when == WHOLE_CLIP:  # never guess what to cut
         return None

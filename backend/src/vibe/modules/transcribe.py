@@ -53,7 +53,7 @@ class Segment(Model):
     start: float
     end: float
     text: str
-    words: list[Word] = []
+    words: list[Word]
 
 
 class Transcript(Model):
@@ -111,6 +111,14 @@ def transcribe(
     )
 
 
+def cached_transcript(
+    storage: Storage, video: VideoRef, model: str = DEFAULT_MODEL
+) -> Transcript | None:
+    """The cached transcript, or ``None`` if the video was never transcribed with ``model``."""
+    path = storage.cache_path(video.sha256, "transcript", transcript_key(model))
+    return Transcript.model_validate_json(path.read_bytes()) if path.exists() else None
+
+
 def transcribe_video(
     storage: Storage,
     video: VideoRef,
@@ -119,9 +127,9 @@ def transcribe_video(
 ) -> Transcript:
     """The video's transcript from the analysis cache, transcribing and caching it if needed."""
     backend = backend or model_backend()
+    if (cached := cached_transcript(storage, video, model)) is not None:
+        return cached
     path = storage.cache_path(video.sha256, "transcript", transcript_key(model))
-    if path.exists():
-        return Transcript.model_validate_json(path.read_bytes())
     if backend == "stub":
         raise TranscribeError(
             f"no cached transcript {path.name} for video {video.sha256[:12]}: run with "
@@ -142,6 +150,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("video", type=Path)
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Whisper size (default: small)")
     args = parser.parse_args(argv)
+    # Windows pipes default to cp1252, which can't print every language's transcript.
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
     storage = Storage()
     try:
         ref = storage.add_video(args.video)

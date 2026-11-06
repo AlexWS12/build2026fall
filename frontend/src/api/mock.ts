@@ -45,5 +45,26 @@ export function createMockClient({ delayMs = 300 }: { delayMs?: number } = {}): 
       await wait(delayMs)
       return exampleState
     },
+    async transcribe() {
+      await wait(delayMs)
+      const word = (text: string, start: number, end: number) => ({
+        text,
+        start,
+        end,
+        probability: 0.9,
+      })
+      return {
+        model: 'mock',
+        language: 'en',
+        segments: [
+          {
+            start: 1.2,
+            end: 2.0,
+            text: '(mock) Hello there.',
+            words: [word('Hello', 1.2, 1.6), word('there.', 1.6, 2.0)],
+          },
+        ],
+      }
+    },
   }
 }

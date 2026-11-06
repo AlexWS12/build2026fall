@@ -11,6 +11,8 @@ export type VideoRef = components['schemas']['VideoRef']
 export type ProjectInfo = components['schemas']['ProjectInfo']
 /** Reply to a chat request (`POST /api/projects/{id}/requests`). */
 export type ChatReply = components['schemas']['ChatReply']
+/** The video's transcript with word timestamps (`POST /api/projects/{id}/transcript`, F-31). */
+export type Transcript = components['schemas']['Transcript']
 
 // --- Contract: derived timeline state (schema_version 1) --------------------------------
 // Still hand-written, though `GET /api/projects/{id}/state` returns it: the generated schema

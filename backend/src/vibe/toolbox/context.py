@@ -6,6 +6,7 @@ from typing import Protocol
 
 from vibe.contract import Op, Track
 from vibe.contract.common import Source
+from vibe.modules.transcribe import Transcript
 
 
 class OpSink(Protocol):
@@ -27,3 +28,5 @@ class ToolContext:
     tracks: Sequence[Track] | None = None
     """Tracks from the analysis cache (stub: given by the caller; real: F-08 / F-10). ``None``
     means the video hasn't been analysed; ``[]`` means it was and nothing was found."""
+    transcript: Transcript | None = None
+    """The video's transcript (F-31), for ``find_speech``. ``None``: never transcribed."""
