@@ -81,6 +81,43 @@ def test_masks_follow_their_time_range() -> None:
     assert np.array_equal(renderer.render(image, 2.0), image)  # end is excluded
 
 
+def short_mask() -> TimelineState:
+    return state_of(mask(["trk_1"], time_range=TimeRange(start=1.01, end=1.02)))
+
+
+def test_mask_starting_while_a_frame_is_shown_covers_it() -> None:
+    image = noise()
+    out = render_frame(image, 1.0, short_mask(), [box_track("trk_1", LEFT)], until=1.04)
+    assert not out[:60, :80].any()
+
+
+def test_mask_starting_after_a_frame_leaves_it_alone() -> None:
+    image = noise()
+    out = render_frame(image, 0.96, short_mask(), [box_track("trk_1", LEFT)], until=1.0)
+    assert np.array_equal(out, image)
+
+
+def test_without_until_only_masks_in_effect_apply() -> None:
+    image = noise()
+    assert np.array_equal(render_frame(image, 1.0, short_mask(), [box_track("trk_1", LEFT)]), image)
+
+
+def test_mask_ending_as_a_frame_arrives_leaves_it_alone() -> None:
+    state = state_of(mask(["trk_1"], time_range=TimeRange(start=0, end=1)))
+    image = noise()
+    out = render_frame(image, 1.0, state, [box_track("trk_1", LEFT)], until=1.04)
+    assert np.array_equal(out, image)
+
+
+def test_two_masks_touching_one_frame_both_apply() -> None:
+    state = state_of(
+        mask(["trk_1"], "box", TimeRange(start=0, end=1.01)),
+        mask(["trk_1"], "pixelate", TimeRange(start=1.01, end=2)),
+    )
+    out = render_frame(noise(), 1.0, state, [box_track("trk_1", LEFT)], until=1.04)
+    assert not out[:60, :80].any()  # black from the first, and still black after the second
+
+
 def test_unmasked_tracks_are_left_alone() -> None:
     image = noise()
     tracks = [box_track("trk_1", LEFT), box_track("trk_2", (0.5, 0.5, 1.0, 1.0))]

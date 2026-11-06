@@ -117,7 +117,9 @@ def _write(
             for frame in reader.iter_frames():
                 if state.is_cut(frame.time):
                     continue
-                image = renderer.render(frame.image, frame.time)[:height, :width]
+                following = frame.index + 1
+                until = index.time_of(following) if following < len(index) else index.end
+                image = renderer.render(frame.image, frame.time, until)[:height, :width]
                 encoded = _to_bt709(image)
                 encoded.time_base = info.time_base
                 output_time = state.source_to_output(frame.time)

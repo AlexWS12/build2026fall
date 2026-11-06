@@ -126,6 +126,22 @@ def test_exit_check_reports_no_issues(rendered: RenderResult) -> None:
 # --- The rest of the export path -----------------------------------------------------------
 
 
+def test_mask_starting_between_frames_covers_the_frame_on_screen(
+    pattern_clip: Path, tmp_path: Path
+) -> None:
+    effect = Effect(type="box")
+    time_range = TimeRange(start=1.01, end=1.02)  # between two 30 fps frames
+    state = state_of(
+        AddMask(
+            request_id="r", source="agent", targets=["trk_1"], effect=effect, time_range=time_range
+        )
+    )
+    result = export(pattern_clip, state, TRACKS, tmp_path / "out.mp4")
+    assert frame_at(result.path, 1.0)[INNER].mean() < 5  # black, give or take the encoder
+    assert frame_at(result.path, 1.04)[INNER].mean() > 30
+    assert frame_at(result.path, 0.96)[INNER].mean() > 30
+
+
 def test_clip_without_audio_exports_without_audio(
     silent_pattern_clip: Path, tmp_path: Path
 ) -> None:

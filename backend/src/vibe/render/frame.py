@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from vibe.contract import TimelineState, Track
+from vibe.contract import Effect, TimelineState, Track
 from vibe.render.effects import apply_effect
 from vibe.render.errors import UnsupportedEdit
 from vibe.render.geometry import TrackPath, to_pixels
@@ -60,9 +60,13 @@ class FrameRenderer:
         """Each problem once, in the order first seen."""
         return list(self._issues.values())
 
-    def render(self, image: np.ndarray, t: float) -> np.ndarray:
-        """``image`` (height, width, channels), shown at source time ``t``, with every mask in
-        effect at ``t`` applied. Returns a new array; ``image`` is left as it was.
+    def render(self, image: np.ndarray, t: float, until: float | None = None) -> np.ndarray:
+        """``image`` (height, width, channels), shown from source time ``t``, with its masks
+        applied. Returns a new array; ``image`` is left as it was.
+
+        ``until`` is when the next frame replaces this one, if known. A mask starting while this
+        frame is on screen then covers it too, so no mask starts late, and none is too short to
+        reach a frame. Without it (live doesn't know yet), only masks in effect at ``t`` apply.
 
         Cuts aren't applied here: whether a cut frame is shown at all is the caller's call.
         """
@@ -70,20 +74,29 @@ class FrameRenderer:
             raise ValueError(f"image must be (height, width, channels), got {image.shape}")
         out = image.copy()
         height, width = out.shape[:2]
-        for track_id, span in sorted(self.state.masks_at(t).items()):
+        for track_id, effect in self._masks(t, until):
             paths = self._paths.get(track_id)
             if not paths:
                 # A target with no geometry can be anywhere: hide the whole frame.
                 self._report(track_id, "no track with this id, so the whole frame is masked", t)
-                apply_effect(out, (0, 0, width, height), span.effect)
+                apply_effect(out, (0, 0, width, height), effect)
                 continue
             placed = [path.at(t) for path in paths]
             if all(box.lost for box in placed):
                 self._report(track_id, "lost, so its nearest known box stays masked", t)
             for box in placed:
-                padding = span.effect.padding + box.extra_padding
-                apply_effect(out, to_pixels(box.box, padding, width, height), span.effect)
+                padding = effect.padding + box.extra_padding
+                apply_effect(out, to_pixels(box.box, padding, width, height), effect)
         return out
+
+    def _masks(self, t: float, until: float | None) -> list[tuple[str, Effect]]:
+        """Each track to mask, with its effect. Two spans touching one frame give two entries."""
+        found = []
+        for track_id in sorted(self.state.masks):
+            for span in self.state.masks[track_id]:
+                if span.contains(t) or (until is not None and t < span.start < until):
+                    found.append((track_id, span.effect))
+        return found
 
     def _report(self, track_id: str, message: str, t: float) -> None:
         if track_id not in self._issues:
@@ -92,7 +105,11 @@ class FrameRenderer:
 
 
 def render_frame(
-    image: np.ndarray, t: float, state: TimelineState, tracks: Iterable[Track]
+    image: np.ndarray,
+    t: float,
+    state: TimelineState,
+    tracks: Iterable[Track],
+    until: float | None = None,
 ) -> np.ndarray:
-    """One frame, without keeping a renderer around: ``FrameRenderer(...).render(image, t)``."""
-    return FrameRenderer(state, tracks).render(image, t)
+    """One frame, without keeping a renderer around: see ``FrameRenderer.render``."""
+    return FrameRenderer(state, tracks).render(image, t, until)
