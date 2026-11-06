@@ -46,7 +46,13 @@ def test_request_set_covers_both_outcomes() -> None:
 
 @pytest.mark.parametrize(
     ("text", "hint"),
-    [("cut it", "0:10 to 0:20"), ("mute 0:20 to 0:10", "before")],
+    [
+        ("cut it", "0:10 to 0:20"),
+        ("mute 0:20 to 0:10", "before"),
+        ("reduce the noise for a bit", "reduce the noise"),
+        ("denoise it somewhat", "reduce the noise"),
+        ("cut the noise from 0:10 to 0:20", "or cut that part out"),
+    ],
 )
 def test_clarify_question_tells_the_user_what_to_say(text: str, hint: str) -> None:
     result = plan_request(text)

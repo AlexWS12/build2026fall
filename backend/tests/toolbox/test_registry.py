@@ -8,7 +8,14 @@ SPECS = list(TOOLS.values())
 
 
 def test_the_registry_has_the_planners_tools() -> None:
-    assert set(TOOLS) == {"find_objects", "resolve_time", "add_mask", "cut_range", "mute"}
+    assert set(TOOLS) == {
+        "find_objects",
+        "resolve_time",
+        "add_mask",
+        "cut_range",
+        "mute",
+        "denoise",
+    }
 
 
 def test_registry_is_read_only() -> None:

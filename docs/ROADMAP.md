@@ -25,7 +25,7 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 | F-07 | Web UI shell: upload, chat, player, timeline view, export | Must | F-01 | done | |
 | F-08 | Compute setup: `stub`/`local`/`remote` model backends, shareable analysis cache, model download script, per-tier install notes (CPU / small GPU / RTX 5070; CUDA 12.8+ for the 5070) | Must | F-01 | in progress | ARCHITECTURE "Compute". Optional: model server on the 5070 |
 | F-09 | Benchmark harness: test clips + labels + request set + report script | Must | F-02 | in progress | Numbers only from here |
-| F-64 | API routes: upload, request, timeline state | Must | F-06 | planned | Shared file. Starts from the routes F-07's mock uses |
+| F-64 | API routes: upload, request, timeline state | Must | F-06 | in progress | Shared file. Starts from the routes F-07's mock uses |
 
 ### Visual edits
 | ID | Feature | Priority | Depends on | Status | Notes |
@@ -51,7 +51,7 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 | F-30 | Mute a time range | Must | F-04 | idea | |
 | F-31 | Transcription with word timestamps | Should | F-03 | idea | Whisper family |
 | F-32 | Who spoke when (diarization) + mute a specific speaker | Should | F-31 | idea | Needs separation if speakers overlap |
-| F-33 | Background noise reduction | Must | F-03 | idea | |
+| F-33 | Background noise reduction | Must | F-03 | in progress | nickolas, `nickolas/f33-denoise` |
 | F-34 | Remove a specific sound ("the fan noise", "the music") | Stretch | F-33 | idea | |
 
 ### Human in the loop
@@ -165,7 +165,7 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 | Card | Owner | Branch | Exit check | Status |
 |---|---|---|---|---|
 | F-06 Toolbox scaffolding: typed tool schemas, registry, stub tools, CLI per tool. **Priority: first.** Shared file (tool names and arguments) | pablo | pablo/f06-toolbox | `<tool> --help` lists tools. A stub tool writes a valid op to an example timeline | in progress |
-| F-64 API routes: `POST /api/projects`, `POST /api/projects/{id}/requests`, `GET /api/projects/{id}/state`, one request at a time per project. **Priority: first.** Shared file (API routes) | _open_ | | With `VITE_API_MODE=http` the UI uploads, sends a request and shows the real timeline. Route tests pass in stub mode. OpenAPI spec and UI types regenerated | planned |
+| F-64 API routes: `POST /api/projects`, `POST /api/projects/{id}/requests`, `GET /api/projects/{id}/state`, one request at a time per project. **Priority: first.** Shared file (API routes) | jonathan | jonathan/f64-api-routes | With `VITE_API_MODE=http` the UI uploads, sends a request and shows the real timeline. Route tests pass in stub mode. OpenAPI spec and UI types regenerated | in progress |
 | F-04 Renderer: export path (ffmpeg) + per-frame path sharing the effect code; nothing on the per-frame path calls the network. Can be split export / per-frame | _open_ | | A test renders a generated clip with a blur, a cut and a mute from an example timeline and checks the output. No GPU | planned |
 | F-05 Planner: template parser + plan validation + clarify reply; the LLM plan plugs in after R-1 | pablo | pablo/f05-planner-v2 | Plain requests → valid tool calls (or clarify) with no network and no GPU | in progress |
 | F-08 Compute setup: `stub`/`local`/`remote` backend interface, model download script, install notes per tier, **plus the team GPU survey**. Cache via `Storage.cache_path()` | eduardo | eduardo/compute-setup | Stub backend replays a cached result in a test. Survey table added to ARCHITECTURE "Compute" | in progress |
