@@ -40,10 +40,7 @@ def box_track(track_id: str, box: tuple[float, float, float, float]) -> Track:
         track_id=track_id,
         label="person",
         source="detector",
-        keyframes=[
-            Keyframe(t=0.0, box=box, conf=0.9, state="detected"),
-            Keyframe(t=10.0, box=box, conf=0.9, state="detected"),
-        ],
+        keyframes=[Keyframe(t=t, box=box, conf=0.9, state="detected") for t in range(11)],
     )
 
 
@@ -138,6 +135,23 @@ def test_target_seen_by_another_track_with_its_id_is_not_lost() -> None:
     assert not out[:60, :80].any()  # both stay masked, to be safe
     assert not out[180:, 240:].any()
     assert renderer.issues == []
+
+
+def test_long_gap_masks_everywhere_the_target_could_be() -> None:
+    # Seen on the left at 1 s and on the right at 8 s; nothing saw it in between.
+    track = Track(
+        track_id="trk_1",
+        label="person",
+        source="detector",
+        keyframes=[
+            Keyframe(t=1.0, box=(0.05, 0.4, 0.2, 0.7), conf=0.9, state="detected"),
+            Keyframe(t=8.0, box=(0.8, 0.4, 0.95, 0.7), conf=0.9, state="detected"),
+        ],
+    )
+    renderer = FrameRenderer(state_of(mask(["trk_1"])), [track])
+    out = renderer.render(noise(), 4.5)
+    assert not out[120, 16:304].any()  # left, right and everything between
+    assert renderer.issues[0].first_seen == 4.5
 
 
 def test_tracks_sharing_an_id_are_all_masked() -> None:

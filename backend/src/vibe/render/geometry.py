@@ -6,6 +6,10 @@ grows, up to a limit: a detector losing a target doesn't mean the target left, s
 effect never just stops (docs/ARCHITECTURE.md, "Renderer"). A box held for more than
 ``HOLD_SECONDS`` is marked ``lost``, because the target may have moved out of it.
 
+Across a gap longer than ``MAX_GAP_SECONDS`` nothing saw the target, so a straight line between
+the two keyframes would be a guess. The box covers both keyframes and all the space between
+them instead.
+
 The constants are starting points; F-11 tunes them on real detections.
 """
 
@@ -13,7 +17,7 @@ import math
 from bisect import bisect_right
 from dataclasses import dataclass
 
-from vibe.contract import Keyframe, Track
+from vibe.contract import Track
 
 HOLD_SECONDS = 0.5
 """How long a box can be held from a keyframe before the target counts as lost."""
@@ -23,6 +27,9 @@ HOLD_GROWTH = 0.5
 
 MAX_HOLD_GROWTH = 0.5
 """The most a held box grows, so a target lost for a long time doesn't hide the whole frame."""
+
+MAX_GAP_SECONDS = 1.0
+"""The longest gap between two keyframes that a box still moves across in a straight line."""
 
 UNCERTAIN_PADDING = 0.25
 """Padding added on top of the effect's own, next to an ``uncertain`` keyframe."""
@@ -55,11 +62,14 @@ class TrackPath:
         keyframes = self.track.keyframes
         first, last = keyframes[0], keyframes[-1]
         if t < first.t:
-            return _held(first, first.t - t)
+            return _held(first.box, first.t - t, first.state == "uncertain")
         if t >= last.t:
-            return _held(last, t - last.t)
+            return _held(last.box, t - last.t, last.state == "uncertain")
         i = bisect_right(self._times, t) - 1  # keyframes[i].t <= t < keyframes[i + 1].t
         a, b = keyframes[i], keyframes[i + 1]
+        uncertain = "uncertain" in (a.state, b.state)
+        if b.t - a.t > MAX_GAP_SECONDS:
+            return _held(_hull(a.box, b.box), min(t - a.t, b.t - t), uncertain)
         w = (t - a.t) / (b.t - a.t)
         ax1, ay1, ax2, ay2 = a.box
         bx1, by1, bx2, by2 = b.box
@@ -69,14 +79,18 @@ class TrackPath:
             ax2 + (bx2 - ax2) * w,
             ay2 + (by2 - ay2) * w,
         )
-        uncertain = "uncertain" in (a.state, b.state)
         return PlacedBox(box, UNCERTAIN_PADDING if uncertain else 0.0)
 
 
-def _held(keyframe: Keyframe, held: float) -> PlacedBox:
+def _held(box: Box, held: float, uncertain: bool) -> PlacedBox:
     growth = min(HOLD_GROWTH * held, MAX_HOLD_GROWTH)
-    uncertain = UNCERTAIN_PADDING if keyframe.state == "uncertain" else 0.0
-    return PlacedBox(keyframe.box, growth + uncertain, lost=held > HOLD_SECONDS)
+    padding = growth + (UNCERTAIN_PADDING if uncertain else 0.0)
+    return PlacedBox(box, padding, lost=held > HOLD_SECONDS)
+
+
+def _hull(a: Box, b: Box) -> Box:
+    """The smallest box that contains both."""
+    return (min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3]))
 
 
 def to_pixels(box: Box, padding: float, width: int, height: int) -> Rect:

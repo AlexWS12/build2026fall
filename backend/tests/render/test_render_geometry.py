@@ -6,6 +6,7 @@ from vibe.contract import Keyframe, Track
 from vibe.render.geometry import (
     HOLD_GROWTH,
     HOLD_SECONDS,
+    MAX_GAP_SECONDS,
     MAX_HOLD_GROWTH,
     UNCERTAIN_PADDING,
     TrackPath,
@@ -65,6 +66,35 @@ def test_single_keyframe_track_is_held_for_good() -> None:
     assert not path.at(HOLD_SECONDS).lost
     assert path.at(60.0).box == (0.1, 0.1, 0.2, 0.2)
     assert path.at(60.0).lost
+
+
+LEFT, RIGHT = (0.05, 0.4, 0.2, 0.7), (0.8, 0.5, 0.95, 0.8)
+LONG_GAP = track((1.0, LEFT, "detected"), (8.0, RIGHT, "detected"))
+
+
+def test_long_gap_covers_both_ends_and_the_space_between() -> None:
+    for t in (1.25, 4.5, 7.75):
+        assert TrackPath(LONG_GAP).at(t).box == (0.05, 0.4, 0.95, 0.8)
+
+
+def test_box_in_a_long_gap_counts_from_the_nearest_keyframe() -> None:
+    path = TrackPath(LONG_GAP)
+    assert path.at(1.25).extra_padding == pytest.approx(HOLD_GROWTH * 0.25)
+    assert not path.at(1.25).lost
+    assert path.at(7.75).extra_padding == pytest.approx(HOLD_GROWTH * 0.25)
+    assert not path.at(7.75).lost
+    assert path.at(4.5).extra_padding == MAX_HOLD_GROWTH
+    assert path.at(4.5).lost
+
+
+def test_gap_of_exactly_the_limit_still_moves_in_a_line() -> None:
+    path = TrackPath(track((0.0, LEFT, "detected"), (MAX_GAP_SECONDS, RIGHT, "detected")))
+    assert path.at(MAX_GAP_SECONDS / 2).box == pytest.approx((0.425, 0.45, 0.575, 0.75))
+
+
+def test_uncertain_end_of_a_long_gap_adds_padding() -> None:
+    path = TrackPath(track((1.0, LEFT, "uncertain"), (8.0, RIGHT, "detected")))
+    assert path.at(4.5).extra_padding == MAX_HOLD_GROWTH + UNCERTAIN_PADDING
 
 
 @pytest.mark.parametrize("states", [("uncertain", "detected"), ("detected", "uncertain")])
