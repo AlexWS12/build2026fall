@@ -4,13 +4,13 @@ date: 2026-11-03
 branch: luis/f10-detect-track
 features: [F-10]
 base: v0.1.0 @ b5e3c66
-head: d949ab3
+head: f349c33
 status: ready for review
 ---
 
 # F-10 first cut: detect-and-track pipeline, stub, per-video cache and detector adapters for the model comparison
 
-> **Ready for review: the pipeline, stub, cache and CLI, plus the review fixes and a first run of the real adapters (updated 2026-11-05).** The card isn't done: there are **no measured numbers yet**, only boxes checked by eye on two clips, because F-09 has no labeled clips (Next steps). The model comparison needs them.
+> **Ready for re-review: the pipeline, stub, cache and CLI, plus the review fixes, a first run of the real adapters, `main` merged in, and a check that F-09's `report` scores our cache (updated 2026-11-05).** The card isn't done: there are **no measured numbers yet**, only boxes checked by eye on two clips, because F-09 has no labeled clips (Next steps). The model comparison needs them.
 
 > **No shared file changes.** New subpackage `backend/src/vibe/modules/vision/` and tests in `backend/tests/vision/`; a one-line "Built so far" note in ARCHITECTURE "AI modules"; my F-10 row in the roadmap. **No dependency changes:** model packages are installed by hand for now (see Gotchas), so `pyproject.toml` and `uv.lock` are untouched.
 
@@ -33,6 +33,8 @@ uv run python -m vibe.modules.vision analyze CLIP.mp4 -d stub:color=red,label=pe
 ```
 Checked on Windows 11 (Python 3.12, no ffmpeg on PATH): on 2026-11-03 `tests/vision` 33 passed and the full suite 379 passed, 76 skipped (ffmpeg); on 2026-11-05, after the fixes below, `tests/vision` 53 passed and the full suite 474 passed, 1 skipped. Both times **1 failed: `tests/toolbox/test_toolbox_cli.py::test_writing_keeps_the_timeline_permissions`, which fails the same way on unchanged `main` on this machine** (not F-10). The tests use the stub and a stand-in for `supervision`/`trackers`: **no automated test covers the real model adapters**, which need the model packages and weights that CI doesn't have. They were run by hand, see "Step 2" below.
 
+After merging `origin/main` (f349c33, 2026-11-05): `tests/vision` 53 passed, the full suite **565 passed, 1 skipped, 1 failed** (the same Windows-only toolbox permissions test as above), `ruff check` and `ruff format --check` clean. GitHub CI on f349c33 passed (`test`, GitGuardian), which also confirms that permissions test passes on Linux.
+
 ## Decisions made
 luis made these on 2026-11-03 for F-10; say on the PR if you disagree. None is architecture-level.
 - **Raw detections are cached too, not only tracks.** Tuning the tracker, the thresholds or the stride then costs seconds on a CPU instead of a GPU run.
@@ -50,6 +52,8 @@ All eight addressed; `tests/vision` is now 53 passed (was 33).
 - **Detector options are typed by the parameter they set**, not guessed from the text: `yoloe:prompts=1984` stays a string (it used to be parsed as an int and crash), `threshold=1` becomes `1.0`, unknown or unparsable options name the option in the error.
 - **Ultralytics boxes** go through `normalize_box` like every other adapter, so a box past the edge is clipped and an empty one dropped.
 - **The ByteTracker unit tests** use a stand-in for `supervision`/`trackers`, which checks our glue and nothing about ByteTrack itself. The real library was run separately (Step 2).
+
+Fixes are in 2cb9ec8 (review) and d949ab3 (real libraries). Pushed on 2026-11-05 with the merge of `main` (head f349c33). **A reply went on each of the 8 comments** saying what changed and where; on the fallback comment the reply also says ByteTrack still gives more tracks than `IouTracker` (Step 2), so stitching is still to do. Waiting for Edugre's re-review; the PR shows "review required".
 
 ## Step 2: the real adapters, run on two real clips (2026-11-05)
 **Hardware and versions:** RTX 4050 Laptop (6 GB), driver 555.97, Windows 11, Python 3.12, `torch 2.6.0+cu124`, `rfdetr 1.11.2`, `trackers 2.7.0`, `supervision 0.31.5`, `opencv-python 5.0.0.93`. EgoBlur Gen1 weights (Meta, Apache 2.0) and YuNet `face_detection_yunet_2023mar.onnx` (OpenCV Zoo, MIT; SHA-256 checked) are in `C:\Users\majit\models\`, **outside the repo**.
@@ -74,9 +78,21 @@ These are wall times from one run each, for orientation, **not benchmark numbers
 
 **Not run, on purpose or for lack of need:** `yolo` / `yoloe` (Ultralytics, AGPL): **never executed**, luis decided not to test them, so D-015 will not have a measured cost for staying permissive. `rfdetr-n/m/l`, full `tv-frcnn` and EgoBlur Gen2 share code with what ran. HiPerGator: an L4 (23 GB) Console session started and the branch cloned there, but nothing was run on it yet.
 
+## Step 3: `main` merged in, and does F-09's harness read our output? (2026-11-05)
+**Merge:** `origin/main` merged into this branch (f349c33, no conflicts), bringing in F-64 (API routes, PR #20) and F-33 (denoise, PR #23). F-09 (benchmark harness, PR #18, [Jean's handoff](2026-11-02-jean-benchmark-harness.md)) was already in this branch's base, b5e3c66. F-04 (renderer, PR #21) landed on `main` after that; a dry-run merge is clean, but it isn't merged here yet.
+
+**Plumbing check, not a result.** A throwaway script (not committed) built a temporary manifest, labels folder and data folder outside the repo, registered the street clip with `add_clip`, copied in the 8 track sets F-10 had cached for it, wrote a labels file with **three plate boxes read by eye off an overlay image** (one keyframe each, `source="user"`), and called `build_report`. The repo's `clips.json` and `labels/` were not touched.
+- `report` found all 8 track sets (`tv-frcnn-mobile`, `rfdetr-s`, each with `iou` and `bytetrack`; `yunet`; `egoblur-face`; `egoblur-plate`) and scored them side by side, with `Problems: none`. **Our cache format is what F-09 reads; no change was needed on either side.**
+- `egoblur-plate` + `iou` found all 3 plates and left none exposed. Its precision is low only because I labeled 3 of the plates it boxed. The sets with no plate detector show the 3 plates as exposed, as they should.
+- **These rows are not quality numbers:** three eyeballed boxes on a stock clip prove the pipe works, nothing more. Note that `exposed` is the count of truth boxes left *uncovered*, so 0 is the good value.
+
+**What F-09 doesn't give us yet:** `clips.json` on `main` is empty and there is no `labels/` data, so there is nothing to score against. The harness has `new-labels CLIP_ID`, which writes an empty labels file, but **no labeling tool**: boxes are typed into the JSON by hand (normalized 0..1, a keyframe per second per target plus entry and exit, labels named exactly `face`, `person`, `license_plate`; the guide is the docstring of `vibe/benchmark/labels.py`). Registering and labeling the team clips is Jean's next step in that handoff.
+
+**The two Pexels clips can't be team clips as they are:** they are licensed, but the people in them didn't consent to our use, which the data policy (R-4, D-017) asks for. I've only used them locally, outside the repo.
+
 ## Next steps (the rest of the F-10 plan)
-1. **Review and merge this PR**, and post the YOLO proposal in the team chat: benchmarking `yolo`/`yoloe` in isolation, with any license change a team decision (D-015). (Update 2026-11-05: I won't run YOLO; say so if you think the decision needs it.)
-2. **Coordinate:** Eduardo (F-08): fit `vision` under the stub/local/remote interface when it lands; nothing in `modules/` exists on `main` and there's no `eduardo/compute-setup` branch on GitHub yet. Jean (F-09): `clips.json` is still empty and there are no labels; offer to film and label 1–2 clips (faces incl. small ones, a plate, a crowd, handheld, low light). Whoever writes the plan executor (F-06 / F-64): build `ToolContext(tracks=project_tracks(storage, project, key))`.
+1. **Re-review and merge this PR** (replies posted, CI green), and post the YOLO proposal in the team chat: benchmarking `yolo`/`yoloe` in isolation, with any license change a team decision (D-015). (Update 2026-11-05: I won't run YOLO; say so if you think the decision needs it.) Merge F-04 from `main` before or after review, whichever the reviewer prefers.
+2. **Coordinate:** Eduardo (F-08): fit `vision` under the stub/local/remote interface when it lands; nothing in `modules/` exists on `main` and there's no `eduardo/compute-setup` branch on GitHub yet. Jean (F-09): `clips.json` is still empty and there are no labels (Step 3); ask what Jean already has, offer to film and label 1–2 consented clips (faces incl. small ones, a plate, a crowd, handheld, low light), and propose a helper that turns cached F-10 tracks into a labels file to correct by hand. That is faster than typing boxes, but labels that start from a detector favor that detector, so the report must say which clips were pre-labeled. It would live in `vibe.benchmark`, Jean's module, so only with Jean's OK. Whoever writes the plan executor (F-06 / F-64): build `ToolContext(tracks=project_tracks(storage, project, key))`.
 3. ~~Set up the GPU~~ **Done** (Step 2). The driver update wasn't needed: an Ada card (4050) runs the `cu124` wheels on driver 555.97. The `cu128` wheels and a 570+ driver are for Blackwell (the 5070). `rfdetr` pulls in `supervision` and `trackers`; YuNet needs `opencv-python`.
 4. ~~Smoke-test each adapter~~ **Done** for torchvision, RF-DETR, EgoBlur Gen1, YuNet and ByteTrack; the Ultralytics path is still unrun. Left to check: whether Gen2 weights change EgoBlur's output.
 5. **Agree the decision rule with the team before running**, e.g. "for faces and plates, the fastest stack with exposure ≥ X% on the team clips; ties go to fewer fragments, then VRAM".
@@ -97,3 +113,5 @@ These are wall times from one run each, for orientation, **not benchmark numbers
 - **EgoBlur's TorchScript needs torchvision imported before loading and must be loaded on the CPU first** (`map_location=cpu`, then `.to(cuda)`), or the first frame fails with "tensors on cuda:0 and cpu".
 - **Labels must match exactly:** `face`, `license_plate`, and COCO names as the model gives them (`cell phone`, with a space). F-09 and `find_objects` compare labels exactly.
 - **Times printed by the CLI are wall time for orientation, not benchmark numbers.** Quote only the F-09 / F-50 scripts.
+- **After merging `main`, `tests/test_api.py` errors with "Form data requires python-multipart"** if your venv was built before F-64. It's already in `pyproject.toml`; `uv sync --inexact` (or `uv pip install python-multipart`) fixes it without wiping the model packages.
+- **Stock clips aren't consented clips.** A Pexels license covers the footage, not the people in it; keep such clips local and out of `clips.json` unless the team decides otherwise under R-4.
