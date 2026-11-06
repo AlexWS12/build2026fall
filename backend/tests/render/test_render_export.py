@@ -2,8 +2,10 @@
 mute from an example timeline (``render_session.jsonl``), checked frame by frame and by ear."""
 
 import os
+import re
 from pathlib import Path
 
+import av
 import numpy as np
 import pytest
 from pydantic import TypeAdapter
@@ -107,6 +109,13 @@ def test_exit_check_muted_audio_is_silent(rendered: RenderResult) -> None:
     assert rms(span(2.1, 2.4)) == pytest.approx(TONE_RMS, rel=0.2)
 
 
+def test_index_comes_first_so_a_browser_can_play_it_while_downloading(
+    rendered: RenderResult,
+) -> None:
+    data = rendered.path.read_bytes()
+    assert data.index(b"moov") < data.index(b"mdat")
+
+
 def test_exit_check_reports_no_issues(rendered: RenderResult) -> None:
     assert rendered.issues == ()
     assert not list(rendered.path.parent.glob(".*"))  # no temporary file left behind
@@ -133,6 +142,20 @@ def test_audio_comes_out_mono_or_stereo(
     result = export(request.getfixturevalue(clip), state_of(), [], tmp_path / "out.mp4")
     assert probe(result.path).audio.channels == channels
     assert rms(extract_audio(result.path)[0]) > 0.01  # and the sound survived
+
+
+def stream_order(path: Path) -> str:
+    """The file's packets in the order they're stored: ``v`` for video, ``a`` for audio."""
+    with av.open(str(path)) as container:
+        packets = [(p.pos, p.stream.type[0]) for p in container.demux() if p.size]
+    return "".join(kind for _, kind in sorted(packets))
+
+
+def test_sound_and_picture_are_stored_together(long_clip: Path, tmp_path: Path) -> None:
+    result = export(long_clip, state_of(), [], tmp_path / "out.mp4")
+    order = stream_order(result.path)
+    assert "a" in order[:FPS]
+    assert max(len(run) for run in re.findall("v+", order)) < FPS  # under a second at a time
 
 
 def test_odd_size_is_cropped_to_even(odd_size_clip: Path, tmp_path: Path) -> None:

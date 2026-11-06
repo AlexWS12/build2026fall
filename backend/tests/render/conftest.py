@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from render_clip import FPS, HEIGHT, SAMPLE_RATE, SECONDS, TONE_HZ, WIDTH
+from render_clip import FPS, HEIGHT, LONG_SECONDS, SAMPLE_RATE, SECONDS, TONE_HZ, WIDTH
 
 
 def _ffmpeg(*args: str) -> None:
@@ -49,6 +49,21 @@ def silent_pattern_clip(render_clip_dir: Path, pattern_clip: Path) -> Path:
     """The pattern clip with its audio stream removed."""
     path = render_clip_dir / "pattern_silent.mp4"
     _ffmpeg("-i", str(pattern_clip), "-an", "-c", "copy", str(path))
+    return path
+
+
+@pytest.fixture(scope="session")
+def long_clip(render_clip_dir: Path) -> Path:
+    """12 s with a tone. Small, so it renders quickly."""
+    path = render_clip_dir / "long.mp4"
+    _ffmpeg(
+        "-f", "lavfi", "-i", f"testsrc2=s=160x120:r={FPS}:d={LONG_SECONDS}",
+        "-f", "lavfi", "-i", f"sine=f={TONE_HZ}:r={SAMPLE_RATE}:d={LONG_SECONDS}",
+        "-ac", "2",
+        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-shortest",
+        str(path),
+    )  # fmt: skip
     return path
 
 

@@ -5,7 +5,7 @@
 ``export`` renders a whole clip into an MP4.
 """
 
-from vibe.render.audio import check_audio, render_audio
+from vibe.render.audio import apply_audio_edits, check_audio, render_audio
 from vibe.render.errors import RenderError, UnsupportedEdit
 from vibe.render.export import RenderResult, export
 from vibe.render.frame import FrameRenderer, RenderIssue, check_video, render_frame
@@ -16,6 +16,7 @@ __all__ = [
     "RenderIssue",
     "RenderResult",
     "UnsupportedEdit",
+    "apply_audio_edits",
     "check_audio",
     "check_video",
     "export",

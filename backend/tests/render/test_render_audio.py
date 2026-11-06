@@ -5,7 +5,7 @@ import pytest
 
 from vibe.contract import AddAudioFilter, Cut, Mute, Op, OpLog, TimelineState, TimeRange
 from vibe.render import UnsupportedEdit
-from vibe.render.audio import render_audio
+from vibe.render.audio import apply_audio_edits, render_audio
 
 RATE = 10  # 10 samples per second keeps the sample numbers easy to read
 
@@ -72,6 +72,21 @@ def test_stereo_mutes_and_cuts_every_channel() -> None:
     assert out.shape == (40, 2)
     assert not out[:10].any()
     assert out[10:].all()
+
+
+@pytest.mark.parametrize("size", [1, 3, 7, 10, 50])
+def test_chunk_by_chunk_gives_the_same_as_all_at_once(size: int) -> None:
+    state = state_of(mute(1.0, 3.0), cut(2.0, 4.0), mute(4.5, None))
+    chunks = [
+        apply_audio_edits(SAMPLES[i : i + size], RATE, state, first_sample=i)
+        for i in range(0, len(SAMPLES), size)
+    ]
+    assert np.concatenate(chunks).tolist() == render_audio(SAMPLES, RATE, state).tolist()
+
+
+def test_a_chunk_entirely_inside_a_cut_comes_out_empty() -> None:
+    state = state_of(cut(1.0, 4.0))
+    assert len(apply_audio_edits(SAMPLES[15:25], RATE, state, first_sample=15)) == 0
 
 
 def test_input_samples_are_not_changed() -> None:

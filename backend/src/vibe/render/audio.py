@@ -27,25 +27,36 @@ def check_audio(state: TimelineState) -> None:
 
 
 def render_audio(samples: np.ndarray, sample_rate: int, state: TimelineState) -> np.ndarray:
-    """``samples`` ((n,) or (n, channels)) with the mutes silenced and the cuts removed.
-
-    Returns a new array; ``samples`` is left as it was.
-    """
+    """A whole clip's ``samples`` ((n,) or (n, channels)) with the mutes silenced and the cuts
+    removed. Returns a new array; ``samples`` is left as it was."""
     check_audio(state)
+    return apply_audio_edits(samples, sample_rate, state)
+
+
+def apply_audio_edits(
+    samples: np.ndarray, sample_rate: int, state: TimelineState, first_sample: int = 0
+) -> np.ndarray:
+    """``render_audio`` for one chunk of a clip, once ``check_audio`` has passed.
+
+    ``first_sample`` is the clip's sample number of ``samples[0]``, so chunks rendered one at a
+    time come out the same as the whole clip rendered at once.
+    """
     out = samples.copy()
     n = len(out)
     for mute in state.mutes:
-        start, end = _samples(mute.start, mute.end, sample_rate, n)
+        start, end = _samples(mute.start, mute.end, sample_rate, first_sample, n)
         out[start:end] = 0
     keep = np.ones(n, dtype=bool)
     for cut in state.cuts:
-        start, end = _samples(cut.start, cut.end, sample_rate, n)
+        start, end = _samples(cut.start, cut.end, sample_rate, first_sample, n)
         keep[start:end] = False
     return out[keep]
 
 
-def _samples(start: float, end: float | None, sample_rate: int, n: int) -> tuple[int, int]:
-    """Source seconds ``[start, end)`` as sample numbers, clamped to the clip."""
-    first = min(n, round(start * sample_rate))
-    last = n if end is None else min(n, round(end * sample_rate))
-    return first, last
+def _samples(
+    start: float, end: float | None, sample_rate: int, first_sample: int, n: int
+) -> tuple[int, int]:
+    """Source seconds ``[start, end)`` as positions in a chunk of ``n`` samples, clamped to it."""
+    first = round(start * sample_rate) - first_sample
+    last = n if end is None else round(end * sample_rate) - first_sample
+    return min(n, max(0, first)), min(n, max(0, last))
