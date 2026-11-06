@@ -23,7 +23,7 @@ from vibe.contract import TimelineState, Track
 from vibe.render.audio import check_audio, render_audio
 from vibe.render.errors import RenderError
 from vibe.render.frame import FrameRenderer, RenderIssue, check_video
-from vibe.video import FrameIndex, VideoInfo, VideoReader, extract_audio, probe
+from vibe.video import FrameIndex, VideoInfo, VideoReader, iter_audio_chunks, probe
 
 VIDEO_CODEC = "libx264"
 PIX_FMT = "yuv420p"
@@ -131,14 +131,13 @@ def _render_audio(
     """The output's audio as ``(samples, rate, layout)``, or ``None`` for a silent clip."""
     if info.audio is None:
         return None
-    rate, mono = info.audio.sample_rate, info.audio.channels == 1
-    samples, _ = extract_audio(source, sample_rate=rate, mono=mono)
+    rate = info.audio.sample_rate
+    # The AAC encoder refuses some layouts, and some files don't name theirs ("2 channels"), so
+    # the output is always mono or stereo.
+    layout = "mono" if info.audio.channels == 1 else "stereo"
+    chunks = iter_audio_chunks(source, sample_rate=rate, mono=False, layout=layout)
+    samples = np.concatenate([chunk.samples for chunk in chunks])
     samples = samples[: round(index.end * rate)]  # no sound past the last frame
-    if mono:
-        layout = "mono"
-    else:
-        with av.open(str(source)) as container:
-            layout = container.streams.audio[0].layout.name
     return render_audio(samples, rate, state), rate, layout
 
 

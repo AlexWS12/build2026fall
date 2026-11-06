@@ -123,6 +123,18 @@ def test_clip_without_audio_exports_without_audio(
     assert result.frames == FRAMES - round(CUT * FPS)
 
 
+@pytest.mark.parametrize(
+    ("clip", "channels"),
+    [("mono_clip", 1), ("unnamed_layout_clip", 2), ("surround_clip", 2), ("pattern_clip", 2)],
+)
+def test_audio_comes_out_mono_or_stereo(
+    clip: str, channels: int, request: pytest.FixtureRequest, tmp_path: Path
+) -> None:
+    result = export(request.getfixturevalue(clip), state_of(), [], tmp_path / "out.mp4")
+    assert probe(result.path).audio.channels == channels
+    assert rms(extract_audio(result.path)[0]) > 0.01  # and the sound survived
+
+
 def test_odd_size_is_cropped_to_even(odd_size_clip: Path, tmp_path: Path) -> None:
     result = export(odd_size_clip, state_of(), [], tmp_path / "out.mp4")
     info = probe(result.path)

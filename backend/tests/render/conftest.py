@@ -52,6 +52,36 @@ def silent_pattern_clip(render_clip_dir: Path, pattern_clip: Path) -> Path:
     return path
 
 
+def _clip_with_audio(path: Path, *audio_args: str) -> Path:
+    """One second of the pattern (lossless, so MKV holds it) plus the tone, encoded as asked."""
+    _ffmpeg(
+        "-f", "lavfi", "-i", f"testsrc2=s={WIDTH}x{HEIGHT}:r={FPS}:d=1",
+        "-f", "lavfi", "-i", f"sine=f={TONE_HZ}:r={SAMPLE_RATE}:d=1",
+        "-c:v", "ffv1", *audio_args, "-shortest",
+        str(path),
+    )  # fmt: skip
+    return path
+
+
+@pytest.fixture(scope="session")
+def mono_clip(render_clip_dir: Path) -> Path:
+    return _clip_with_audio(render_clip_dir / "mono.mkv", "-ac", "1", "-c:a", "aac")
+
+
+@pytest.fixture(scope="session")
+def unnamed_layout_clip(render_clip_dir: Path) -> Path:
+    """Stereo PCM in MKV, which doesn't name its layout: PyAV calls it "2 channels"."""
+    return _clip_with_audio(render_clip_dir / "unnamed.mkv", "-ac", "2", "-c:a", "pcm_s16le")
+
+
+@pytest.fixture(scope="session")
+def surround_clip(render_clip_dir: Path) -> Path:
+    """7.1 audio, a layout the AAC encoder refuses."""
+    return _clip_with_audio(
+        render_clip_dir / "surround.mkv", "-af", "aformat=channel_layouts=7.1", "-c:a", "flac"
+    )
+
+
 @pytest.fixture(scope="session")
 def odd_size_clip(render_clip_dir: Path) -> Path:
     """321×241 (an odd width and height), lossless FFV1 in MKV, no audio."""

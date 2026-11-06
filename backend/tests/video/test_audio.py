@@ -114,3 +114,16 @@ def test_errors(silent_clip: Path, junk_file: Path) -> None:
         next(iter_audio_chunks(silent_clip))
     with pytest.raises(UnreadableMedia):
         extract_audio(junk_file)
+
+
+def test_chunks_convert_to_a_layout(delayed_audio_clip: Path) -> None:
+    # PCM in MKV doesn't name its layout, so this also checks an unnamed one converts.
+    chunks = list(
+        iter_audio_chunks(delayed_audio_clip, sample_rate=SAMPLE_RATE, mono=False, layout="stereo")
+    )
+    assert all(c.samples.ndim == 2 and c.samples.shape[1] == 2 for c in chunks)
+
+
+def test_layout_keeps_the_channel_axis_for_mono(main_clip: Path) -> None:
+    chunk = next(iter_audio_chunks(main_clip, sample_rate=SAMPLE_RATE, layout="mono"))
+    assert chunk.samples.shape == (SAMPLE_RATE, 1)
