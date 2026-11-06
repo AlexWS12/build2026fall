@@ -62,6 +62,16 @@ _TOOLS = (
         ref_args={"time_range": "time_range"},
     ),
     ToolSpec(
+        name="unmute",
+        kind="edit",
+        description="Bring back the sound a mute silenced, over a time range.",
+        args=tools.UnmuteArgs,
+        result=tools.UnmuteResult,
+        returns="none",
+        run=tools.unmute,
+        ref_args={"time_range": "time_range"},
+    ),
+    ToolSpec(
         name="denoise",
         kind="edit",
         description="Reduce background noise (hiss, hum, fans) over a time range.",

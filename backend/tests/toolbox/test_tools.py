@@ -8,7 +8,7 @@ from pydantic import TypeAdapter
 
 from vibe.agent import Plan, plan_request
 from vibe.agent.plan import as_ref
-from vibe.contract import AddAudioFilter, AddMask, Cut, Mute, OpLog, TimeRange, Track
+from vibe.contract import AddAudioFilter, AddMask, Cut, Mute, OpLog, TimeRange, Track, Unmute
 from vibe.storage import Storage
 from vibe.toolbox import TOOLS, ToolContext, ToolError, call_tool
 from vibe.toolbox.tools import FindObjectsResult
@@ -128,6 +128,68 @@ def test_mute_without_a_time_range_mutes_the_whole_clip() -> None:
     (op,) = log.ops
     assert isinstance(op, Mute)
     assert op.time_range is None and op.speaker is None
+
+
+def test_unmute_lifts_part_of_an_earlier_mute() -> None:
+    log = OpLog()
+    call_tool("mute", {"time_range": {"start": 10, "end": 20}}, ctx(log))
+
+    call_tool("unmute", {"time_range": {"start": 12, "end": 15}}, ctx(log))
+
+    op = log.ops[-1]
+    assert isinstance(op, Unmute) and op.speaker is None
+    assert [(m.start, m.end) for m in log.state().mutes] == [(10, 12), (15, 20)]
+
+
+def test_unmute_without_a_time_range_lifts_every_all_audio_mute() -> None:
+    log = OpLog()
+    call_tool("mute", {"time_range": {"start": 1, "end": 2}}, ctx(log))
+    call_tool("mute", {"speaker": "spk_1"}, ctx(log))
+
+    result = call_tool("unmute", {}, ctx(log))
+
+    assert [m.speaker for m in log.state().mutes] == ["spk_1"]  # a speaker's mute stays
+    assert result.still_muted == ["spk_1"]  # and the agent is told so
+
+
+def test_unmute_says_nothing_is_still_muted_when_all_the_sound_is_back() -> None:
+    log = OpLog()
+    call_tool("mute", {"time_range": {"start": 10, "end": 20}}, ctx(log))
+    call_tool("mute", {"speaker": "spk_1", "time_range": {"start": 30, "end": 40}}, ctx(log))
+
+    result = call_tool("unmute", {"time_range": {"start": 10, "end": 20}}, ctx(log))
+
+    assert result.still_muted == []  # spk_1's mute is outside the range
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        {"time_range": {"start": 30, "end": 40}},  # after the mute
+        {"time_range": {"start": 5, "end": 10}},  # right before it: the end is excluded
+        {"speaker": "spk_2"},  # nobody muted spk_2
+    ],
+)
+def test_unmute_with_nothing_to_lift_is_an_error(args: dict) -> None:
+    log = OpLog()
+    call_tool("mute", {"time_range": {"start": 10, "end": 20}}, ctx(log))
+
+    with pytest.raises(ToolError, match="isn't muted"):
+        call_tool("unmute", args, ctx(log))
+    assert len(log.ops) == 1  # nothing written
+
+
+def test_unmute_all_audio_where_only_a_speaker_is_muted_names_the_speaker() -> None:
+    log = OpLog()
+    call_tool("mute", {"speaker": "spk_1", "time_range": {"start": 10, "end": 20}}, ctx(log))
+
+    with pytest.raises(ToolError, match="only spk_1 muted there"):
+        call_tool("unmute", {"time_range": {"start": 12, "end": 15}}, ctx(log))
+
+
+def test_unmute_on_an_empty_timeline_is_an_error() -> None:
+    with pytest.raises(ToolError, match="all audio isn't muted anywhere"):
+        call_tool("unmute", {}, ctx(OpLog()))
 
 
 def test_denoise_appends_an_audio_filter_op() -> None:

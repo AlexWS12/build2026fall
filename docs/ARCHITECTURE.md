@@ -51,7 +51,7 @@ A chat message, a UI action (click a target, draw a box, drag a box), or a **sta
 - **Hand edits from the UI go through the same tools**, so they land in the same op log and undo works the same way.
 - **Analysis runs once per video and is cached** (tracks, transcripts, speaker turns), so repeat requests are cheap.
 - Every tool has a CLI and a stub implementation, so it can be tested without a GPU.
-- **Built so far (F-06):** `find_objects` (stub: filters the tracks it's given; with no analysis at all it fails instead of finding nothing), `resolve_time` (real: arithmetic on the video duration), `add_mask`, `cut_range` and `mute`, the five the planner uses. F-33 adds `denoise` (writes `add_audio_filter` with `filter: "denoise"`, an optional `time_range` and `strength`). The other tools above get added when a feature needs them.
+- **Built so far (F-06):** `find_objects` (stub: filters the tracks it's given; with no analysis at all it fails instead of finding nothing), `resolve_time` (real: arithmetic on the video duration), `add_mask`, `cut_range` and `mute`, the five the planner uses. F-33 adds `denoise` (writes `add_audio_filter` with `filter: "denoise"`, an optional `time_range` and `strength`). F-30 adds `unmute` (writes `unmute`: lifts all or part of a mute for the same `speaker`, which undo can't do for part of a request; it refuses when nothing for that speaker is muted in the range, and its result lists `still_muted` speakers so the agent doesn't claim all the sound is back). The other tools above get added when a feature needs them.
 - **One entry point:** `call_tool(name, args, ctx)` validates the arguments and runs the tool. `ToolContext` carries the `request_id`, the `source`, the timeline to write to (an `OpLog` in memory or a storage `Project` on disk), the duration and the tracks. Anything that can't be done raises `ToolError` and writes nothing.
 - **CLI:** `uv run python -m vibe.toolbox --help` lists the tools; `... <tool> --help` lists its arguments; `... <tool> --project <id> --args '{...}'` (or `--log timeline.jsonl`) runs one. It only appends to a timeline, never rewrites it.
 
@@ -83,7 +83,7 @@ See [The contract](#the-contract-edit-timeline-v1-in-code) below. Everything ups
     - A masked track id with no track masks the whole frame, and is reported in `issues`.
     - Pure: no files, cache or network.
   - **Effects:** blur, pixelate and black box, numpy only. Their sizes scale with the target, with a floor, so strength 0 still hides it. The numbers are starting points for F-11.
-  - **Audio:** `render_audio` silences all-audio mutes, then removes cuts. `apply_audio_edits` does the same for one chunk.
+  - **Audio:** `render_audio` silences all-audio mutes, then removes cuts. `apply_audio_edits` does the same for one chunk. The sound fades out over 10 ms before each mute and each cut, and back in after, so edits don't click (F-30). The fades sit outside the edited range: a muted span stays exactly silent, and a cut keeps the same samples. `TimelineState.mutes_at(t)` gives the mutes in effect at one time, for the per-frame path.
   - **Export:** `export(source, state, tracks, out_path)`.
     - Every frame that isn't cut goes through the per-frame path, timed with `source_to_output`, into an H.264 + AAC MP4.
     - Output is BT.709 and tagged as such, so players show HD colours correctly.

@@ -4,15 +4,18 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from vibe.contract import Op, Track
+from vibe.contract import Op, TimelineState, Track
 from vibe.contract.common import Source
 
 
 class OpSink(Protocol):
     """Where edit tools write. ``contract.OpLog`` (in memory) and ``storage.Project`` (on disk)
-    both fit: ``append`` validates the op against the whole log and raises before writing."""
+    both fit: ``append`` validates the op against the whole log and raises before writing.
+    ``state`` is the folded timeline, for tools that check what's there first (``unmute``)."""
 
     def append(self, op: Op) -> Op: ...
+
+    def state(self) -> TimelineState: ...
 
 
 @dataclass(frozen=True)

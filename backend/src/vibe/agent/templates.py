@@ -13,7 +13,10 @@ from vibe.agent.plan import Plan, ToolCall, ref
 from vibe.agent.timeparse import TimeParseError, parse_time_phrase
 from vibe.contract import WHOLE_CLIP, TimeRange
 
-_VERBS = r"blur|pixelate|black ?box|box|hide|mute|silence|cut|remove|delete|denoise|reduce"
+_VERBS = (
+    r"blur|pixelate|black ?box|box|hide|mute|silence|unmute|restore|cut|remove|delete"
+    r"|denoise|reduce"
+)
 """No "trim": it means "cut this" or "keep only this" depending on who says it, so it's asked."""
 
 _CLAUSE_SPLIT = re.compile(
@@ -25,7 +28,13 @@ _MASK = re.compile(
     r"(?:all\s+(?:the\s+)?|the\s+|every\s+|each\s+)?"
     r"(faces?|people|persons?|everyone|everybody|license plates?|plates?)\b(.*)"
 )
-_MUTE = re.compile(r"(?:mute|silence)(?:\s+(?:the\s+)?(?:audio|sound|video|clip|it))?\b(.*)")
+_MUTE = re.compile(r"(?:mute|silence)(?:\s+(?:the\s+)?(?:audio|sound|video|clip))?\b(.*)")
+"""No "it": "mute it" may mean a person or a sound the user is pointing at, not the whole clip,
+so it goes to the LLM or gets asked about, like other pronouns ("mute him")."""
+_UNMUTE = re.compile(
+    r"(?:unmute(?:\s+(?:the\s+)?(?:audio|sound|video|clip))?"
+    r"|restore\s+(?:the\s+)?(?:audio|sound))\b(.*)"
+)
 _DENOISE = re.compile(
     r"(?:denoise(?:\s+(?:the\s+)?(?:audio|sound|video|clip|it))?"
     r"|(remove|reduce|cut|delete)\s+(?:the\s+)?(?:background\s+)?(?:noises?|hiss(?:es)?|hums?)"
@@ -122,6 +131,14 @@ def _mute(match: re.Match[str], steps: _Steps) -> Matched:
     return _scope(when)
 
 
+def _unmute(match: re.Match[str], steps: _Steps) -> Matched:
+    when = _time(match.group(1))
+    if when is None:
+        return None
+    steps.add("unmute", _time_args(when, steps))
+    return _scope(when)
+
+
 def _denoise(match: re.Match[str], steps: _Steps) -> Matched:
     verb, rest = match.groups()
     when = _time(rest)
@@ -144,6 +161,7 @@ def _cut(match: re.Match[str], steps: _Steps) -> Matched:
 _TEMPLATES: tuple[tuple[re.Pattern[str], Callable[[re.Match[str], _Steps], Matched]], ...] = (
     (_MASK, _mask),
     (_MUTE, _mute),
+    (_UNMUTE, _unmute),
     (_DENOISE, _denoise),
     (_CUT, _cut),
 )
