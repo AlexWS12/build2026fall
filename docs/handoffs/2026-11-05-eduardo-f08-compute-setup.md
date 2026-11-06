@@ -4,7 +4,7 @@ date: 2026-11-05
 branch: eduardo/compute-setup
 features: [F-08]
 base: v0.1.0 @ d95ede3
-head: 7c51b1e
+head: 4148e4c
 status: ready for review
 ---
 
@@ -47,7 +47,7 @@ status: ready for review
   - driver and `sm_120` warnings
   - `download` checks hashes and leaves no `.part` file
 - **Docs:**
-  - [`docs/research/f08-gpu-survey.md`](../research/f08-gpu-survey.md): every answer as reported, a tier per machine and what follows from it.
+  - [`docs/research/f08-gpu-survey.md`](../research/f08-gpu-survey.md): every answer as reported, a tier per machine and what follows from it. **Correction (2026-11-05):** Alex and Nickolas both have an RTX 5070. Nickolas's chat answer said RTX PRO 2000 Blackwell, 16 GB, and the survey doc keeps that answer next to the correction.
   - The survey table and "Built so far" in ARCHITECTURE "Compute".
   - "Running models: setup per compute tier" in the README.
   - My F-08 row in the roadmap is set to `in review`.
@@ -62,7 +62,7 @@ uv run ruff check && uv run ruff format --check
 uv run python -m vibe.modules doctor               # your machine's tier
 uv run python -m vibe.modules models
 ```
-Verified on 2026-11-05 on macOS 26.6.2 (Apple M2, 8 GB, no GPU used), Python 3.12, with ffmpeg on PATH: 495 passed, and Ruff is clean. **Not tested:**
+Verified on 2026-11-05 at `4148e4c` on macOS 26.6.2 (Apple M2, 8 GB, no GPU used), Python 3.12, with ffmpeg on PATH: 495 passed, and Ruff check and format are clean. Frontend tests weren't run (no frontend change). **Not tested:**
 - `uv sync --extra cpu` / `--extra cu128` actually installing torch (it's only locked).
 - `doctor` on any NVIDIA machine (only on this Mac, plus unit tests on parsed `nvidia-smi` output).
 - `serve` over a real network (only in-process via `TestClient`).
