@@ -70,21 +70,26 @@ See [The contract](#the-contract-edit-timeline-v1-in-code) below. Everything ups
 > Code: [`backend/src/vibe/render/`](../backend/src/vibe/render/) (F-04). Encoding: D-019 (proposed).
 
 - **It's deterministic:** the same timeline and the same source always give the same output.
-- **It applies the fail-safe rules:** interpolate boxes between keyframes, hold a lost track's mask for a few frames and grow it, pad uncertain masks more, and on an error mask the whole affected segment and log it, never skip it.
+- **It applies the fail-safe rules:** interpolate boxes between keyframes, keep a lost track's mask for as long as the edit lasts, growing it up to a limit, and flag it, pad uncertain masks more, and on an error mask the whole affected segment and log it, never skip it.
 - **Two paths:** **export** (whole file, encoded by the ffmpeg libraries inside PyAV, D-019) and **frame by frame** (preview and live). They share the same masking and effect code, so preview, export and live look identical.
 - **Built so far (F-04):**
   - **Per-frame:** `FrameRenderer(state, tracks).render(image, t)` (or `render_frame`) applies every mask in effect at source time `t`.
-    - Boxes move linearly between keyframes. Past either end of a track, the box is held for 0.5 s and grows; after that the track is off screen.
+    - Boxes move linearly between keyframes up to 1 s apart. Across a longer gap, nothing saw the target, so the box covers both keyframes and the space between them.
+    - Past either end of a track, the nearest box is held for as long as the mask lasts, growing up to a limit. More than 0.5 s from any keyframe, the target counts as lost and is reported once in `issues`.
+    - **A held box is the last known position, not a guarantee:** a lost target can move out of it, which is why it's reported. Held boxes can also leave masked patches where nobody is. F-11 tunes this on real detections.
     - `uncertain` keyframes get extra padding.
     - A masked track id with no track masks the whole frame, and is reported once in `issues`.
     - Pure: no files, cache or network.
   - **Effects:** blur, pixelate and black box, numpy only. Their sizes scale with the target, with a floor, so strength 0 still hides it. The numbers are starting points for F-11.
-  - **Audio:** `render_audio` silences all-audio mutes, then removes cuts, on the samples from `extract_audio`.
+  - **Audio:** `render_audio` silences all-audio mutes, then removes cuts. `apply_audio_edits` does the same for one chunk.
   - **Export:** `export(source, state, tracks, out_path)`.
     - Every frame that isn't cut goes through the per-frame path, timed with `source_to_output`, into an H.264 + AAC MP4.
-    - The file is written under a temporary name and renamed when complete.
+    - Sound is edited and encoded in chunks alongside the picture, so memory stays small on long clips.
+    - Audio comes out mono or stereo, whatever the source has.
+    - The file's index goes at its start (`faststart`), so a browser can play it while it downloads.
+    - The file is written under a temporary name and renamed when complete. Exporting over the source is refused.
     - An odd width or height loses its last row or column (yuv420p needs even sizes).
-  - **Refused before anything is written** (`UnsupportedEdit`): standing rules (F-51), muting one speaker (F-32) and audio filters (F-33). A privacy edit is never silently missing from an output.
+  - **Refused before anything is written** (`UnsupportedEdit`): standing rules (F-51), muting one speaker (F-32) and audio filters (F-33). These are errors rather than skips, so a refused edit is never silently left out of an output.
   - **CLI:** `uv run python -m vibe.render export clip.mp4 --log timeline.jsonl [--tracks tracks.json] -o out.mp4`. With `--project <id>`, it renders a project into a new file in its `exports/` each time.
 
 ## Code layout

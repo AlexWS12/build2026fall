@@ -3,14 +3,14 @@ author: paulallain
 date: 2026-11-03
 branch: paulallain/f04-renderer
 features: [F-04]
-base: v0.1.0 @ f5ecc86
-head: 427f2e2
+base: v0.1.0 @ d95ede3
+head: de10f9b
 status: ready for review
 ---
 
 # F-04 renderer: per-frame path, export to MP4, blur / pixelate / box, cuts and mutes
 
-> **Heads-up:** this adds **D-019** (export encodes with PyAV; Proposed) to the decisions log in `docs/ARCHITECTURE.md`, a shared file. Post in the team chat before merging. No other shared file changes: no new dependencies (PyAV and numpy were already locked), and the contract, toolbox and API are untouched.
+> **Heads-up:** this adds **D-019** (export encodes with PyAV; Proposed) to the decisions log in `docs/ARCHITECTURE.md`, a shared file. Post in the team chat before merging. No other shared file changes: no new dependencies (PyAV and numpy were already locked), and the contract, toolbox and API are untouched. `iter_audio_chunks` in `video/audio.py` (F-03) gained an optional `layout` argument; existing calls behave the same.
 
 ## What changed
 - **`backend/src/vibe/render/`** (was an empty package):
@@ -19,36 +19,49 @@ status: ready for review
     - Pure: no files, no cache, no network.
     - **Fail closed:** a masked track id with no track masks the whole frame, and is reported once in `.issues`. Tracks sharing an id are all masked.
   - `geometry.py`: where a box is at time `t`.
-    - Linear between keyframes.
-    - Past either end of a track, it's held for `HOLD_SECONDS` (0.5 s) and grows (`HOLD_GROWTH`); after that, it's off screen.
+    - Linear between keyframes up to `MAX_GAP_SECONDS` (1 s) apart. Across a longer gap, the box covers both keyframes and the space between them.
+    - Past either end of a track, the nearest box is held for as long as the mask lasts, growing (`HOLD_GROWTH`) up to `MAX_HOLD_GROWTH`. More than `HOLD_SECONDS` (0.5 s) from a keyframe, it's marked `lost`, and the track is reported once in `.issues`.
     - Next to an `uncertain` keyframe, it gets `UNCERTAIN_PADDING` extra.
     - Padding grows the box by that fraction of its size, half on each side. Pixels round outward, so a mask never shrinks.
   - `effects.py`: `blur` (3 box-blur passes ≈ Gaussian), `pixelate` (block averages) and `box` (black), in numpy only. Sizes scale with the target's shorter side, with a floor, so strength 0 still hides it.
-  - `audio.py`: `render_audio` silences all-audio mutes, then removes cuts, on samples from `extract_audio`.
+  - `audio.py`: `render_audio` silences all-audio mutes, then removes cuts. `apply_audio_edits` does the same for one chunk.
   - `export.py`: **the export path.**
     - `export(source, state, tracks, out_path)` runs every frame that isn't cut through the per-frame path and writes an H.264 + AAC MP4 with PyAV.
     - Timestamps come from `source_to_output`, in the source's time base, so variable frame rates keep their timing.
-    - The file is written under a temporary name and renamed at the end; on failure the temporary file is deleted.
+    - Sound is edited and encoded in 0.1 s chunks alongside the picture, and comes out mono or stereo.
+    - The file's index goes at its start (`faststart`).
+    - The file is written under a temporary name and renamed at the end; on failure the temporary file is deleted. Exporting over the source is refused.
     - An odd width or height loses its last row or column (yuv420p).
   - **Refused before anything is written** (`UnsupportedEdit`): standing rules (F-51), muting one speaker (F-32) and audio filters (F-33). The error names the card.
   - `__main__.py`: the CLI. `export CLIP --log timeline.jsonl [--tracks t.json] -o out.mp4`, or `export --project <id>`, which writes a new file in the project's `exports/` every time.
-- **`backend/tests/render/`:** 86 tests.
+- **`backend/tests/render/`:** 110 tests.
   - `test_render_export.py` holds **the exit check.** It renders a 3 s ffmpeg-made clip with `render_session.jsonl` (blur 0–2 s, cut 1–1.5 s, mute 2–2.5 s) and checks:
     - the output is 2.5 s and 75 frames;
     - the masked region changed and the rest didn't;
     - the blur ends on time after the cut;
     - the muted span is silent and the rest isn't.
-  - It also covers: refusals write nothing; a clip with no audio; odd sizes; cutting everything is an error.
+  - It also covers: refusals write nothing; a clip with no audio; odd sizes; cutting everything is an error; audio layouts; sound and picture stored together; the index first; refusing to overwrite the source.
   - The other files cover geometry, effects, the per-frame path (including a no-network test), audio and the CLI.
   - Clips come from `conftest.py`, the same way as the video tests: skipped without ffmpeg, and failing if `VIBE_REQUIRE_FFMPEG=1`.
 - **Docs:**
   - `docs/ARCHITECTURE.md`: a code pointer and "Built so far" in "6. Renderer", plus the D-019 row.
   - `README.md`: the render CLI line in "Run the app".
   - `docs/ROADMAP.md`: claimed the Sprint 2 F-04 row, and set it and the backlog row to `done`.
+- **Review fixes (PR #21, Edugre):** every comment is addressed, two of them differently from what was suggested.
+  - **A lost target stayed visible, with no report.** A box stopped 0.5 s after a track's last keyframe even with the mask still in effect. It's now held for as long as the mask lasts, and the track is reported in `.issues`. This replaces the old "off screen" behaviour, and `at()` no longer returns `None`.
+  - **A box slid across a long gap.** Past `MAX_GAP_SECONDS`, the box now covers both keyframes and everything between them. Edugre suggested holding the two end boxes; a target crossing the frame during the gap would be visible between those two, so the box covers the whole span instead.
+  - **Export could overwrite its source.** It's now refused, using `samefile`, which also catches other spellings of the path and hard links.
+  - **Some audio made the export fail.** `5.1(side)` from the review worked here, but 7.1 layouts failed, and so did any source with no named layout (stereo PCM in MKV reports "2 channels"). Output is now always mono or stereo, through a new `layout` argument on `iter_audio_chunks`.
+  - **The source was reopened to read its layout.** No longer needed, so `AudioInfo` didn't need a `layout` field.
+  - **Sound wasn't stored with the picture, and the index was at the end.** Below about 10 s the muxer hid this; a 30 s clip had 599 video packets before the first audio. Sound is now encoded with the picture (a 15 s clip has 2), and `faststart` moves the index to the front.
+  - **All the audio was held in memory.** It's now processed in chunks, which took the peak for a 30-minute clip from 2,778 MB to 98 MB (measured below).
+  - **Only `FileNotFoundError` was handled by the CLI.** It now catches `OSError`, so a permission error prints `error: ...`.
+  - **`check_video` ran twice.** Removed from `export()`; `FrameRenderer` does it.
+- **Merged `origin/main`** to resolve a conflict in `docs/ROADMAP.md`, keeping F-64 and F-09 from `main` and the F-04 row from this branch. It's a merge rather than a rebase, so review comments stay attached and no force-push is needed.
 
 ## How to check it
 ```bash
-uv run --directory backend pytest -q tests/render     # 86 passed (with ffmpeg on PATH; without it, 14 skip)
+uv run --directory backend pytest -q tests/render     # 110 passed (with ffmpeg on PATH; without it, the clip tests skip)
 uv run --directory backend python -m vibe.render export --help
 ```
 By hand, from `backend/` (ffmpeg makes the clip; the render itself doesn't need ffmpeg):
@@ -59,16 +72,19 @@ uv run python -m vibe.video probe out.mp4             # duration 2.5
 ```
 In `out.mp4`, the middle of the frame is blurred until 1.5 s of output (2.0 s of source), 0.5 s is gone, and the sound is silent from 1.5 s to 2.0 s.
 
-Verified on 2026-11-03 on Windows 11, Python 3.12.12, uv 0.13.0, PyAV 19.0.2, numpy 2.5.4, ffmpeg 9.0.2 (gyan.dev build), no GPU:
-- `tests/render`: 86 passed, none skipped.
-- `npm test`, backend step: 448 passed, 1 skipped, **1 failed**. The failure is `tests/toolbox/test_toolbox_cli.py::test_writing_keeps_the_timeline_permissions`, which already fails on `main` on Windows (see "Gotchas"). Because of it, `npm test` stopped before the frontend step.
+Verified on 2026-11-05 on Windows 11, Intel 64-bit laptop, Python 3.12.12, uv 0.13.0, PyAV 19.0.2, numpy 2.5.4, ffmpeg 9.0.2 (gyan.dev build), no GPU:
+- `tests/render`: 110 passed, none skipped.
+- Backend suite: 563 passed, 1 skipped, **1 failed**. The failure is `tests/toolbox/test_toolbox_cli.py::test_writing_keeps_the_timeline_permissions`, which already fails on `main` on Windows (see "Gotchas").
 - `uv run ruff check` and `uv run ruff format --check`: pass.
-- I rendered a clip with the CLI and compared frames by eye: the blurred box is right, and output 1.6 s shows source 2.1 s.
+- I reran a reproduction of each review comment, and none of them happens now.
+- I compared frames by eye, on the original exit-check render and on a track lost at 1 s under a 3 s blur: the box stays and grows.
+- **Measured by scratch script, on a 30-minute, 48 kHz stereo, 64×48 clip, peak process memory for one export:** 2,778 MB before, 98 MB after.
+- **Speed, same machine, a 60 s clip of the same kind, 8 alternating rounds:** best 1.55 s before and 1.71 s after. This laptop drops to about a fifth of its speed under sustained load (both reach about 7.8 s), so compare only like with like.
 
 **Not tested:**
 - the frontend tests (its dependencies aren't installed on this machine; this branch changes no frontend files);
 - CI, which runs on the PR;
-- real phone footage, variable-frame-rate sources, audio with more than 2 channels, and long or 1080p clips. No speed was measured: there's no benchmark for the renderer yet.
+- real phone footage, variable-frame-rate sources, and 1080p clips. The renderer has no speed benchmark yet; the figures above only compare before and after on a tiny clip.
 
 ## Decisions made
 paulallain made these on 2026-11-03:
@@ -78,20 +94,26 @@ paulallain made these on 2026-11-03:
 
 F-04 details, not decisions-log material; say on the PR if you disagree:
 - A masked target with no track masks the **whole frame** ("mask the whole affected segment", ARCHITECTURE "Renderer").
-- Tracks sharing an id (e.g. a detector track and its hand correction) are **all** masked.
+- A lost target keeps its last box rather than masking the whole frame, which would blur the rest of the edit whenever anyone left the shot.
+- Tracks sharing an id (e.g. a detector track and its hand correction) are **all** masked, and the id only counts as lost when all of them are.
 - Outputs are `.mp4` only.
 - The exit-check timeline lives in `tests/render/`, not in `contract/examples/`, so the shared contract folder isn't touched.
 
 ## Next steps
 - Post the D-019 heads-up, open the PR and get a review. After merging, F-04 is done.
-- **F-11 (blur on real targets):** tune the constants at the top of `geometry.py` and `effects.py` on real detections. Masks come later through F-15 (D-018).
+- **F-11 (blur on real targets):** tune the constants at the top of `geometry.py` and `effects.py` on real detections, especially `MAX_GAP_SECONDS` and `MAX_HOLD_GROWTH`, which are unmeasured starting values. Masks come later through F-15 (D-018).
+- **F-41 (review queue):** `RenderResult.issues` lists the lost targets to show for review.
 - **F-20 / F-30 (cut, mute):** the renderer already applies cuts and all-audio mutes. Those cards connect toolbox → API → UI → export, and the preview.
 - **An export route (F-64 follow-up):** call `export(storage.video_path(project.info.video), project.state(), tracks, project.exports_dir / <new name>)`, as the CLI's `--project` does, with a new file name each time.
 - **F-08 / F-10:** detector tracks from the analysis cache aren't loaded yet. `--project` uses the project's hand-drawn tracks plus `--tracks`. Add cache tracks once their format exists.
 - **F-51 / F-32 / F-33:** replace the matching refusal in `check_video` / `check_audio` when each lands.
 
 ## Gotchas
-- **A track with one keyframe** (e.g. a box drawn once) is only masked for 0.5 s on either side of it. F-14 should give drawn boxes keyframes along the clip, or the hold rule needs an exception for `user` tracks.
+- **A held box is the last known position, not a guarantee.** A lost target can move out of it, so this still isn't fully fail-closed. That's why it's reported. Masking the whole frame would be, at the cost of blurring the rest of the edit whenever anyone leaves the shot.
+- **Held boxes can leave masked patches where nobody is.** A whole-clip mask keeps a box before a track starts and after it ends, so a clip with many short tracks shows many patches, and a box across a long gap can be wide. F-10 / F-11 should reduce this with steadier tracks.
+- **Timing on this laptop is unreliable:** the same export took between 8 s and 40 s depending on the moment. Alternate what you compare, and use the best times. I blamed AAC frame sizes for a slowdown that was really this, so don't reintroduce a frame-size workaround: alternating runs showed frame size makes no difference.
+- **Downmixing can go above 1.0** on very loud multichannel audio, because channels are added together. It's rare and isn't handled.
+- **`import vibe.render.export as x` gives the function, not the module,** because `vibe.render` exports a function with that name.
 - **ffmpeg on Windows:** after `winget install ffmpeg`, terminals opened by an app that was already running (including the Claude app) don't see it. Refresh PATH in the terminal, or sign out and back in.
 - **Pre-existing Windows test failure:** `test_writing_keeps_the_timeline_permissions` (F-06) checks POSIX permissions, which Windows doesn't have. Its neighbouring test already skips on Windows; this one should too. CI runs on Linux, so it's green there.
 - **The exit check's blur test relies mainly on "the region changed a lot"** (about 92/255 measured). The neighbour-difference "detail" measure only drops to about 0.27 after encoding, because `testsrc2` has broad gradients. Don't tighten its 0.5 bound.

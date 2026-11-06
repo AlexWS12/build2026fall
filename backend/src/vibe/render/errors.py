@@ -7,4 +7,4 @@ class RenderError(Exception):
 
 class UnsupportedEdit(RenderError):
     """The timeline has an edit this renderer can't apply yet. Raised before anything is
-    written, so a privacy edit is never silently missing from an output."""
+    written, so an edit it can't apply is never silently left out of an output."""
