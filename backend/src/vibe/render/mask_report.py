@@ -18,7 +18,7 @@ from bisect import bisect_right
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from itertools import pairwise
-from typing import Literal, get_args
+from typing import Any, Literal, get_args
 
 from vibe.contract import Effect, Keyframe, MaskSpan, TimelineState, TimeRange, Track
 from vibe.render.geometry import HOLD_SECONDS, MAX_GAP_SECONDS
@@ -80,6 +80,26 @@ class MaskAudit:
         """True when the renderer would report nothing and there are no rules left unchecked."""
         totals = self.totals
         return not (totals["lost"] or totals["no_track"] or self.rules_not_audited)
+
+    def to_json(self) -> dict[str, Any]:
+        """Plain data for ``json.dumps``, with ``totals`` and ``clean`` included."""
+        return {
+            "spans": [
+                {
+                    "track_id": span.track_id,
+                    "op_id": span.op_id,
+                    "request_id": span.request_id,
+                    "effect": span.effect.model_dump(mode="json"),
+                    "stretches": [
+                        {"kind": s.kind, "start": s.start, "end": s.end} for s in span.stretches
+                    ],
+                }
+                for span in self.spans
+            ],
+            "rules_not_audited": list(self.rules_not_audited),
+            "totals": self.totals,
+            "clean": self.clean,
+        }
 
 
 def audit_masks(state: TimelineState, tracks: Iterable[Track], *, duration: float) -> MaskAudit:
