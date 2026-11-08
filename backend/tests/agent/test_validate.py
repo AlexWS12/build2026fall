@@ -11,6 +11,27 @@ def plan(*calls: tuple[str, str, dict]) -> Plan:
 FIND_FACES = ("s1", "find_objects", {"label": "face"})
 
 
+def test_two_keeps_in_one_plan_are_refused_because_only_their_overlap_would_stay() -> None:
+    p = plan(
+        ("s1", "keep_range", {"time_range": {"start": 10, "end": 20}}),
+        ("s2", "keep_range", {"time_range": {"start": 30, "end": 40}}),
+    )
+
+    errors = validate_plan(p, TOOLS)
+
+    assert len(errors) == 1
+    assert "more than one keep_range" in errors[0]
+
+
+def test_one_keep_with_other_edits_is_valid() -> None:
+    p = plan(
+        ("s1", "keep_range", {"time_range": {"start": 10, "end": 20}}),
+        ("s2", "mute", {}),
+    )
+
+    assert validate_plan(p, TOOLS) == []
+
+
 def test_a_valid_plan_has_no_errors() -> None:
     p = plan(
         FIND_FACES,

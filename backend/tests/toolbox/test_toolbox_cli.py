@@ -41,12 +41,24 @@ def test_help_lists_every_tool(capsys: pytest.CaptureFixture[str]) -> None:
         assert name in out
 
 
-@pytest.mark.parametrize("tool", ["add_mask", "cut_range", "mute", "unmute", "denoise"])
+@pytest.mark.parametrize(
+    "tool", ["add_mask", "cut_range", "keep_range", "mute", "unmute", "denoise"]
+)
 def test_edit_tool_help_shows_an_example(tool: str, capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit):
         main([tool, "--help"])
 
     assert "example:" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("tool", ["resolve_time", "keep_range"])
+def test_help_says_which_tools_need_the_duration(
+    tool: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit):
+        main([tool, "--help"])
+
+    assert "needs --duration" in capsys.readouterr().out
 
 
 def test_tool_help_lists_its_arguments(capsys: pytest.CaptureFixture[str]) -> None:
@@ -80,6 +92,40 @@ def test_stub_tools_write_valid_ops_to_an_example_timeline(
     assert json.loads(out_cut)["op_ids"] == [cut.op_id]
     assert json.loads(out_mute)["op_ids"] == [mute.op_id]
     assert (cut.source, mute.source) == ("user", "user")
+
+
+def test_keep_range_writes_the_cuts_around_a_range(
+    capsys: pytest.CaptureFixture[str], timeline: Path
+) -> None:
+    before = len(OpLog.from_jsonl(timeline.read_text()))
+
+    code, out, _ = run(
+        capsys, "keep_range", "--log", str(timeline), "--duration", "60",
+        "--args", '{"time_range": {"start": 10, "end": 20}}',
+    )  # fmt: skip
+
+    log = OpLog.from_jsonl(timeline.read_text())
+    head, tail = log.ops[-2:]
+    assert code == 0
+    assert len(log) == before + 2
+    assert (head.time_range.start, head.time_range.end) == (0, 10)
+    assert (tail.time_range.start, tail.time_range.end) == (20, None)
+    assert json.loads(out)["op_ids"] == [head.op_id, tail.op_id]
+
+
+def test_keep_range_without_a_duration_is_an_error_and_writes_nothing(
+    capsys: pytest.CaptureFixture[str], timeline: Path
+) -> None:
+    before = timeline.read_text()
+
+    code, _, err = run(
+        capsys, "keep_range", "--log", str(timeline),
+        "--args", '{"time_range": {"start": 10, "end": 20}}',
+    )  # fmt: skip
+
+    assert code == 1
+    assert err.startswith("error:") and "duration" in err
+    assert timeline.read_text() == before
 
 
 def test_query_tool_prints_its_result(capsys: pytest.CaptureFixture[str]) -> None:

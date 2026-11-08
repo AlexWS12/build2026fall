@@ -26,7 +26,7 @@ class ToolContext:
     log: OpSink | None = None
     """The timeline edit tools write to. Query tools don't need one."""
     duration: float | None = None
-    """Video length in seconds, for ``resolve_time``."""
+    """Video length in seconds, for ``resolve_time`` and ``keep_range``."""
     tracks: Sequence[Track] | None = None
     """Tracks from the analysis cache (stub: given by the caller; real: F-08 / F-10). ``None``
     means the video hasn't been analysed; ``[]`` means it was and nothing was found."""

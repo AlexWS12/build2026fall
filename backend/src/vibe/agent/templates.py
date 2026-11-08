@@ -15,7 +15,7 @@ from vibe.contract import WHOLE_CLIP, TimeRange
 
 _VERBS = (
     r"blur|pixelate|black ?box|box|hide|mute|silence|unmute|restore|cut|remove|delete"
-    r"|denoise|reduce"
+    r"|denoise|reduce|keep"
 )
 """No "trim": it means "cut this" or "keep only this" depending on who says it, so it's asked."""
 
@@ -46,6 +46,8 @@ _DENOISE = re.compile(
 and "delete" are asked about instead (see ``_denoise``)."""
 NOISE_WORDS = frozenset({"noise", "noises", "hiss", "hisses", "hum", "hums"})
 _CUT = re.compile(r"(?:cut|remove|delete)(?:\s+out)?\b(.*)")
+_KEEP = re.compile(r"(?:only\s+)?keep(?:\s+(?:only|just))?\b(.*)")
+"""Keep only a range: the toolbox cuts everything around it."""
 
 _EFFECTS = {"blur": "blur", "hide": "blur", "pixelate": "pixelate", "box": "box"}
 _LABELS = {
@@ -89,11 +91,11 @@ class MixedTimeError(TimeParseError):
 _NO_TIME = object()
 """The clause has no time words: the edit applies to the whole clip."""
 
-Matched = Literal["timed", "untimed"] | None
+Matched = Literal["timed", "untimed", "keep"] | None
 """Whether a clause said when (a range, or "for the whole video") or didn't; None: no match.
 
 A request mixing both ("blur faces and mute 0:10 to 0:20") is asked about, because the time
-may have been meant for every part."""
+may have been meant for every part. "keep" edits the whole timeline, so it never takes part."""
 
 
 def _time(rest: str) -> TimeRange | str | object | None:
@@ -158,12 +160,21 @@ def _cut(match: re.Match[str], steps: _Steps) -> Matched:
     return "timed"
 
 
+def _keep(match: re.Match[str], steps: _Steps) -> Matched:
+    when = _time(match.group(1))
+    if when is None or when is _NO_TIME or when == WHOLE_CLIP:  # never guess what to keep
+        return None
+    steps.add("keep_range", {"time_range": steps.time_arg(when)})
+    return "keep"
+
+
 _TEMPLATES: tuple[tuple[re.Pattern[str], Callable[[re.Match[str], _Steps], Matched]], ...] = (
     (_MASK, _mask),
     (_MUTE, _mute),
     (_UNMUTE, _unmute),
     (_DENOISE, _denoise),
     (_CUT, _cut),
+    (_KEEP, _keep),
 )
 
 
@@ -194,6 +205,8 @@ def parse(text: str) -> Plan | None:
         if scope is None:
             return None
         scopes.add(scope)
+    if sum(call.tool == "keep_range" for call in steps.calls) > 1:
+        return None  # each keep cuts what the other keeps: only their overlap would be left
     if {"untimed", "timed"} <= scopes:
         raise MixedTimeError(
             "Only part of that request has a time. Should the rest cover the whole video, or "

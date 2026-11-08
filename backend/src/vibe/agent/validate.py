@@ -33,6 +33,11 @@ def validate_plan(plan: Plan, registry: Mapping[str, ToolSpec]) -> list[str]:
             continue
         errors += _check_call(call, spec, returns_by_step)
         returns_by_step[call.step_id] = spec.returns
+    if sum(call.tool == "keep_range" for call in plan.calls) > 1:
+        errors.append(
+            "more than one keep_range call: each keeps only its own range, so only their "
+            "overlap would be left"
+        )
     if not any(registry[c.tool].kind == "edit" for c in plan.calls if c.tool in registry):
         errors.append("plan has no edit call, so it would change nothing")
     return errors

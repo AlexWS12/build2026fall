@@ -22,12 +22,16 @@ from vibe.toolbox.spec import ToolError, ToolSpec
 
 _TRACKS = TypeAdapter(list[Track])
 
+NEEDS_DURATION = ("resolve_time", "keep_range")
+"""Tools that read the video's length, so they need ``--duration``."""
+
 EXAMPLES = {
     "find_objects": '{"label": "face"}',
     "resolve_time": '{"phrase": "first half"}',
     "add_mask": '{"targets": ["trk_1"], "effect": {"type": "blur"}, '
     '"time_range": {"start": 0, "end": 5}}',
     "cut_range": '{"time_range": {"start": 10, "end": 20}}',
+    "keep_range": '{"time_range": {"start": 10, "end": 20}}',
     "mute": '{"time_range": {"start": 10, "end": 20}}',
     "unmute": '{"time_range": {"start": 12, "end": 15}}',
     "denoise": '{"time_range": {"start": 10, "end": 20}, "strength": 0.5}',
@@ -52,6 +56,8 @@ def _arguments_help(spec: ToolSpec) -> str:
         lines.append(f"  {name}: {_type_name(field.annotation)} ({need})")
         if field.description:
             lines.append(f"      {field.description}")
+    if spec.name in NEEDS_DURATION:
+        lines.append("\nneeds --duration SECONDS (the length of the video)")
     if spec.name in EXAMPLES:
         lines.append(f"\nexample:\n  --args '{EXAMPLES[spec.name]}'")
     return "\n".join(lines)
@@ -75,7 +81,9 @@ def _parser() -> argparse.ArgumentParser:
         cmd.add_argument(
             "--tracks", type=Path, help="tracks .json to search (find_objects; required)"
         )
-        cmd.add_argument("--duration", type=float, help="video length in seconds (resolve_time)")
+        cmd.add_argument(
+            "--duration", type=float, help="video length in seconds (resolve_time, keep_range)"
+        )
         cmd.add_argument("--request-id", help="request id for the ops (default: a new one)")
     return parser
 

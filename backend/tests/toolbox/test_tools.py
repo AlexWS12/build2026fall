@@ -1,6 +1,8 @@
 """F-06: the toolbox's tools. No GPU, no network, no video files."""
 
 import dataclasses
+import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -240,6 +242,10 @@ def test_edit_tool_without_a_timeline_is_an_error() -> None:
         ("denoise", {"filter": "reverb"}),
         ("cut_range", {}),
         ("cut_range", {"time_range": {"start": 5, "end": 1}}),
+        ("keep_range", {}),
+        ("keep_range", {"time_range": {"start": float("inf"), "end": float("inf")}}),
+        ("keep_range", {"time_range": {"start": 5, "end": 1}}),
+        ("keep_range", {"time_range": {"start": 1, "end": 5}, "speaker": "a"}),
         ("add_mask", {"targets": [], "effect": {"type": "blur"}}),
         ("add_mask", {"targets": ["trk_1"], "effect": {"type": "sparkles"}}),
         ("find_objects", {"label": ""}),
@@ -350,6 +356,219 @@ def test_planner_and_toolbox_cut_part_of_the_video() -> None:
     _run_plan("cut the first 5 seconds", ctx(log, duration=60.0))
 
     assert log.state().cuts == [TimeRange(start=0, end=5)]
+
+
+# --- keep_range: cuts around a range -------------------------------------------------------
+
+
+def _keep(log, start: float, end: float | None, duration: float | None = 60.0):
+    return call_tool("keep_range", {"time_range": {"start": start, "end": end}}, ctx(log, duration))
+
+
+def test_keep_a_middle_range_cuts_before_and_after_it() -> None:
+    log = OpLog()
+
+    result = _keep(log, 10, 20)
+
+    assert log.state().cuts == [TimeRange(start=0, end=10), TimeRange(start=20)]
+    assert len(result.op_ids) == 2
+
+
+def test_keep_writes_the_head_cut_before_the_tail_cut() -> None:
+    log = OpLog()
+
+    _keep(log, 10, 20)
+
+    ops = list(log.ops)
+    assert [(o.time_range.start, o.time_range.end) for o in ops] == [(0, 10), (20, None)]
+    assert all(isinstance(o, Cut) for o in ops)
+    assert {o.request_id for o in ops} == {"req_1"}
+
+
+def test_keep_from_the_start_cuts_only_the_tail() -> None:
+    log = OpLog()
+
+    result = _keep(log, 0, 20)
+
+    assert log.state().cuts == [TimeRange(start=20)]
+    assert len(result.op_ids) == 1
+
+
+@pytest.mark.parametrize("end", [None, 60])
+def test_keep_to_the_end_cuts_only_the_head(end: float | None) -> None:
+    log = OpLog()
+
+    result = _keep(log, 10, end)
+
+    assert log.state().cuts == [TimeRange(start=0, end=10)]
+    assert len(result.op_ids) == 1
+
+
+def test_keep_after_an_earlier_cut_keeps_only_what_both_leave() -> None:
+    log = OpLog()
+    call_tool("cut_range", {"time_range": {"start": 15, "end": 18}}, ctx(log))
+
+    _keep(log, 10, 20)
+
+    assert log.state().cuts == [
+        TimeRange(start=0, end=10),
+        TimeRange(start=15, end=18),
+        TimeRange(start=20),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("start", "end"),
+    [(0, None), (0, 60), (-0.0, 60)],
+)
+def test_keeping_the_whole_video_is_refused(start: float, end: float | None) -> None:
+    log = OpLog()
+
+    with pytest.raises(ToolError, match="whole video"):
+        _keep(log, start, end)
+
+    assert len(log) == 0
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "message"),
+    [
+        (60, None, "starts at or after the end"),
+        (75, 80, "starts at or after the end"),
+        (10, 5 * 60, "past the end"),
+        (10, 61, "past the end"),
+        (0, 90, "past the end"),
+    ],
+)
+def test_keeping_beyond_the_video_is_refused_not_clamped(
+    start: float, end: float | None, message: str
+) -> None:
+    log = OpLog()
+
+    with pytest.raises(ToolError, match=message):
+        _keep(log, start, end)
+
+    assert len(log) == 0
+
+
+@pytest.mark.parametrize(
+    ("start", "end"),
+    [
+        (float("inf"), None),
+        (0, float("nan")),
+        (0, float("inf")),
+    ],
+)
+def test_keep_refuses_times_that_are_not_finite(start: float, end: float | None) -> None:
+    log = OpLog()
+
+    with pytest.raises(ToolError, match="keep_range: .*finite"):
+        _keep(log, start, end)
+
+    assert len(log) == 0
+
+
+@pytest.mark.parametrize("duration", [None, 0, -1, float("nan"), float("inf")])
+def test_keep_needs_a_real_video_duration(duration: float | None) -> None:
+    log = OpLog()
+
+    with pytest.raises(ToolError, match="keep_range: .*duration"):
+        _keep(log, 10, 20, duration=duration)
+
+    assert len(log) == 0
+
+
+def test_keep_needs_a_timeline_to_write_to() -> None:
+    with pytest.raises(ToolError, match="timeline"):
+        call_tool("keep_range", {"time_range": {"start": 1, "end": 2}}, ctx(log=None))
+
+
+class _FailsOnSecondAppend:
+    """A timeline that takes one op and then fails, like a disk that fills up between writes."""
+
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+        self.ops: list = []
+
+    def append(self, op) -> None:
+        if self.ops:
+            raise self.error
+        self.ops.append(op)
+
+
+@pytest.mark.parametrize(
+    "error", [OSError("disk full"), RuntimeError("anything else")], ids=["os", "other"]
+)
+def test_keep_that_half_lands_names_the_op_that_did_and_says_to_undo(error: Exception) -> None:
+    log = _FailsOnSecondAppend(error)
+
+    with pytest.raises(ToolError, match="undo") as caught:
+        call_tool("keep_range", {"time_range": {"start": 10, "end": 20}}, ctx(log))  # type: ignore[arg-type]
+
+    assert log.ops[0].op_id in str(caught.value)
+    assert str(error) in str(caught.value)
+
+
+def test_keep_works_on_a_project_on_disk(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+
+    result = _keep(project, 10, 20)
+
+    assert len(result.op_ids) == 2
+    assert project.state().cuts == [TimeRange(start=0, end=10), TimeRange(start=20)]
+
+
+class _FailsAfterFirstAppend:
+    """A real project's timeline whose second write fails, like a disk that fills up."""
+
+    def __init__(self, project) -> None:
+        self.project, self.appended = project, 0
+
+    def append(self, op):
+        if self.appended:
+            raise OSError("disk full")
+        self.appended += 1
+        return self.project.append(op)
+
+
+def test_a_keep_whose_second_write_fails_on_a_real_project_can_be_undone(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    flaky = _FailsAfterFirstAppend(project)
+
+    with pytest.raises(ToolError, match="undo this request"):
+        _keep(flaky, 10, 20)
+
+    # Only the head cut landed: the output has the start cut but still the whole tail.
+    assert project.state().cuts == [TimeRange(start=0, end=10)]
+    log = project.log()
+    log.undo("req_undo")
+    assert log.state().cuts == []
+
+
+def test_a_failed_second_write_keeps_the_cause_in_the_traceback() -> None:
+    log = _FailsOnSecondAppend(OSError("disk full"))
+
+    with pytest.raises(ToolError) as caught:
+        _keep(log, 10, 20)
+
+    assert isinstance(caught.value.__cause__, OSError)
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32" or os.geteuid() == 0, reason="needs POSIX permissions, not root"
+)
+def test_a_keep_on_a_read_only_project_timeline_writes_nothing_and_says_so(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    project.timeline_path.chmod(0o444)
+    before = project.timeline_path.read_bytes()
+
+    try:
+        with pytest.raises(ToolError, match="can't read or write the timeline"):
+            _keep(project, 10, 20)
+    finally:
+        project.timeline_path.chmod(0o644)
+
+    assert project.timeline_path.read_bytes() == before
 
 
 # --- Errors from a project's timeline file ---------------------------------------------------

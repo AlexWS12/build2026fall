@@ -108,6 +108,10 @@ class CutRangeArgs(Model):
     time_range: TimeRange
 
 
+class KeepRangeArgs(Model):
+    time_range: TimeRange = Field(description="The part to keep; everything else is cut.")
+
+
 class MuteArgs(Model):
     time_range: TimeRange | None = Field(default=None, description="Null = the whole clip.")
     speaker: str | None = Field(default=None, description="Speaker id; null = all audio.")
@@ -170,6 +174,48 @@ def cut_range(args: CutRangeArgs, ctx: ToolContext) -> EditResult:
         raise ToolError(f"cut_range: {r.start:g}s to {_end(r)} would cut the whole video")
     op = Cut(request_id=ctx.request_id, source=ctx.source, time_range=args.time_range)
     return _write("cut_range", op, ctx)
+
+
+def keep_range(args: KeepRangeArgs, ctx: ToolContext) -> EditResult:
+    """Cut everything before and after ``time_range``: ``[0, start)`` then ``[end, end of video)``.
+
+    Needs the video's duration and refuses a range past the end, rather than clamping like
+    ``cut_range``, so it can never keep or cut more than the user said. The whole-video check is
+    per call: cuts from earlier calls aren't visible here, so a keep can still leave nothing
+    (export refuses an empty output).
+    """
+    if ctx.log is None:
+        raise ToolError("keep_range: needs a timeline to write to")
+    r, d = args.time_range, ctx.duration
+    if d is None:
+        raise ToolError("keep_range: needs the video duration")
+    if not math.isfinite(d) or d <= 0:
+        raise ToolError(f"keep_range: the video duration must be finite and positive, not {d}")
+    if not math.isfinite(r.start) or (r.end is not None and not math.isfinite(r.end)):
+        raise ToolError(f"keep_range: times must be finite numbers, not {r.start} to {_end(r)}")
+    if not r.start < d:
+        raise ToolError(f"keep_range: the range starts at or after the end of the video ({d:g}s)")
+    if r.end is not None and not r.end <= d:
+        raise ToolError(f"keep_range: the range ends past the end of the video ({d:g}s)")
+    if r.start <= 0 and (r.end is None or r.end >= d):
+        raise ToolError("keep_range: that keeps the whole video, so there is nothing to cut")
+    ranges = []
+    if r.start > 0:
+        ranges.append(TimeRange(start=0, end=r.start))
+    if r.end is not None and r.end < d:
+        ranges.append(TimeRange(start=r.end))
+    ops = [Cut(request_id=ctx.request_id, source=ctx.source, time_range=t) for t in ranges]
+    result = _write("keep_range", ops[0], ctx)
+    for op in ops[1:]:
+        try:
+            ctx.log.append(op)
+        except Exception as exc:  # whatever the timeline raises: it must surface, naming the op
+            raise ToolError(
+                f"keep_range: cut {result.op_ids[0]} was written but the next one failed "
+                f"({exc}); undo this request to revert"
+            ) from exc
+        result = EditResult(op_ids=[*result.op_ids, op.op_id])
+    return result
 
 
 def mute(args: MuteArgs, ctx: ToolContext) -> EditResult:

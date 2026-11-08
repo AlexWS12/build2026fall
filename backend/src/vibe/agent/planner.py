@@ -97,6 +97,10 @@ def _plan_with_llm(text: str, registry: Mapping[str, ToolSpec], llm: LlmPlanner)
     )
 
 
+_KEEP_NEGATIONS = frozenset({"except", "but", "not", "without", "don't", "dont"})
+"""Words that turn "keep ..." into "remove ...": the user needs to be pointed at cut."""
+
+
 def _question_for(text: str) -> str:
     """A question that tells the user what the planner needs to go ahead."""
     words = normalize(text).split()
@@ -114,6 +118,16 @@ def _question_for(text: str) -> str:
         )
     if verb == "cut":
         return "Which part should I cut? Give a time range like 0:10 to 0:20."
+    if "keep" in words[:2] and not _KEEP_NEGATIONS.isdisjoint(words):
+        return (
+            "To remove a part instead, say 'cut 0:10 to 0:20'. To keep only one part, say "
+            "'keep only 0:10 to 0:20'."
+        )
+    if "keep" in words[:2]:
+        return (
+            "Which part should I keep? Give one time range like 0:10 to 0:20, and I'll cut "
+            "everything around it."
+        )
     if verb in ("mute", "silence"):
         return "What should I mute? Give a time range like 0:10 to 0:20, or say 'mute the audio'."
     if verb == "unmute":  # "restore" alone may mean a cut, so it gets the general question

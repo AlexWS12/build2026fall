@@ -52,6 +52,13 @@ def test_request_set_covers_both_outcomes() -> None:
         ("reduce the noise for a bit", "reduce the noise"),
         ("denoise it somewhat", "reduce the noise"),
         ("cut the noise from 0:10 to 0:20", "or cut that part out"),
+        ("keep it", "Which part should I keep"),
+        ("keep only", "Which part should I keep"),
+        ("only keep it", "Which part should I keep"),
+        ("keep 0:10 to 0:20 and keep 0:30 to 0:40", "Which part should I keep"),
+        ("keep the noise down", "reduce the noise"),
+        ("keep everything except 0:10 to 0:20", "cut 0:10 to 0:20"),
+        ("don't keep 0:10 to 0:20", "cut 0:10 to 0:20"),
     ],
 )
 def test_clarify_question_tells_the_user_what_to_say(text: str, hint: str) -> None:
