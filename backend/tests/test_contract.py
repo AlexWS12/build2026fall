@@ -329,6 +329,31 @@ def test_log_refuses_a_bad_op_and_stays_unchanged() -> None:
     assert len(log) == 1
 
 
+def test_log_appends_a_batch_in_order() -> None:
+    log = OpLog([mask("r_1", ["a"])])
+    batch = [mask("r_2", ["b"]), mask("r_2", ["c"])]
+
+    appended = log.append_many(batch)
+
+    assert appended == batch
+    assert list(log.ops)[1:] == batch
+
+
+def test_log_refuses_a_whole_batch_when_any_op_is_bad() -> None:
+    log = OpLog([mask("r_1", ["a"])])
+    batch = [mask("r_2", ["b"]), Undo(request_id="r_2", source="user", undo_request_id="r_9")]
+
+    with pytest.raises(ContractError):
+        log.append_many(batch)
+
+    assert len(log) == 1  # not even the good first op
+
+
+def test_log_refuses_an_empty_batch() -> None:
+    with pytest.raises(ValueError, match="no ops"):
+        OpLog().append_many([])
+
+
 def test_duplicate_op_ids_are_rejected() -> None:
     first = mask("r_1", ["a"])
     with pytest.raises(ContractError, match="duplicate op_id"):

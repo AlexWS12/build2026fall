@@ -246,14 +246,23 @@ def test_edits_append_and_never_rewrite_earlier_lines(
     assert after.count("\n") == before.count("\n") + 1
 
 
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["mute"],
+        # Two ops in one write: refused the same way, not half-written.
+        ["keep_range", "--duration", "60", "--args", '{"time_range": {"start": 10, "end": 20}}'],
+    ],
+    ids=["one_op", "batch"],
+)
 def test_incomplete_last_line_is_refused_not_glued_onto(
-    capsys: pytest.CaptureFixture[str], timeline: Path
+    capsys: pytest.CaptureFixture[str], timeline: Path, argv: list[str]
 ) -> None:
     with timeline.open("a") as f:
         f.write('{"kind": "mu')  # a crash mid-append
     before = timeline.read_text()
 
-    code, _, err = run(capsys, "mute", "--log", str(timeline))
+    code, _, err = run(capsys, *argv, "--log", str(timeline))
 
     assert code == 1
     assert "incomplete line" in err

@@ -358,6 +358,40 @@ def test_planner_and_toolbox_cut_part_of_the_video() -> None:
     assert log.state().cuts == [TimeRange(start=0, end=5)]
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "just keep 0:10 to 0:20",
+        "mute 0:12 to 0:14 and only keep 0:10 to 0:20",
+        "keep 0:10 to 0:20 but mute 0:12 to 0:14",
+    ],
+)
+def test_planner_and_toolbox_keep_a_range_from_a_chat_request(text: str) -> None:
+    log = OpLog()
+
+    _run_plan(text, ctx(log, duration=60.0))
+
+    assert log.state().cuts == [TimeRange(start=0, end=10), TimeRange(start=20)]
+
+
+def test_planner_and_toolbox_keep_the_tail_of_a_clip_shown_rounded_up() -> None:
+    log = OpLog()
+
+    _run_plan("keep 0:50 to 1:00", ctx(log, duration=59.97))
+
+    assert log.state().cuts == [TimeRange(start=0, end=50)]
+
+
+def test_planner_and_toolbox_refuse_a_keep_an_earlier_cut_empties() -> None:
+    log = OpLog()
+    _run_plan("cut 0:00 to 0:30", ctx(log, duration=60.0))
+
+    with pytest.raises(ToolError, match="leave nothing"):
+        _run_plan("keep only 0:10 to 0:20", dataclasses.replace(ctx(log), request_id="req_2"))
+
+    assert log.state().cuts == [TimeRange(start=0, end=30)]
+
+
 # --- keep_range: cuts around a range -------------------------------------------------------
 
 
@@ -483,30 +517,48 @@ def test_keep_needs_a_timeline_to_write_to() -> None:
         call_tool("keep_range", {"time_range": {"start": 1, "end": 2}}, ctx(log=None))
 
 
-class _FailsOnSecondAppend:
-    """A timeline that takes one op and then fails, like a disk that fills up between writes."""
+class _RecordingSink:
+    """An in-memory timeline that records each write, and can fail the way a disk does."""
 
-    def __init__(self, error: Exception) -> None:
-        self.error = error
-        self.ops: list = []
+    def __init__(self, error: Exception | None = None) -> None:
+        self.log, self.error = OpLog(), error
+        self.batches: list[list] = []
 
-    def append(self, op) -> None:
-        if self.ops:
+    def append(self, op):
+        return self.append_many([op])[0]
+
+    def append_many(self, ops):
+        if self.error is not None:
             raise self.error
-        self.ops.append(op)
+        self.batches.append(list(ops))
+        return self.log.append_many(ops)
+
+    def state(self):
+        return self.log.state()
 
 
-@pytest.mark.parametrize(
-    "error", [OSError("disk full"), RuntimeError("anything else")], ids=["os", "other"]
-)
-def test_keep_that_half_lands_names_the_op_that_did_and_says_to_undo(error: Exception) -> None:
-    log = _FailsOnSecondAppend(error)
+def test_keep_writes_both_cuts_in_one_batch() -> None:
+    sink = _RecordingSink()
 
-    with pytest.raises(ToolError, match="undo") as caught:
-        call_tool("keep_range", {"time_range": {"start": 10, "end": 20}}, ctx(log))  # type: ignore[arg-type]
+    _keep(sink, 10, 20)
 
-    assert log.ops[0].op_id in str(caught.value)
-    assert str(error) in str(caught.value)
+    assert [len(b) for b in sink.batches] == [2]
+
+
+def test_keep_whose_write_fails_writes_nothing_and_says_why() -> None:
+    sink = _RecordingSink(OSError("disk full"))
+
+    with pytest.raises(ToolError, match="keep_range: can't read or write the timeline: disk full"):
+        _keep(sink, 10, 20)
+
+    assert len(sink.log) == 0
+
+
+def test_a_bug_in_the_timeline_is_not_dressed_up_as_a_tool_error() -> None:
+    sink = _RecordingSink(TypeError("a real bug"))
+
+    with pytest.raises(TypeError, match="a real bug"):
+        _keep(sink, 10, 20)
 
 
 def test_keep_works_on_a_project_on_disk(tmp_path: Path) -> None:
@@ -518,40 +570,106 @@ def test_keep_works_on_a_project_on_disk(tmp_path: Path) -> None:
     assert project.state().cuts == [TimeRange(start=0, end=10), TimeRange(start=20)]
 
 
-class _FailsAfterFirstAppend:
-    """A real project's timeline whose second write fails, like a disk that fills up."""
-
-    def __init__(self, project) -> None:
-        self.project, self.appended = project, 0
-
-    def append(self, op):
-        if self.appended:
-            raise OSError("disk full")
-        self.appended += 1
-        return self.project.append(op)
-
-
-def test_a_keep_whose_second_write_fails_on_a_real_project_can_be_undone(tmp_path: Path) -> None:
+def test_keep_the_contract_refuses_writes_neither_cut_to_a_project(tmp_path: Path) -> None:
+    """Another request's op between two of this request's ops breaks the contract; with one
+    batch, the timeline is never left holding only the head cut."""
     project = _project(tmp_path)
-    flaky = _FailsAfterFirstAppend(project)
+    call_tool("mute", {}, ctx(project))  # req_1
+    call_tool("mute", {}, dataclasses.replace(ctx(project), request_id="req_2"))
+    before = project.timeline_path.read_bytes()
 
-    with pytest.raises(ToolError, match="undo this request"):
-        _keep(flaky, 10, 20)
+    with pytest.raises(ToolError, match="keep_range: couldn't apply the edit"):
+        _keep(project, 10, 20)  # req_1 again, after req_2: not contiguous
 
-    # Only the head cut landed: the output has the start cut but still the whole tail.
-    assert project.state().cuts == [TimeRange(start=0, end=10)]
-    log = project.log()
-    log.undo("req_undo")
-    assert log.state().cuts == []
+    assert project.timeline_path.read_bytes() == before
 
 
-def test_a_failed_second_write_keeps_the_cause_in_the_traceback() -> None:
-    log = _FailsOnSecondAppend(OSError("disk full"))
+# --- keep_range after earlier edits -----------------------------------------------------------
 
-    with pytest.raises(ToolError) as caught:
-        _keep(log, 10, 20)
 
-    assert isinstance(caught.value.__cause__, OSError)
+@pytest.mark.parametrize(
+    ("earlier", "keep"),
+    [
+        ((0, 30), (10, 20)),  # the user read 0:10-0:20 off the preview, already cut
+        ((5, None), (10, 20)),
+        ((10, 20), (10, 20)),
+        ((10, 15), (10, 15)),
+    ],
+)
+def test_keep_that_would_leave_nothing_after_earlier_cuts_is_refused(
+    earlier: tuple[float, float | None], keep: tuple[float, float]
+) -> None:
+    log = OpLog()
+    start, end = earlier
+    call_tool("cut_range", {"time_range": {"start": start, "end": end}}, ctx(log))
+    before = len(log)
+
+    with pytest.raises(ToolError, match="leave nothing"):
+        _keep(log, *keep)
+
+    assert len(log) == before
+
+
+def test_keep_that_overlaps_an_earlier_cut_but_leaves_something_goes_ahead() -> None:
+    log = OpLog()
+    call_tool("cut_range", {"time_range": {"start": 0, "end": 15}}, ctx(log))
+
+    _keep(log, 10, 20)
+
+    assert log.state().cuts == [TimeRange(start=0, end=15), TimeRange(start=20)]
+
+
+def test_keep_on_an_unreadable_timeline_is_a_tool_error(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    project.timeline_path.write_text('{"schema_version": 99}\n')
+
+    with pytest.raises(ToolError, match="keep_range: .*schema_version"):
+        _keep(project, 10, 20)
+
+
+# --- keep_range at the end of the clip --------------------------------------------------------
+
+
+@pytest.mark.parametrize("end", [59.97, 60.0, 60.05])
+def test_keep_to_just_past_the_end_keeps_to_the_end(end: float) -> None:
+    """A 59.97 s clip shows as 1:00, so "keep 0:50 to 1:00" means the tail."""
+    log = OpLog()
+
+    _keep(log, 50, end, duration=59.97)
+
+    assert log.state().cuts == [TimeRange(start=0, end=50)]
+
+
+@pytest.mark.parametrize(
+    ("duration", "start", "end"),
+    [(0.08, 0.01, 0.05), (0.15, 0.0, 0.1), (5.0, 1.0, 4.97)],
+)
+def test_on_a_short_video_the_end_tolerance_never_drops_a_real_tail(
+    duration: float, start: float, end: float
+) -> None:
+    log = OpLog()
+
+    _keep(log, start, end, duration=duration)
+
+    assert TimeRange(start=end) in log.state().cuts
+
+
+@pytest.mark.parametrize("end", [59.8, 59.95])
+def test_keep_ending_before_the_end_cuts_the_tail_however_short(end: float) -> None:
+    log = OpLog()
+
+    _keep(log, 10, end, duration=59.97)
+
+    assert log.state().cuts == [TimeRange(start=0, end=10), TimeRange(start=end)]
+
+
+def test_keep_well_past_the_end_names_the_length_and_how_to_say_it() -> None:
+    log = OpLog()
+
+    with pytest.raises(ToolError, match=r"59\.97s.*to the end"):
+        _keep(log, 50, 61, duration=59.97)
+
+    assert len(log) == 0
 
 
 @pytest.mark.skipif(

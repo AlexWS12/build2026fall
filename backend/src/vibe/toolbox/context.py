@@ -11,9 +11,13 @@ from vibe.contract.common import Source
 class OpSink(Protocol):
     """Where edit tools write. ``contract.OpLog`` (in memory) and ``storage.Project`` (on disk)
     both fit: ``append`` validates the op against the whole log and raises before writing.
-    ``state`` is the folded timeline, for tools that check what's there first (``unmute``)."""
+    ``append_many`` does the same for several ops as one unit, so a request that writes more
+    than one op (``keep_range``) lands whole or not at all. ``state`` is the folded timeline,
+    for tools that check what's there first (``unmute``, ``keep_range``)."""
 
     def append(self, op: Op) -> Op: ...
+
+    def append_many(self, ops: Sequence[Op]) -> list[Op]: ...
 
     def state(self) -> TimelineState: ...
 

@@ -6,6 +6,8 @@ ops and append them to the timeline; they never touch pixels or audio.
 
 import math
 import re
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 
 from pydantic import Field
 
@@ -142,18 +144,29 @@ def _end(r: TimeRange) -> str:
     return "the end" if r.end is None else f"{r.end:g}s"
 
 
-def _write(tool: str, op: Op, ctx: ToolContext) -> EditResult:
-    if ctx.log is None:
-        raise ToolError(f"{tool}: needs a timeline to write to")
+@contextmanager
+def _timeline_errors(tool: str) -> Iterator[None]:
+    """Turn what a timeline raises on reading or writing into one clear ``ToolError``.
+
+    Anything else (a ``TypeError``, say) is a bug and propagates as it is.
+    """
     try:
-        ctx.log.append(op)
+        yield
     except OSError as exc:  # a project's timeline.jsonl is missing or unwritable
         raise ToolError(f"{tool}: can't read or write the timeline: {exc}") from None
     except (ContractError, ValueError) as exc:
         # Either the edit breaks a contract rule or the stored log is unreadable (bad UTF-8,
         # bad header); the message says which, so don't blame the edit.
         raise ToolError(f"{tool}: couldn't apply the edit to the timeline: {exc}") from None
-    return EditResult(op_ids=[op.op_id])
+
+
+def _write(tool: str, ops: Sequence[Op], ctx: ToolContext) -> EditResult:
+    """Append one request's ops as one unit: all of them land, or none do."""
+    if ctx.log is None:
+        raise ToolError(f"{tool}: needs a timeline to write to")
+    with _timeline_errors(tool):
+        ctx.log.append_many(ops)
+    return EditResult(op_ids=[op.op_id for op in ops])
 
 
 def add_mask(args: AddMaskArgs, ctx: ToolContext) -> EditResult:
@@ -164,7 +177,7 @@ def add_mask(args: AddMaskArgs, ctx: ToolContext) -> EditResult:
         effect=args.effect,
         time_range=args.time_range,
     )
-    return _write("add_mask", op, ctx)
+    return _write("add_mask", [op], ctx)
 
 
 def cut_range(args: CutRangeArgs, ctx: ToolContext) -> EditResult:
@@ -173,20 +186,44 @@ def cut_range(args: CutRangeArgs, ctx: ToolContext) -> EditResult:
         # Never silently cut everything ("cut before 2:00" on a 1-minute clip): ask instead.
         raise ToolError(f"cut_range: {r.start:g}s to {_end(r)} would cut the whole video")
     op = Cut(request_id=ctx.request_id, source=ctx.source, time_range=args.time_range)
-    return _write("cut_range", op, ctx)
+    return _write("cut_range", [op], ctx)
+
+
+END_TOLERANCE_S = 0.1
+"""How far past the video's end a keep's end may be and still mean "to the end": about one
+frame at 10 fps or more. A 59.97 s clip shows as 1:00, so "keep 0:50 to 1:00" means the tail.
+Only an end past the video counts: an end before it is always kept exactly, however close, so
+no real tail is dropped. Further past the end is refused, not clamped."""
 
 
 def keep_range(args: KeepRangeArgs, ctx: ToolContext) -> EditResult:
     """Cut everything before and after ``time_range``: ``[0, start)`` then ``[end, end of video)``.
 
-    Needs the video's duration and refuses a range past the end, rather than clamping like
-    ``cut_range``, so it can never keep or cut more than the user said. The whole-video check is
-    per call: cuts from earlier calls aren't visible here, so a keep can still leave nothing
-    (export refuses an empty output).
+    Needs the video's duration. Refuses a range past the end (beyond ``END_TOLERANCE_S``) rather
+    than clamping like ``cut_range``, so it never keeps or cuts more than the user said. Refuses
+    a keep that earlier cuts would leave empty. Both cuts are written as one unit.
     """
     if ctx.log is None:
         raise ToolError("keep_range: needs a timeline to write to")
-    r, d = args.time_range, ctx.duration
+    start, end = _keep_bounds(args.time_range, ctx.duration)
+    with _timeline_errors("keep_range"):
+        earlier_cuts = ctx.log.state().cuts
+    if _uncut_seconds(start, end, earlier_cuts) <= 0:
+        raise ToolError(
+            f"keep_range: {start:g}s to {end:g}s is already cut, so keeping it would leave "
+            "nothing; times are in the original video"
+        )
+    ranges = []
+    if start > 0:
+        ranges.append(TimeRange(start=0, end=start))
+    if end < ctx.duration:  # type: ignore[operator]  # checked by _keep_bounds
+        ranges.append(TimeRange(start=end))
+    ops = [Cut(request_id=ctx.request_id, source=ctx.source, time_range=t) for t in ranges]
+    return _write("keep_range", ops, ctx)
+
+
+def _keep_bounds(r: TimeRange, d: float | None) -> tuple[float, float]:
+    """The range to keep, checked against the video duration, with the end filled in."""
     if d is None:
         raise ToolError("keep_range: needs the video duration")
     if not math.isfinite(d) or d <= 0:
@@ -195,27 +232,24 @@ def keep_range(args: KeepRangeArgs, ctx: ToolContext) -> EditResult:
         raise ToolError(f"keep_range: times must be finite numbers, not {r.start} to {_end(r)}")
     if not r.start < d:
         raise ToolError(f"keep_range: the range starts at or after the end of the video ({d:g}s)")
-    if r.end is not None and not r.end <= d:
-        raise ToolError(f"keep_range: the range ends past the end of the video ({d:g}s)")
-    if r.start <= 0 and (r.end is None or r.end >= d):
+    if r.end is not None and r.end > d + END_TOLERANCE_S:
+        raise ToolError(
+            f"keep_range: the range ends past the end of the video ({d:g}s); to keep everything "
+            f"after {r.start:g}s, say 'keep from {r.start:g}s to the end'"
+        )
+    end = d if r.end is None or r.end >= d else r.end
+    if r.start <= 0 and end >= d:
         raise ToolError("keep_range: that keeps the whole video, so there is nothing to cut")
-    ranges = []
-    if r.start > 0:
-        ranges.append(TimeRange(start=0, end=r.start))
-    if r.end is not None and r.end < d:
-        ranges.append(TimeRange(start=r.end))
-    ops = [Cut(request_id=ctx.request_id, source=ctx.source, time_range=t) for t in ranges]
-    result = _write("keep_range", ops[0], ctx)
-    for op in ops[1:]:
-        try:
-            ctx.log.append(op)
-        except Exception as exc:  # whatever the timeline raises: it must surface, naming the op
-            raise ToolError(
-                f"keep_range: cut {result.op_ids[0]} was written but the next one failed "
-                f"({exc}); undo this request to revert"
-            ) from exc
-        result = EditResult(op_ids=[*result.op_ids, op.op_id])
-    return result
+    return r.start, end
+
+
+def _uncut_seconds(start: float, end: float, cuts: Sequence[TimeRange]) -> float:
+    """How much of ``[start, end)`` the (merged, non-overlapping) ``cuts`` leave."""
+    left = end - start
+    for c in cuts:
+        c_end = end if c.end is None else c.end
+        left -= max(0.0, min(end, c_end) - max(start, c.start))
+    return left
 
 
 def mute(args: MuteArgs, ctx: ToolContext) -> EditResult:
@@ -225,7 +259,7 @@ def mute(args: MuteArgs, ctx: ToolContext) -> EditResult:
         time_range=args.time_range,
         speaker=args.speaker,
     )
-    return _write("mute", op, ctx)
+    return _write("mute", [op], ctx)
 
 
 def unmute(args: UnmuteArgs, ctx: ToolContext) -> UnmuteResult:
@@ -257,7 +291,7 @@ def unmute(args: UnmuteArgs, ctx: ToolContext) -> UnmuteResult:
         time_range=args.time_range,
         speaker=args.speaker,
     )
-    result = _write("unmute", op, ctx)
+    result = _write("unmute", [op], ctx)
     return UnmuteResult(op_ids=result.op_ids, still_muted=others)
 
 
@@ -279,4 +313,4 @@ def denoise(args: DenoiseArgs, ctx: ToolContext) -> EditResult:
         strength=args.strength,
         time_range=args.time_range,
     )
-    return _write("denoise", op, ctx)
+    return _write("denoise", [op], ctx)
