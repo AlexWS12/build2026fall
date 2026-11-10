@@ -41,7 +41,7 @@ def test_help_lists_every_tool(capsys: pytest.CaptureFixture[str]) -> None:
         assert name in out
 
 
-@pytest.mark.parametrize("tool", ["add_mask", "cut_range", "mute", "denoise"])
+@pytest.mark.parametrize("tool", ["add_mask", "cut_range", "mute", "unmute", "denoise"])
 def test_edit_tool_help_shows_an_example(tool: str, capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit):
         main([tool, "--help"])

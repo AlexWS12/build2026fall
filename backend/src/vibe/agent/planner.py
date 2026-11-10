@@ -116,6 +116,11 @@ def _question_for(text: str) -> str:
         return "Which part should I cut? Give a time range like 0:10 to 0:20."
     if verb in ("mute", "silence"):
         return "What should I mute? Give a time range like 0:10 to 0:20, or say 'mute the audio'."
+    if verb == "unmute":  # "restore" alone may mean a cut, so it gets the general question
+        return (
+            "When should the sound come back? Give a time range like 0:10 to 0:20, or say "
+            "'unmute the audio' for the whole video."
+        )
     if verb in ("blur", "pixelate", "hide"):
         return (
             "Who or what should I hide? Right now I can do faces, people or license plates, "

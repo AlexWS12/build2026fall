@@ -1,6 +1,6 @@
 # Roadmap
 
-> **Status (2026-10-28):** sprints are weekly, and **demo day is 2026-12-04**. **Sprint 1 closed as v0.1.0 (2026-10-28). Sprint 2 (2026-10-27 → 2026-11-03): first end-to-end path.** See [Sprints](#sprints).
+> **Status (2026-11-10):** sprints are weekly, and **demo day is 2026-12-04**. **Sprint 1 closed as v0.1.0. Sprints 2 and 3 are done but not yet tagged. Sprint 4 (2026-11-10 → 2026-11-17): the app really edits + human in the loop.** See [Sprints](#sprints).
 
 ## How this file works
 - **Backlog** lists every feature we know of, with an ID. IDs never change or get reused, so handoffs, branches and PRs can refer to them (`F-32`).
@@ -48,7 +48,7 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 ### Audio
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
-| F-30 | Mute a time range | Must | F-04 | idea | |
+| F-30 | Mute a time range | Must | F-04 | in progress | eduardo, `eduardo/f30-mute` |
 | F-31 | Transcription with word timestamps | Should | F-03 | idea | Whisper family |
 | F-32 | Who spoke when (diarization) + mute a specific speaker | Should | F-31 | idea | Needs separation if speakers overlap |
 | F-33 | Background noise reduction | Must | F-03 | in progress | nickolas, `nickolas/f33-denoise` |
@@ -168,7 +168,7 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 | F-64 API routes: `POST /api/projects`, `POST /api/projects/{id}/requests`, `GET /api/projects/{id}/state`, one request at a time per project. **Priority: first.** Shared file (API routes) | jonathan | jonathan/f64-api-routes | With `VITE_API_MODE=http` the UI uploads, sends a request and shows the real timeline. Route tests pass in stub mode. OpenAPI spec and UI types regenerated | in progress |
 | F-04 Renderer: export path (ffmpeg) + per-frame path sharing the effect code; nothing on the per-frame path calls the network. Can be split export / per-frame | paulallain | paulallain/f04-renderer | A test renders a generated clip with a blur, a cut and a mute from an example timeline and checks the output. No GPU | done |
 | F-05 Planner: template parser + plan validation + clarify reply; the LLM plan plugs in after R-1 | pablo | pablo/f05-planner-v2 | Plain requests → valid tool calls (or clarify) with no network and no GPU | in progress |
-| F-08 Compute setup: `stub`/`local`/`remote` backend interface, model download script, install notes per tier, **plus the team GPU survey**. Cache via `Storage.cache_path()` | eduardo | eduardo/compute-setup | Stub backend replays a cached result in a test. Survey table added to ARCHITECTURE "Compute" | in progress |
+| F-08 Compute setup: `stub`/`local`/`remote` backend interface, model download script, install notes per tier, **plus the team GPU survey**. Cache via `Storage.cache_path()` | eduardo | eduardo/compute-setup | Stub backend replays a cached result in a test. Survey table added to ARCHITECTURE "Compute" | in review |
 | F-09 Benchmark harness, first cut: consented clips + manifest, label format, request set, report script. Can slip | jean | jean/benchmark-harness | `report` runs on the stub backend and prints a table. Clips listed in the manifest, not committed | in progress |
 | F-50 Live feasibility spike on the **RTX 5070**: per-frame latency of detector + tracker + identity check at 720p/1080p, with R-3 candidates | _open_ | | Script output with fps and latency per stage, hardware stated | planned |
 
@@ -177,6 +177,64 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 - F-50 needs the RTX 5070 (or remote access) and R-3's shortlist. Its numbers decide live mode in Sprint 4.
 - R-1 and F-09 share the request set; F-05 uses it too.
 - Shared files (tool names, API routes, OpenAPI spec): post in the team chat before merging.
+
+**Closed (not tagged; see the Sprint 4 housekeeping card):** shipped F-06 toolbox, F-64 API routes, F-05 template planner, F-04 renderer, R-3 shortlist (D-015 Proposed), R-4 data policy (D-017, D-018), the R-1 research doc and the F-09 harness (no clips yet). Moved to Sprint 3: F-08. Still open: the R-1 comparison and the LLM planner (`paul/r1-planner-llm`, no PR), and F-50.
+
+### Sprint 3: first real edits   (2026-11-03 → 2026-11-10)  · version at close: v0.3.0
+
+**Goal:** by Tuesday 2026-11-10, the end-to-end path does real edits: find and track people, faces and plates and blur them; cut or keep a time range; mute a time range; reduce background noise; and resolve time phrases like "first half" or "after 0:30" in the planner.
+
+**Sprint lead:** Alex. (This plan was kept on Trello and is written here at close.)
+
+| Card | Owner | Branch | Exit check | Status |
+|---|---|---|---|---|
+| F-08 Compute setup + GPU survey (carried over) | eduardo | eduardo/compute-setup | Stub backend replays a cached result; survey table in ARCHITECTURE | done (#24) |
+| F-10 Find and track people, faces, plates | luis | luis/f10-detect-track | Pipeline, stub, cache and detector adapters; real adapters smoke-tested | done (#22); bake-off moves to Sprint 4 |
+| F-11 Blur / pixelate / black-box targets | jonathan, christopher | jonathan/f11-mask-effects, christopher/f11-track-loading | Export with cached F-10 tracks; mask audit | in review (#29) |
+| F-12 Time-bounded edits | jean | jean/f12-time-bounded-edits | Resolver + planner wiring + tests | in review (#30) |
+| F-20 Cut / keep a time range | pablo | pablo/f20-cut-range | `keep_range` tool, keep template, cut/keep export tests | in review (#27) |
+| F-30 Mute a time range | eduardo | eduardo/f30-mute | Edge fades, `unmute`, `mutes_at` | done (#25) |
+| F-31 Transcription (+ F-21 `find_speech`, plan only) | paul | paul/f31-transcribe | Transcript route and panel | in review (#26) |
+| F-33 Background noise reduction | nickolas | nickolas/f33-denoise | Denoise module (stub) | done; the renderer doesn't apply audio filters yet → F-33b |
+| F-50 Live feasibility spike | _open_ | | | not started → Sprint 4 |
+
+**Closed:** F-08, F-10 (pipeline), F-30 and F-33 (module) merged. F-11, F-12, F-20 and F-31 merge at the start of Sprint 4. Gaps found at close: there's no plan executor (requests reply `not_applied`), no export route in the API, and the renderer refuses audio filters.
+
+### Sprint 4: the app really edits + human in the loop   (2026-11-10 → 2026-11-17)  · version at close: v0.4.0
+
+**Goal:** by Tuesday 2026-11-17, a request typed in the UI is applied to the timeline and can be exported as a video, for blur, cut, mute and denoise with time phrases. The user sees what the agent did, can undo it per request, and can review low-confidence targets. The F-50 numbers decide on live mode at close.
+
+**Sprint lead:** _tbd_
+
+**Order:** first, merge the open PRs (#26, #27, #29, #30), then the plan executor and the export route (everything user-facing depends on them). Then F-40, F-43, F-41, F-42. Alongside: R-1b, F-09b → F-10b, F-33b, F-13 and F-50.
+
+**Carried over**
+| Card | Owner | Branch | Exit check | Status |
+|---|---|---|---|---|
+| F-11, F-12, F-20, F-31: review and merge | (same owners) | (PR branches) | Merged, `main` green | in review |
+| R-1b Run the planner LLM comparison, add the decision row, pass `LlmPlanner` to `plan_request`; flag LLM-invented cut ranges | paul? | paul/r1-planner-llm | Script output → decision row; a non-template request gets a valid plan | planned |
+| F-50 Live feasibility spike on the RTX 5070 (also: blur at reduced resolution, since the renderer's blur is ~311 ms per quarter-1080p frame per the F-04 handoff) | _open_ | | fps and latency per stage, hardware stated → live go/no-go | planned |
+
+**Build**
+| Card | Owner | Branch | Exit check | Status |
+|---|---|---|---|---|
+| Plan executor: run the plan through `call_tool`, resolve `$ref`s, dry-run on an `OpLog` copy, reply `applied`. **Priority: first** | _open_ | | In the UI (`VITE_API_MODE=http`), "mute the first 5 seconds" is applied and shows in the timeline | planned |
+| Export route + source-video route + Export button in the UI. Shared file (API routes) | _open_ | | Upload → request → Export → the MP4 has the edit; route test in stub mode | planned |
+| F-33b Renderer applies `audio_filters` (denoise) + pick the local/remote model | _open_ | | A test exports a clip with a denoise span, no GPU | planned |
+| F-09b Consented clips + labels in `clips.json` / `labels/` | _open_ | | `benchmark report` scores an F-10 run against real labels | planned |
+| F-10b Detector bake-off → decision row, then harden the winner (stitching, face↔person, fit under `run_analysis`) | _open_ | | Report table with hardware stated → decision row | planned |
+| F-13 Targeting by description ("the person in red", "everyone except me") | _open_ | | A request picks the right tracks on a labeled clip; unsure = masked | planned |
+| F-40 Agent reports what it did in plain words + raw tool calls | _open_ | | The chat shows a plain summary and the tool calls for each applied request | planned |
+| F-41 Review queue for low-confidence results (uses `RenderResult.issues` and the mask audit) | _open_ | | Low-confidence stretches show in a queue; confirming or fixing one writes an op | planned |
+| F-42 Hand fixes: select, change effect, remove, correct a box (through the toolbox) | _open_ | | A hand fix from the UI is an op in the timeline and can be undone | planned |
+| F-43 Undo per request + version history in the UI | _open_ | | Undo removes one whole request; history lists the requests | planned |
+
+**Risks / dependencies:**
+- The executor and the export route gate F-40–F-43 and the demo path. If they aren't merged by midweek, the HITL cards build against the CLI.
+- F-10b and F-50 need F-09b clips; F-50 needs a 5070 (Alex or Nickolas).
+- R-1b has no budget: free options only (open models run locally, e.g. Ollama or LM Studio, or a provider's free tier if its limits are enough).
+- Shared files: API routes (executor, export), dependency groups (R-1b, F-10b). Post in the team chat before merging.
+- Team decisions pending: D-006, D-012 and D-015 are still Proposed, and the license posture (R-3) is open.
 
 **Closed:** (filled in at sprint close: what shipped, what moved to the next sprint)
 
