@@ -11,7 +11,18 @@ import re
 
 from vibe.contract import TimeRange
 from vibe.toolbox.spec import ToolError
-from vibe.toolbox.timecodes import NUMBER, UNIT, TimeParseError, is_bare_number, parse_timestamp
+from vibe.toolbox.timecodes import (
+    AFTER,
+    BEFORE,
+    BETWEEN,
+    FRACTION,
+    LEADING_WORDS,
+    SPAN,
+    TS,
+    TimeParseError,
+    is_bare_number,
+    parse_timestamp,
+)
 
 __all__ = ["TimeRangeError", "check_range", "resolve_range"]
 
@@ -19,27 +30,24 @@ __all__ = ["TimeRangeError", "check_range", "resolve_range"]
 class TimeRangeError(ToolError):
     """A time phrase that can't become a range inside this video: unreadable, empty, backwards,
     past the end, or as long as the whole video when only part was asked for. Nothing is
-    clamped or guessed; the message says what's wrong so the user can be asked."""
+    clamped or guessed; the message says what's wrong so the user can be asked.
+
+    Only for what the user can fix by rephrasing the time. Missing context (no video duration)
+    is a plain ``ToolError``."""
 
 
-_TS = rf"{NUMBER}(?:\s*{UNIT}\b)?"
-
-_FRACTION = re.compile(r"(first|second|middle|last) (half|third)")
-_EDGE = re.compile(rf"(first|last)\s+({_TS})")
-_AFTER = re.compile(rf"(?:after|from|starting at|since)\s+({_TS})(?:\s+on(?:wards?)?)?")
-_BEFORE = re.compile(rf"(?:before|until|till|up to)\s+({_TS})")
-_BETWEEN = re.compile(rf"between\s+({_TS})\s*and\s*({_TS})")
-_SPAN = re.compile(rf"(?:from\s+)?({_TS})\s*(?:to|until|till|through|-|–)\s*({_TS})")
+_EDGE = re.compile(rf"(first|last)\s+({TS})")
+"""The rest of the grammar is in ``timecodes``, shared with the planner so the two can't drift."""
 
 _PARTS = {
-    ("first", "half"): (0, 1, 2),
-    ("second", "half"): (1, 2, 2),
-    ("first", "third"): (0, 1, 3),
-    ("middle", "third"): (1, 2, 3),
-    ("second", "third"): (1, 2, 3),
-    ("last", "third"): (2, 3, 3),
+    "first half": (0, 1, 2),
+    "second half": (1, 2, 2),
+    "first third": (0, 1, 3),
+    "middle third": (1, 2, 3),
+    "second third": (1, 2, 3),
+    "last third": (2, 3, 3),
 }
-"""(from, to, parts): "the middle third" is 1/3 to 2/3. There is no "last half"."""
+"""(from, to, parts) for each ``FRACTION``: "the middle third" is 1/3 to 2/3."""
 
 
 def resolve_range(phrase: str, duration: float) -> TimeRange:
@@ -53,14 +61,12 @@ def resolve_range(phrase: str, duration: float) -> TimeRange:
     """
     if not math.isfinite(duration) or duration <= 0:
         raise TimeRangeError(f"the video duration must be positive, not {duration}")
-    text = re.sub(r"\s+", " ", phrase.strip().lower())
+    # As a user (or the LLM planner, passing their words on) writes it: "for the first half".
+    text = LEADING_WORDS.sub("", re.sub(r"\s+", " ", phrase.strip().lower()))
     text = re.sub(r"^the ", "", text)
 
-    if match := _FRACTION.fullmatch(text):
-        part = _PARTS.get(match.groups())
-        if part is None:
-            raise TimeRangeError(f"can't resolve {phrase!r}")
-        lo, hi, n = part
+    if match := FRACTION.fullmatch(text):
+        lo, hi, n = _PARTS[match.group(1)]
         return _range(duration * lo / n, None if hi == n else duration * hi / n, duration)
     if match := _EDGE.fullmatch(text):
         side, ts = match.groups()
@@ -72,11 +78,11 @@ def resolve_range(phrase: str, duration: float) -> TimeRange:
         if side == "first":
             return _range(0.0, seconds, duration)
         return _range(duration - seconds, None, duration)
-    if match := _AFTER.fullmatch(text):
+    if match := AFTER.fullmatch(text):
         return _range(_seconds(match.group(1)), None, duration)
-    if match := _BEFORE.fullmatch(text):
+    if match := BEFORE.fullmatch(text):
         return _range(0.0, _seconds(match.group(1)), duration)
-    if match := _BETWEEN.fullmatch(text) or _SPAN.fullmatch(text):
+    if match := BETWEEN.fullmatch(text) or SPAN.fullmatch(text):
         return _range(_seconds(match.group(1)), _seconds(match.group(2)), duration)
     raise TimeRangeError(f"can't resolve {phrase!r}")
 

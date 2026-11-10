@@ -11,7 +11,7 @@ from vibe.contract.common import Effect, Model
 from vibe.contract.state import MuteSpan
 from vibe.toolbox.context import ToolContext
 from vibe.toolbox.spec import ToolError
-from vibe.toolbox.time_range import TimeRangeError, resolve_range
+from vibe.toolbox.time_range import TimeRangeError, check_range, resolve_range
 
 # --- find_objects -------------------------------------------------------------------------
 
@@ -57,7 +57,11 @@ class ResolveTimeResult(Model):
 
 
 def resolve_time(args: ResolveTimeArgs, ctx: ToolContext) -> ResolveTimeResult:
-    """The range ``args.phrase`` means in this video (F-12's ``resolve_range``)."""
+    """The range ``args.phrase`` means in this video (F-12's ``resolve_range``).
+
+    A missing duration is a plain ``ToolError``, not a ``TimeRangeError``, on purpose: the
+    video hasn't been probed, which the user can't fix by rephrasing the time.
+    """
     if ctx.duration is None:
         raise ToolError(f"resolve_time: needs the video duration to resolve {args.phrase!r}")
     try:
@@ -116,6 +120,14 @@ def _end(r: TimeRange) -> str:
 def _write(tool: str, op: Op, ctx: ToolContext) -> EditResult:
     if ctx.log is None:
         raise ToolError(f"{tool}: needs a timeline to write to")
+    r = getattr(op, "time_range", None)
+    if r is not None and ctx.duration is not None:
+        # Every edit, whatever wrote its range (the planner's "after 2:00", the LLM, a hand
+        # edit), must fit in the video; else "blur faces after 2:00" masks nothing, silently.
+        try:
+            check_range(r, ctx.duration)
+        except TimeRangeError as exc:
+            raise TimeRangeError(f"{tool}: {exc}") from None
     try:
         ctx.log.append(op)
     except OSError as exc:  # a project's timeline.jsonl is missing or unwritable

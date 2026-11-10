@@ -9,31 +9,21 @@ import re
 from pydantic import ValidationError
 
 from vibe.contract import WHOLE_CLIP, TimeRange
-from vibe.toolbox.timecodes import (
-    NUMBER,
-    UNIT,
-    TimeParseError,
-    is_bare_number,
-    parse_timestamp,
-)
+from vibe.toolbox.timecodes import AFTER as _AFTER
+from vibe.toolbox.timecodes import BEFORE as _BEFORE
+from vibe.toolbox.timecodes import BETWEEN as _BETWEEN
+from vibe.toolbox.timecodes import FRACTION as _HALF
+from vibe.toolbox.timecodes import LEADING_WORDS as _LEADING_WORDS
+from vibe.toolbox.timecodes import SPAN as _RANGE
+from vibe.toolbox.timecodes import TS as _TS
+from vibe.toolbox.timecodes import TimeParseError, is_bare_number, parse_timestamp
 
 __all__ = ["TimeParseError", "parse_time_phrase", "parse_timestamp"]
 
-
-_TS = rf"{NUMBER}(?:\s*{UNIT}\b)?"
-"""One timestamp: "10", "1.5", "10s", "2 minutes", "1:30", "1:02:03"."""
-
-_LEADING_WORDS = re.compile(r"^(?:(?:for|during|in|over|on|everything|all)\s+)+")
-
-_RANGE = re.compile(rf"(?:from\s+)?({_TS})\s*(?:to|until|till|through|-|–)\s*({_TS})")
-_BETWEEN = re.compile(rf"between\s+({_TS})\s*and\s*({_TS})")
-"""Only "between" makes "X and Y" a range: "mute 0:10 and 0:20" may mean two moments."""
+# The range grammar lives in toolbox/timecodes.py, shared with resolve_range (F-12).
 _WHOLE = re.compile(r"(?:the\s+)?(?:whole|entire|full)\s+(?:video|clip|thing)")
-_HALF = re.compile(r"(?:the\s+)?((?:first|second) half|(?:first|middle|last) third)")
 _FIRST = re.compile(rf"(?:the\s+)?first\s+({_TS})")
 _LAST = re.compile(rf"(?:the\s+)?last\s+({_TS})")
-_AFTER = re.compile(rf"(?:after|from|starting at|since)\s+({_TS})(?:\s+on(?:wards?)?)?")
-_BEFORE = re.compile(rf"(?:before|until|till|up to)\s+({_TS})")
 
 
 def parse_time_phrase(text: str) -> TimeRange | str | None:

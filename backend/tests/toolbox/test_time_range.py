@@ -7,11 +7,12 @@ The unit tests need no video. The round-trip tests use a 90 s testsrc2 clip from
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from vibe.agent import Plan, plan_request
 from vibe.agent.plan import as_ref
-from vibe.contract import OpLog, TimeRange
+from vibe.agent.timeparse import parse_time_phrase
+from vibe.contract import OpLog, TimeRange, Track
 from vibe.render import export
 from vibe.toolbox import ToolContext, ToolError, call_tool
 from vibe.toolbox.time_range import TimeRangeError, check_range, resolve_range
@@ -20,9 +21,15 @@ from vibe.video import probe
 D = 90.0
 """The video length the unit tests resolve against, in seconds."""
 
+EXAMPLES = Path(__file__).parents[2] / "src" / "vibe" / "contract" / "examples"
+TRACKS = TypeAdapter(list[Track]).validate_json((EXAMPLES / "street.tracks.json").read_bytes())
+"""People and plates, so "blur people ..." plans can run."""
+
 
 def ctx(log: OpLog | None = None, duration: float | None = D) -> ToolContext:
-    return ToolContext(request_id="req_1", source="agent", log=log, duration=duration)
+    return ToolContext(
+        request_id="req_1", source="agent", log=log, duration=duration, tracks=TRACKS
+    )
 
 
 # --- Grammar: each phrase on a 90 s video ---------------------------------------------------
@@ -245,6 +252,97 @@ def test_planner_and_toolbox_cut_the_middle_third() -> None:
     _run_plan("cut the middle third", ctx(log))
 
     assert log.state().cuts == [TimeRange(start=30, end=60)]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "blur people after 2:00",
+        "mute between 1:00 and 2:00",
+        "mute 1:00 to 1:30.1",
+        "reduce the noise after 1:30",
+        "cut 1:00 to 2:00",
+        "pixelate plates before 2:00",
+    ],
+)
+def test_planner_ranges_past_the_end_are_refused_when_the_plan_runs(text: str) -> None:
+    # The planner writes these as literal ranges (it doesn't know the duration), so the edit
+    # tools check them; nothing is written.
+    log = OpLog()
+
+    with pytest.raises(TimeRangeError, match="end of the video"):
+        _run_plan(text, ctx(log))
+
+    assert len(log) == 0
+
+
+def test_planner_range_ending_exactly_at_the_end_is_written() -> None:
+    log = OpLog()
+
+    _run_plan("mute between 1:00 and 1:30", ctx(log))
+
+    assert len(log) == 1
+
+
+@pytest.mark.parametrize(
+    ("tool", "args"),
+    [
+        ("mute", {"time_range": {"start": 120}}),
+        ("denoise", {"time_range": {"start": 0, "end": 91}}),
+        ("add_mask", {"targets": ["t1"], "effect": {"type": "blur"}, "time_range": {"start": 95}}),
+        ("cut_range", {"time_range": {"start": 30, "end": 120}}),
+    ],
+)
+def test_hand_edits_past_the_end_are_refused(tool: str, args: dict) -> None:
+    log = OpLog()
+
+    with pytest.raises(TimeRangeError, match=rf"^{tool}: .*end of the video"):
+        call_tool(tool, args, ctx(log))
+
+    assert len(log) == 0
+
+
+def test_unmute_past_the_end_is_refused() -> None:
+    log = OpLog()
+    call_tool("mute", {}, ctx(log))
+
+    with pytest.raises(TimeRangeError, match="end of the video"):
+        call_tool("unmute", {"time_range": {"start": 120}}, ctx(log))
+
+    assert len(log) == 1
+
+
+def test_edits_without_a_known_duration_cant_be_checked_and_are_written() -> None:
+    log = OpLog()
+
+    call_tool("mute", {"time_range": {"start": 120}}, ctx(log, duration=None))
+
+    assert len(log) == 1
+
+
+def test_planner_and_resolver_agree_on_second_third() -> None:
+    assert parse_time_phrase("the second third") == "second third"
+    assert resolve_range("second third", D) == TimeRange(start=30, end=60)
+
+
+@pytest.mark.parametrize(
+    ("phrase", "expected"),
+    [
+        ("during the first half", TimeRange(start=0, end=45)),
+        ("for the last third", TimeRange(start=60)),
+        ("everything after 0:30", TimeRange(start=30)),
+        ("over 0:10 to 0:40", TimeRange(start=10, end=40)),
+    ],
+)
+def test_resolver_ignores_the_planners_leading_words(phrase: str, expected: TimeRange) -> None:
+    assert resolve_range(phrase, D) == expected
+
+
+def test_resolve_time_without_a_duration_is_a_tool_error_not_a_time_question() -> None:
+    with pytest.raises(ToolError, match="duration") as caught:
+        call_tool("resolve_time", {"phrase": "first half"}, ctx(duration=None))
+
+    assert not isinstance(caught.value, TimeRangeError)
 
 
 # --- Round trip on a real 90 s clip ---------------------------------------------------------
