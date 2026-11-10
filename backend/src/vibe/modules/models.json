@@ -1,0 +1,48 @@
+{
+  "_comment": "Model weights `python -m vibe.modules download` can fetch (F-08). Only permissive licenses on the default path (D-015). A null sha256 means not pinned yet: run `download NAME --pin` once, check the file, then add the printed hash here. `source: package` means the model's pip package downloads its own weights on first use; `source: manual` means a gated download you do by hand.",
+  "models": {
+    "yunet": {
+      "source": "url",
+      "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx",
+      "file": "face_detection_yunet_2023mar.onnx",
+      "sha256": null,
+      "license": "MIT",
+      "for": "face boxes, live path (D-015)",
+      "min_tier": 0
+    },
+    "sface": {
+      "source": "url",
+      "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx",
+      "file": "face_recognition_sface_2021dec.onnx",
+      "sha256": null,
+      "license": "Apache 2.0",
+      "for": "identity embeddings, stay on this machine (D-017)",
+      "min_tier": 0
+    },
+    "egoblur-face": {
+      "source": "manual",
+      "url": "https://www.projectaria.com/tools/egoblur/",
+      "file": "egoblur_face.jit",
+      "sha256": null,
+      "license": "Apache 2.0 (gated download: accept Meta's terms yourself)",
+      "for": "faces, offline (D-015)",
+      "min_tier": 1
+    },
+    "egoblur-plate": {
+      "source": "manual",
+      "url": "https://www.projectaria.com/tools/egoblur/",
+      "file": "egoblur_lp.jit",
+      "sha256": null,
+      "license": "Apache 2.0 (gated download: accept Meta's terms yourself)",
+      "for": "license plates, offline (D-015)",
+      "min_tier": 1
+    },
+    "rfdetr": {
+      "source": "package",
+      "package": "rfdetr",
+      "license": "Apache 2.0 (N/S/M/L only; XL/2XL and rfdetr[plus] are PML 1.0, avoid)",
+      "for": "people and COCO objects; N/S live, L offline (D-015)",
+      "min_tier": 1
+    }
+  }
+}

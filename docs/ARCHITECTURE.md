@@ -146,6 +146,19 @@ The team's hardware varies widely. Some people have a laptop with no usable GPU,
 - **12 GB (or 8 GB) means models take turns.** Not everything fits in VRAM at once (a VLM alone is ~5–6 GB at 4-bit for an 8B model), so the backend loads models on demand and unloads idle ones. Live mode needs its per-frame models (detector, tracker, identity) to fit together.
 - **Benchmarks state the hardware.** The 5070 is the reference for quoted numbers; numbers from other machines are labeled as such.
 
+**Team GPU survey (F-08, 2026-11-05).** As reported in the team chat; full answers, other compute and credits: [`docs/research/f08-gpu-survey.md`](research/f08-gpu-survey.md). `uv run --directory backend python -m vibe.modules doctor` prints a machine's row.
+
+| Tier | Who | GPU / memory |
+|---|---|---|
+| 2 | Alex W., Nickolas G. | RTX 5070 each, **VRAM not confirmed** (12 GB desktop or 8 GB laptop); tier 1 if 8 GB |
+| 1 | Pablo H. | Apple M5 Pro, 64 GB unified (Metal, no CUDA) |
+| 1 | Jonathan S., Paul P. | RTX 5060 Ti 8 GB; RTX 4060 Ti 8 GB |
+| 1 | Luis P. | RTX 4050 Laptop, 6 GB |
+| 1 (tight) | Paul A., Jean M. | RTX 3050 4 GB; RTX 3050 Laptop 4 GB |
+| 0 | Eduardo G., Chris | Apple M2 8 GB unified; integrated graphics |
+
+**Built so far (F-08):** [`backend/src/vibe/modules/`](../backend/src/vibe/modules/). A module subclasses `Analysis` (module name, cache kind, settings, `compute(video_path)`), and `run_analysis(storage, video, analysis)` picks the backend from `VIBE_BACKEND`. Every backend returns a cached result under the analysis's key first. `stub` replays it or raises `NoAnalysis` (never an empty result). `local` computes and caches. `remote` asks the model server (`python -m vibe.modules serve`) on a host listed in `VIBE_REMOTE_HOSTS`, uploading the video once, and caches the result locally. Keys are `<name>-<8 hex>` over name, version and settings. `replay()` reads "whatever is cached" and refuses to guess between several. Biometric kinds are refused by the cache (D-017). Also: `doctor` (GPU, driver, PyTorch build, tier), `download` (weights with pinned sha256, `models.json`), and the `cpu` / `cu128` PyTorch extras. CLI: `uv run python -m vibe.modules --help`.
+
 **Gotcha (RTX 50 series):** these are Blackwell GPUs, which need a recent CUDA (12.8+) and a PyTorch build compiled for them (PyTorch 2.7+ with the `cu128` wheels). Older wheels and some libraries with custom CUDA kernels may not support them yet. Check this before adopting any model.
 
 ## Storage
