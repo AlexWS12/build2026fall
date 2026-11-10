@@ -202,17 +202,17 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 
 ### Sprint 4: the app really edits + human in the loop   (2026-11-10 → 2026-11-17)  · version at close: v0.4.0
 
-**Goal:** by Tuesday 2026-11-17, a request typed in the UI is applied to the timeline and can be exported as a video, for blur, cut, mute and denoise with time phrases. The user sees what the agent did, can undo it per request, and can review low-confidence targets. The F-50 numbers decide on live mode at close.
+**Goal:** by Tuesday 2026-11-17, everything still open from Sprint 3 is finished **and** this sprint's new work lands. Sprint 3's goal (real blur, cut, mute and denoise edits with time phrases) carries over in full, not as a replacement. On top of it: a request typed in the UI is applied to the timeline and can be exported as a video. The user sees what the agent did, can undo it per request, and can review low-confidence targets. The F-50 numbers decide on live mode at close.
 
-**Sprint lead:** _tbd_
+**Sprint lead:** Alex.
 
-**Order:** first, merge the open PRs (#26, #27, #29, #30), then the plan executor and the export route (everything user-facing depends on them). Then F-40, F-43, F-41, F-42. Alongside: R-1b, F-09b → F-10b, F-33b, F-13 and F-50.
+**Order:** carried-over work continues alongside the new cards; nothing from Sprint 3 is dropped. First, finish and merge the open PRs (#26, #27, #29, #30), then the plan executor and the export route (everything user-facing depends on them). Then F-40, F-43, F-41, F-42. Alongside: R-1b, F-09b → F-10b, F-33b, F-13 and F-50.
 
 **Carried over**
 | Card | Owner | Branch | Exit check | Status |
 |---|---|---|---|---|
-| F-11, F-12, F-20, F-31: review and merge | (same owners) | (PR branches) | Merged, `main` green | in review |
-| R-1b Run the planner LLM comparison, add the decision row, pass `LlmPlanner` to `plan_request`; flag LLM-invented cut ranges | paul? | paul/r1-planner-llm | Script output → decision row; a non-template request gets a valid plan | planned |
+| F-11, F-12, F-20, F-31: finish, review and merge (continues; already claimed) | (current owners) | (PR branches) | Merged, `main` green | in review |
+| R-1b Run the planner LLM comparison, add the decision row, pass `LlmPlanner` to `plan_request`; flag LLM-invented cut ranges | _open_ | (existing work on paul/r1-planner-llm) | Script output → decision row; a non-template request gets a valid plan | planned |
 | F-50 Live feasibility spike on the RTX 5070 (also: blur at reduced resolution, since the renderer's blur is ~311 ms per quarter-1080p frame per the F-04 handoff) | _open_ | | fps and latency per stage, hardware stated → live go/no-go | planned |
 
 **Build**
