@@ -310,5 +310,33 @@ def test_a_video_without_audio_is_400(
     assert response.json()["detail"] == "this video has no audio"
 
 
+def test_an_unreadable_cached_transcript_is_503_not_500(
+    client: TestClient, storage: Storage, clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VIBE_BACKEND", "stub")
+    project_id = upload(client, clip)["project_id"]
+    cache_transcript(storage, project_id)
+    video = storage.open_project(project_id).info.video
+    storage.cache_path(video.sha256, "transcript", transcript_key()).write_text("{not json")
+
+    assert client.post(f"/api/projects/{project_id}/transcript").status_code == 503
+
+
+def test_unreadable_audio_is_a_logged_500(
+    client: TestClient, clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_frames(*_: object) -> None:
+        raise ValueError("need at least one array to concatenate")
+
+    monkeypatch.setattr(projects, "transcribe_video", no_frames)
+    project_id = upload(client, clip)["project_id"]
+
+    response = client.post(f"/api/projects/{project_id}/transcript")
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "couldn't read the video's audio"
+    assert projects._busy == set()
+
+
 def test_transcript_of_an_unknown_project_is_404(client: TestClient) -> None:
     assert client.post("/api/projects/prj_nope/transcript").status_code == 404

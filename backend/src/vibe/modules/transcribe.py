@@ -16,10 +16,13 @@ CLI: ``uv run python -m vibe.modules.transcribe CLIP [--model small]``.
 """
 
 import argparse
+import functools
+import logging
 import sys
 from pathlib import Path
 
 import numpy as np
+from pydantic import ValidationError
 
 from vibe.config import Backend, model_backend
 from vibe.contract.common import Model
@@ -29,6 +32,8 @@ from vibe.storage import Storage, StorageError, VideoRef
 from vibe.storage.store import _atomic_write
 from vibe.video import VideoError, extract_audio
 from vibe.video.audio import DEFAULT_SAMPLE_RATE
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "small"
 COMPUTE_TYPE = "int8"  # shortcut: CPU int8 only; add a device option when someone needs a GPU
@@ -67,6 +72,18 @@ def transcript_key(model: str = DEFAULT_MODEL) -> str:
     return f"faster-whisper-{model}-{COMPUTE_TYPE}@{TRANSCRIPT_VERSION}"
 
 
+@functools.lru_cache(maxsize=2)
+def _whisper(model: str):  # no return type: faster_whisper is optional
+    """The loaded model, kept so repeat calls (and per-chunk live use) don't reload weights."""
+    try:
+        from faster_whisper import WhisperModel
+    except ImportError as e:
+        raise TranscribeError(
+            "faster-whisper isn't installed: run `uv pip install faster-whisper` in backend/"
+        ) from e
+    return WhisperModel(model, device="cpu", compute_type=COMPUTE_TYPE)
+
+
 def transcribe(
     samples: np.ndarray,
     sample_rate: int = DEFAULT_SAMPLE_RATE,
@@ -85,14 +102,7 @@ def transcribe(
             f"Whisper needs mono audio at {DEFAULT_SAMPLE_RATE} Hz, "
             f"got shape {samples.shape} at {sample_rate} Hz"
         )
-    try:
-        from faster_whisper import WhisperModel
-    except ImportError as e:
-        raise TranscribeError(
-            "faster-whisper isn't installed: run `uv pip install faster-whisper` in backend/"
-        ) from e
-    whisper = WhisperModel(model, device="cpu", compute_type=COMPUTE_TYPE)
-    segments, info = whisper.transcribe(samples.astype(np.float32), word_timestamps=True)
+    segments, info = _whisper(model).transcribe(samples.astype(np.float32), word_timestamps=True)
     return Transcript(
         model=transcript_key(model),
         language=info.language,
@@ -114,9 +124,19 @@ def transcribe(
 def cached_transcript(
     storage: Storage, video: VideoRef, model: str = DEFAULT_MODEL
 ) -> Transcript | None:
-    """The cached transcript, or ``None`` if the video was never transcribed with ``model``."""
+    """The cached transcript, or ``None`` if the video was never transcribed with ``model``.
+
+    An unreadable cache file (corrupt, or hand-copied in an old format) counts as a miss, so
+    ``local`` replaces it instead of every retry failing.
+    """
     path = storage.cache_path(video.sha256, "transcript", transcript_key(model))
-    return Transcript.model_validate_json(path.read_bytes()) if path.exists() else None
+    if not path.exists():
+        return None
+    try:
+        return Transcript.model_validate_json(path.read_bytes())
+    except ValidationError as e:
+        logger.warning("ignoring unreadable cached transcript %s: %s", path, e)
+        return None
 
 
 def transcribe_video(

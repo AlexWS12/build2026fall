@@ -2,9 +2,11 @@ import type { Transcript } from '../api/types'
 import { Panel } from './Panel'
 import styles from './TranscriptPanel.module.css'
 
-/** "0:07.08": minutes, then seconds to the hundredth. */
-const clock = (seconds: number) =>
-  `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(2).padStart(5, '0')}`
+/** "0:07.08": minutes, then seconds to the hundredth. Rounds first, so 59.997 is "1:00.00". */
+const clock = (seconds: number) => {
+  const cs = Math.round(seconds * 100)
+  return `${Math.floor(cs / 6000)}:${((cs % 6000) / 100).toFixed(2).padStart(5, '0')}`
+}
 
 /** The video's transcript (F-31): made on request, then used by the agent for "where he says X". */
 export function TranscriptPanel({

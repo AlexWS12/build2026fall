@@ -218,7 +218,7 @@ def transcribe_project(project_id: str, storage: StorageDep) -> Transcript:
             ) from e
         except NoAudioStream as e:
             raise HTTPException(status_code=400, detail="this video has no audio") from e
-        except VideoError as e:
+        except (VideoError, ValueError) as e:  # ValueError: e.g. an audio stream with no frames
             logger.exception("reading the audio of %s failed", project.id)
             raise HTTPException(status_code=500, detail="couldn't read the video's audio") from e
 

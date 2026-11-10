@@ -120,17 +120,34 @@ def _mask(match: re.Match[str], steps: _Steps) -> Matched:
     return _scope(when)
 
 
-def _spoken(rest: str, steps: _Steps) -> dict[str, Any] | None:
-    """``{"time_range": $ref}`` to a ``find_speech`` step for "where he says X", else None."""
+_TIME_WORDS = re.compile(r"\b(?:first|last|half|whole|entire|minutes?|seconds?)\b|\d")
+"""Words that may be a time ("goodbye in the last minute") rather than speech. ponytail: a word
+list, not a parse (``parse_time_phrase`` doesn't read "the last minute"), so "he says 3" is
+asked too; quoting the words skips it. Add a ``within`` range to ``find_speech`` if it's too
+strict."""
+
+
+def _spoken(rest: str, steps: _Steps, bare_words: bool = False) -> dict[str, Any] | None:
+    """``{"time_range": $ref}`` to a ``find_speech`` step for "where he says X", else None.
+
+    ``bare_words`` also takes "the word(s) X", only for mute: "remove the words on the screen"
+    isn't speech, and a cut is never guessed. Unquoted words with a time word in them give
+    None (asked): ``find_speech`` has no time-range argument, so the time would be searched
+    for as spoken words.
+    """
     match = _SPOKEN.fullmatch(rest.strip())
-    words = (match.group(1) or match.group(2)).strip("\"' ") if match else ""
-    if not words:
+    if match is None or (match.group(2) and not bare_words):
+        return None
+    said = (match.group(1) or match.group(2)).strip()
+    quoted = len(said) > 1 and said[0] == said[-1] and said[0] in "\"'"
+    words = said.strip("\"' ")
+    if not words or (not quoted and _TIME_WORDS.search(words)):
         return None
     return {"time_range": ref(steps.add("find_speech", {"text": words}))}
 
 
 def _mute(match: re.Match[str], steps: _Steps) -> Matched:
-    if (spoken := _spoken(match.group(1), steps)) is not None:
+    if (spoken := _spoken(match.group(1), steps, bare_words=True)) is not None:
         steps.add("mute", spoken)
         return "timed"
     when = _time(match.group(1))

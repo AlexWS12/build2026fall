@@ -106,10 +106,16 @@ class FindSpeechResult(Model):
     time_range: TimeRange
 
 
-def _plain_words(text: str) -> list[str]:
-    """Lowercase words without accents or punctuation, so "que" finds "¿Qué"."""
+def _plain_word(text: str) -> str:
+    """One word lowercased without accents or punctuation, so "que" finds "¿Qué" and "dont"
+    finds "don't" (but "don" doesn't)."""
     text = unicodedata.normalize("NFKD", text.casefold())
-    return re.findall(r"\w+", "".join(c for c in text if not unicodedata.combining(c)))
+    return "".join(re.findall(r"\w+", "".join(c for c in text if not unicodedata.combining(c))))
+
+
+def _plain_words(text: str) -> list[str]:
+    """``_plain_word`` for each whitespace-separated word, dropping ones with no letters."""
+    return [w for w in map(_plain_word, text.split()) if w]
 
 
 def find_speech(args: FindSpeechArgs, ctx: ToolContext) -> FindSpeechResult:
@@ -123,11 +129,12 @@ def find_speech(args: FindSpeechArgs, ctx: ToolContext) -> FindSpeechResult:
     wanted = _plain_words(args.text)
     if not wanted:
         raise ToolError(f"find_speech: {args.text!r} has no words to look for")
+    # Whole Whisper words, so a query never matches inside one ("it" in "it's").
     said = [
         (plain, word)
         for segment in ctx.transcript.segments
         for word in segment.words
-        for plain in _plain_words(word.text)
+        if (plain := _plain_word(word.text))
     ]
     n = len(wanted)
     hits = [said[i : i + n] for i in range(len(said) - n + 1)]
@@ -138,7 +145,7 @@ def find_speech(args: FindSpeechArgs, ctx: ToolContext) -> FindSpeechResult:
         times = ", ".join(f"{h[0][1].start:.2f}s" for h in hits)
         raise ToolError(
             f"find_speech: {args.text!r} is said {len(hits)} times (at {times}); "
-            "give a time range for the one you mean"
+            "edit the one you mean by its time instead, e.g. mute 0:12 to 0:13"
         )
     start = max(0.0, hits[0][0][1].start - SPEECH_PAD)
     end = hits[0][-1][1].end + SPEECH_PAD

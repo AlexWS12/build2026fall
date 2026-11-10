@@ -9,6 +9,8 @@ import pytest
 
 from vibe.modules.transcribe import (
     TranscribeError,
+    _whisper,
+    cached_transcript,
     main,
     transcribe,
     transcribe_video,
@@ -24,9 +26,11 @@ class FakeWhisper:
     """Stands in for ``faster_whisper.WhisperModel``; counts how often it transcribes."""
 
     calls = 0
+    loads = 0
 
     def __init__(self, size: str, device: str, compute_type: str) -> None:
         assert (device, compute_type) == ("cpu", "int8")
+        FakeWhisper.loads += 1
 
     def transcribe(self, audio: np.ndarray, word_timestamps: bool):
         assert word_timestamps and audio.dtype == np.float32 and audio.ndim == 1
@@ -39,9 +43,15 @@ class FakeWhisper:
         return (s for s in [segment]), SimpleNamespace(language="en")
 
 
+@pytest.fixture(autouse=True)
+def _fresh_model_cache() -> None:
+    """``_whisper`` keeps loaded models; each test swaps in its own fake package."""
+    _whisper.cache_clear()
+
+
 @pytest.fixture
 def whisper(monkeypatch: pytest.MonkeyPatch) -> type[FakeWhisper]:
-    FakeWhisper.calls = 0
+    FakeWhisper.calls = FakeWhisper.loads = 0
     monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=FakeWhisper))
     return FakeWhisper
 
@@ -108,6 +118,27 @@ def test_stub_replays_the_cache_and_never_invents_an_empty_transcript(
 
     assert transcribe_video(storage, ref, backend="stub") == made
     assert whisper.calls == 1
+
+
+def test_the_model_is_loaded_once(whisper: type[FakeWhisper]) -> None:
+    transcribe(np.zeros(RATE, np.float32), RATE, backend="local")
+    transcribe(np.zeros(RATE, np.float32), RATE, backend="local")
+    assert (whisper.calls, whisper.loads) == (2, 1)
+
+
+def test_an_unreadable_cache_is_a_miss_and_gets_replaced(
+    whisper: type[FakeWhisper], stored: tuple[Storage, VideoRef]
+) -> None:
+    storage, ref = stored
+    path = storage.cache_path(ref.sha256, "transcript", transcript_key())
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{"old": "format"}')
+
+    assert cached_transcript(storage, ref) is None
+    with pytest.raises(TranscribeError, match="no cached transcript"):
+        transcribe_video(storage, ref, backend="stub")
+    made = transcribe_video(storage, ref, backend="local")
+    assert cached_transcript(storage, ref) == made
 
 
 def test_cli_prints_the_cache_path_and_words(

@@ -4,11 +4,14 @@ import { Panel } from './Panel'
 export function UploadPanel({
   project,
   busy,
+  disabled = false,
   error,
   onUpload,
 }: {
   project: ProjectInfo | null
   busy: boolean
+  /** True while another request (e.g. a transcription) runs on the current project. */
+  disabled?: boolean
   error: string | null
   onUpload: (file: File) => void
 }) {
@@ -19,7 +22,7 @@ export function UploadPanel({
         <input
           type="file"
           accept="video/*"
-          disabled={busy}
+          disabled={busy || disabled}
           onChange={(event) => {
             const file = event.target.files?.[0]
             if (file) onUpload(file)

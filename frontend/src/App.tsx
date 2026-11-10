@@ -93,6 +93,8 @@ function App({ api = defaultClient }: { api?: ApiClient }) {
           <UploadPanel
             project={project}
             busy={uploading}
+            // A new project mid-transcription would get the old video's transcript.
+            disabled={transcribing}
             error={uploadError}
             onUpload={handleUpload}
           />
@@ -106,7 +108,8 @@ function App({ api = defaultClient }: { api?: ApiClient }) {
           <ChatPanel
             className={styles.chat}
             messages={messages}
-            disabled={!project}
+            // The server holds the project's busy lock while Whisper runs (409).
+            disabled={!project || transcribing}
             busy={thinking}
             onSend={handleSend}
           />

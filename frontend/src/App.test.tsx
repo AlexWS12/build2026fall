@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest'
 import App from './App'
 import type { ApiClient } from './api'
 import { createMockClient } from './api/mock'
+import { TranscriptPanel } from './components/TranscriptPanel'
 
 const mock = () => createMockClient({ delayMs: 0 })
 
@@ -90,6 +91,40 @@ describe('App shell', () => {
     await screen.findByText('street')
     fireEvent.click(screen.getByRole('button', { name: 'Transcribe' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Transcription failed: 503')
+  })
+
+  test('chat and upload wait while a transcription runs', async () => {
+    // The server holds the project busy (409), and a new upload would get the old transcript.
+    const pending: ApiClient = { ...mock(), transcribe: () => new Promise(() => {}) }
+    render(<App api={pending} />)
+    upload()
+    const input = await screen.findByLabelText('Request')
+    await screen.findByText('street')
+    expect(input).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Transcribe' }))
+
+    expect(await screen.findByText('Transcribing…')).toBeInTheDocument()
+    expect(input).toBeDisabled()
+    expect(screen.getByLabelText('Video file')).toBeDisabled()
+  })
+
+  test('transcript times round before splitting minutes', () => {
+    const at = (start: number) => ({ start, end: start + 1, text: 'hi', words: [] })
+    const transcript = { model: 'test', language: 'en', segments: [7.08, 59.997, 119.999].map(at) }
+    render(
+      <TranscriptPanel
+        transcript={transcript}
+        disabled={false}
+        busy={false}
+        error={null}
+        onTranscribe={() => {}}
+      />,
+    )
+    const times = within(screen.getByRole('list', { name: 'Transcript segments' }))
+    for (const time of ['0:07.08', '1:00.00', '2:00.00']) {
+      expect(times.getByText(time)).toBeInTheDocument()
+    }
   })
 
   test('sending a request shows it and the reply', async () => {

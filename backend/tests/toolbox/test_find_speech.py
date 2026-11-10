@@ -57,8 +57,30 @@ def test_the_end_is_clamped_to_the_duration() -> None:
 
 
 def test_said_twice_asks_which_one() -> None:
-    with pytest.raises(ToolError, match=r"said 2 times \(at 7.00s, 9.00s\)"):
+    with pytest.raises(ToolError, match=r"said 2 times \(at 7.00s, 9.00s\)") as e:
         find("hola")
+    assert "by its time" in str(e.value)  # find_speech itself takes no time range
+
+
+CONTRACTION = Transcript(
+    model="test",
+    language="en",
+    segments=[
+        Segment(
+            start=1.0,
+            end=2.0,
+            text="Don't go, Don.",
+            words=words(("Don't", 1.0, 1.4), ("go,", 1.4, 1.6), ("Don.", 1.6, 2.0)),
+        )
+    ],
+)
+
+
+def test_only_whole_words_match() -> None:
+    assert find("don", CONTRACTION).start == pytest.approx(1.6 - SPEECH_PAD)  # not "don't"
+    assert find("don't go", CONTRACTION).start == pytest.approx(1.0 - SPEECH_PAD)
+    with pytest.raises(ToolError, match="isn't said"):
+        find("t", CONTRACTION)
 
 
 @pytest.mark.parametrize("text", ["adios", "hola amigo hola amigo", "¿?"])

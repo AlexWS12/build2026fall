@@ -40,3 +40,26 @@ def test_it_joins_other_timed_clauses() -> None:
 )
 def test_topics_and_missing_words_are_not_templated(text: str) -> None:
     assert parse(text) is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "cut the part where she said goodbye in the last minute",
+        "mute where he says hello from 0:30 to 0:50",
+        "mute where he says hello 10 to 20",
+    ],
+)
+def test_a_time_after_the_words_is_asked_not_searched_for(text: str) -> None:
+    assert parse(text) is None  # find_speech takes no range; the time isn't spoken words
+
+
+@pytest.mark.parametrize("text", ["remove the words on the screen", "delete the word art overlay"])
+def test_bare_the_words_x_never_plans_a_cut(text: str) -> None:
+    plan = parse(text)
+    assert plan is None or "find_speech" not in [c.tool for c in plan.calls]
+
+
+def test_quoted_words_are_searched_even_with_a_time_word() -> None:
+    plan = parse("mute where he says 'last call'")
+    assert plan is not None and plan.calls[0].args == {"text": "last call"}
