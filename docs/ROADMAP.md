@@ -232,7 +232,7 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 **Risks / dependencies:**
 - The executor and the export route gate F-40–F-43 and the demo path. If they aren't merged by midweek, the HITL cards build against the CLI.
 - F-10b and F-50 need F-09b clips; F-50 needs a 5070 (Alex or Nickolas).
-- R-1b needs API credits; who pays is an open team question.
+- R-1b has no budget: free options only (open models run locally, e.g. Ollama or LM Studio, or a provider's free tier if its limits are enough).
 - Shared files: API routes (executor, export), dependency groups (R-1b, F-10b). Post in the team chat before merging.
 - Team decisions pending: D-006, D-012 and D-015 are still Proposed, and the license posture (R-3) is open.
 
