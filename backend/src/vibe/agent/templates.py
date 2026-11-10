@@ -9,19 +9,27 @@ import re
 from collections.abc import Callable
 from typing import Any, Literal
 
-from vibe.agent.plan import Plan, ToolCall, ref
+from vibe.agent.plan import Plan, ToolCall, ref, too_many_keeps
 from vibe.agent.timeparse import TimeParseError, parse_time_phrase
 from vibe.contract import WHOLE_CLIP, TimeRange
 
-_VERBS = (
+_EDIT_VERBS = (
     r"blur|pixelate|black ?box|box|hide|mute|silence|unmute|restore|cut|remove|delete"
-    r"|denoise|reduce|keep"
+    r"|denoise|reduce"
 )
+_KEEP_VERBS = r"keep|(?:only|just) keep"
+_VERBS = f"{_EDIT_VERBS}|{_KEEP_VERBS}"
 """No "trim": it means "cut this" or "keep only this" depending on who says it, so it's asked."""
 
 _CLAUSE_SPLIT = re.compile(
-    rf"\s*(?:,\s*and then|,\s*then|,\s*and|,|\s+and then|\s+then|\s+and)\s+(?=(?:{_VERBS})\b)"
+    r"\s*(?:,\s*and then|,\s*then|,\s*and|,|\s+and then|\s+then|\s+and)\s+"
+    rf"(?=(?:{_VERBS})\b)"
+    rf"|\s*,?\s+but\s+(?=(?:{_EDIT_VERBS})\b)"
 )
+"""Splits before a verb only: "keep 0:10 to 0:20 but blur faces" is two edits, while "keep
+everything but 0:10 to 0:20" stays one clause (and is asked about). "but keep" never splits:
+"cut 0:10 to 0:20 but keep 0:15" or "blur faces but keep 0:10 to 0:20" may be an exception to
+the first edit, not a second one, so those are asked about."""
 
 _MASK = re.compile(
     r"(blur|pixelate|black ?box|box|hide)(?:\s+out)?\s+"
@@ -46,7 +54,7 @@ _DENOISE = re.compile(
 and "delete" are asked about instead (see ``_denoise``)."""
 NOISE_WORDS = frozenset({"noise", "noises", "hiss", "hisses", "hum", "hums"})
 _CUT = re.compile(r"(?:cut|remove|delete)(?:\s+out)?\b(.*)")
-_KEEP = re.compile(r"(?:only\s+)?keep(?:\s+(?:only|just))?\b(.*)")
+_KEEP = re.compile(r"(?:(?:only|just)\s+)?keep(?:\s+(?:only|just))?\b(.*)")
 """Keep only a range: the toolbox cuts everything around it."""
 
 _EFFECTS = {"blur": "blur", "hide": "blur", "pixelate": "pixelate", "box": "box"}
@@ -205,8 +213,8 @@ def parse(text: str) -> Plan | None:
         if scope is None:
             return None
         scopes.add(scope)
-    if sum(call.tool == "keep_range" for call in steps.calls) > 1:
-        return None  # each keep cuts what the other keeps: only their overlap would be left
+    if too_many_keeps(steps.calls):
+        return None  # asked about; validate_plan would refuse it too
     if {"untimed", "timed"} <= scopes:
         raise MixedTimeError(
             "Only part of that request has a time. Should the rest cover the whole video, or "

@@ -97,8 +97,28 @@ def _plan_with_llm(text: str, registry: Mapping[str, ToolSpec], llm: LlmPlanner)
     )
 
 
-_KEEP_NEGATIONS = frozenset({"except", "but", "not", "without", "don't", "dont"})
+_KEEP_NEGATIONS = frozenset({"except", "but", "not", "without", "apart", "don't", "dont"})
 """Words that turn "keep ..." into "remove ...": the user needs to be pointed at cut."""
+_KEEP_NEGATION_WINDOW = 5
+"""How many words after "keep" can negate it ("keep the whole video except ...", "only keep
+the part without ..."). The search stops at the first time ("keep 0:10 to 0:20 but not the
+faces") or comma: after that, a "but" or "not" is about something else."""
+
+
+def _keep_at(words: list[str]) -> int | None:
+    """Where "keep" is, if the request starts with it ("keep", "only keep", "do not keep")."""
+    return words.index("keep") if "keep" in words[:3] else None
+
+
+def _negated_keep(words: list[str], at: int) -> bool:
+    after = []
+    for word in words[at + 1 : at + 1 + _KEEP_NEGATION_WINDOW]:
+        if any(ch.isdigit() for ch in word):
+            break
+        after.append(word)
+        if word.endswith(","):  # "keep the good part, not sure where": a new thought
+            break
+    return not _KEEP_NEGATIONS.isdisjoint(words[:at] + after)
 
 
 def _question_for(text: str) -> str:
@@ -118,12 +138,13 @@ def _question_for(text: str) -> str:
         )
     if verb == "cut":
         return "Which part should I cut? Give a time range like 0:10 to 0:20."
-    if "keep" in words[:2] and not _KEEP_NEGATIONS.isdisjoint(words):
+    keep_at = _keep_at(words)
+    if keep_at is not None and _negated_keep(words, keep_at):
         return (
             "To remove a part instead, say 'cut 0:10 to 0:20'. To keep only one part, say "
             "'keep only 0:10 to 0:20'."
         )
-    if "keep" in words[:2]:
+    if keep_at is not None:
         return (
             "Which part should I keep? Give one time range like 0:10 to 0:20, and I'll cut "
             "everything around it."

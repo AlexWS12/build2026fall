@@ -58,7 +58,18 @@ def test_request_set_covers_both_outcomes() -> None:
         ("keep 0:10 to 0:20 and keep 0:30 to 0:40", "Which part should I keep"),
         ("keep the noise down", "reduce the noise"),
         ("keep everything except 0:10 to 0:20", "cut 0:10 to 0:20"),
+        ("keep all but the first 10 seconds", "cut 0:10 to 0:20"),
+        ("keep it without 0:10 to 0:20", "cut 0:10 to 0:20"),
         ("don't keep 0:10 to 0:20", "cut 0:10 to 0:20"),
+        ("do not keep 0:10 to 0:20", "cut 0:10 to 0:20"),
+        ("keep the whole video except 0:10 to 0:20", "cut 0:10 to 0:20"),
+        ("keep it all except the intro", "cut 0:10 to 0:20"),
+        ("keep all of it but 0:10 to 0:20", "cut 0:10 to 0:20"),
+        ("keep everything apart from the intro", "cut 0:10 to 0:20"),
+        ("only keep the part without the intro", "cut 0:10 to 0:20"),
+        # A "but" or "not" later in the request isn't about what to keep.
+        ("keep 0:10 to 0:20 but not the faces", "Which part should I keep"),
+        ("keep the good part, not sure where it starts", "Which part should I keep"),
     ],
 )
 def test_clarify_question_tells_the_user_what_to_say(text: str, hint: str) -> None:

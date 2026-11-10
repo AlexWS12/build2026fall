@@ -174,6 +174,8 @@ def test_requests_that_are_not_plain_give_none(text: str) -> None:
         "keep only 0:10 to 0:20",
         "keep just 0:10 to 0:20",
         "only keep 0:10 to 0:20",
+        "just keep 0:10 to 0:20",
+        "please just keep 0:10 to 0:20",
         "please keep only 0:10 to 0:20",
         "keep from 0:10 to 0:20",
     ],
@@ -229,6 +231,53 @@ def test_keep_requests_that_are_not_plain_give_none(text: str) -> None:
 def test_keep_with_a_bare_number_asks_seconds_or_minutes_like_cut() -> None:
     with pytest.raises(TimeParseError, match="seconds or minutes"):
         parse("keep 10 to 20")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "blur faces and only keep 0:10 to 0:20",
+        "blur faces and just keep 0:10 to 0:20",
+        "blur faces, then only keep 0:10 to 0:20",
+    ],
+)
+def test_only_keep_and_just_keep_start_a_new_clause(text: str) -> None:
+    assert [c["tool"] for c in calls(text)] == ["find_objects", "add_mask", "keep_range"]
+
+
+@pytest.mark.parametrize(
+    ("text", "tools"),
+    [
+        ("keep 0:10 to 0:20 but blur faces", ["keep_range", "find_objects", "add_mask"]),
+        ("keep 0:10 to 0:20 but mute 0:12 to 0:14", ["keep_range", "mute"]),
+    ],
+)
+def test_but_before_a_verb_starts_a_new_clause(text: str, tools: list[str]) -> None:
+    assert [c["tool"] for c in calls(text)] == tools
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "keep everything but 0:10 to 0:20",  # "but" before a time, not a verb: no split
+        "mute everything but 0:10 to 0:20",
+        "blur faces but not 0:10 to 0:20",
+    ],
+)
+def test_but_before_something_other_than_a_verb_doesnt_split(text: str) -> None:
+    assert parse(text) is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "cut 0:10 to 0:20 but keep 0:05 to 0:30",  # an exception to the cut, or a second edit?
+        "blur faces but keep 0:10 to 0:20",  # unblurred there, or cut the rest?
+        "mute 0:10 to 0:20 but only keep 0:05 to 0:30",
+    ],
+)
+def test_but_keep_is_asked_about_not_split(text: str) -> None:
+    assert parse(text) is None
 
 
 def test_keep_after_a_cut_is_two_steps_in_order() -> None:
