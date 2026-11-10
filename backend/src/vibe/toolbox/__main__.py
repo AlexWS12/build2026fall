@@ -14,7 +14,7 @@ from pathlib import Path
 
 from pydantic import TypeAdapter, ValidationError
 
-from vibe.contract import OP_ADAPTER, Op, OpLog, Track, new_id
+from vibe.contract import OP_ADAPTER, Op, OpLog, TimelineState, Track, new_id
 from vibe.storage import Storage, StorageError
 from vibe.toolbox.context import OpSink, ToolContext
 from vibe.toolbox.registry import TOOLS, call_tool
@@ -29,6 +29,7 @@ EXAMPLES = {
     '"time_range": {"start": 0, "end": 5}}',
     "cut_range": '{"time_range": {"start": 10, "end": 20}}',
     "mute": '{"time_range": {"start": 10, "end": 20}}',
+    "unmute": '{"time_range": {"start": 12, "end": 15}}',
     "denoise": '{"time_range": {"start": 10, "end": 20}, "strength": 0.5}',
 }
 
@@ -112,6 +113,9 @@ class _TimelineFile:
             f.flush()
             os.fsync(f.fileno())
         return op
+
+    def state(self) -> TimelineState:
+        return OpLog.from_jsonl(self.path.read_text(encoding="utf-8")).state()
 
 
 def _open_timeline(args: argparse.Namespace) -> OpSink:

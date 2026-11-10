@@ -52,6 +52,40 @@ def test_mute_without_a_time_mutes_the_whole_clip() -> None:
     assert calls("mute") == [{"step_id": "s1", "tool": "mute", "args": {}}]
 
 
+@pytest.mark.parametrize("text", ["mute the audio", "silence the sound", "mute the video"])
+def test_mute_the_audio_mutes_the_whole_clip(text: str) -> None:
+    assert calls(text) == [{"step_id": "s1", "tool": "mute", "args": {}}]
+
+
+@pytest.mark.parametrize("text", ["mute it", "silence it", "mute it from 0:10 to 0:20"])
+def test_mute_it_is_not_guessed_as_the_whole_clip(text: str) -> None:
+    # "it" may be a person or a sound the user means, so it's asked about or goes to the LLM.
+    assert parse(text) is None
+
+
+@pytest.mark.parametrize(
+    ("text", "args"),
+    [
+        ("unmute", {}),
+        ("unmute the audio", {}),
+        ("unmute 0:10 to 0:20", {"time_range": {"start": 10, "end": 20}}),
+        ("restore the sound after 0:30", {"time_range": {"start": 30}}),
+    ],
+)
+def test_unmute_requests(text: str, args: dict) -> None:
+    assert calls(text) == [{"step_id": "s1", "tool": "unmute", "args": args}]
+
+
+def test_mute_then_unmute_part_of_it() -> None:
+    result = calls("mute 0:01 to 0:05 and unmute 0:02 to 0:03")
+    assert [c["tool"] for c in result] == ["mute", "unmute"]
+
+
+@pytest.mark.parametrize("text", ["unmute him", "restore the cut part", "restore it"])
+def test_unclear_unmute_requests_are_declined(text: str) -> None:
+    assert parse(text) is None
+
+
 @pytest.mark.parametrize(
     "text",
     [

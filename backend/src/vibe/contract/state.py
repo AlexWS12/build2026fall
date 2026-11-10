@@ -64,6 +64,10 @@ class TimelineState(Model):
                     break
         return found
 
+    def mutes_at(self, t: float) -> list[MuteSpan]:
+        """The mutes in effect at source time ``t``: the all-audio one and any per speaker."""
+        return [span for span in self.mutes if span.contains(t)]
+
     def rules_at(self, t: float) -> list[Rule]:
         return [r for r in self.rules if r.time_range is None or _in_range(r.time_range, t)]
 
