@@ -1,8 +1,9 @@
 """Render by hand: ``uv run python -m vibe.render export clip.mp4 --log timeline.jsonl -o out.mp4``.
 
 ``--tracks`` adds a tracks .json (the contract's format). ``--project <id>`` renders a project
-in ``VIBE_DATA_DIR`` instead: its video, timeline and hand-drawn tracks, into a new file in its
-``exports/`` folder each time. Prints what it wrote as JSON.
+in ``VIBE_DATA_DIR`` instead: its video and timeline, with the tracks cached for the video (F-10)
+and the ones drawn by hand, into a new file in its ``exports/`` folder each time. ``--analysis
+<key>`` says which cached tracks, when the video has several sets. Prints what it wrote as JSON.
 """
 
 import argparse
@@ -14,9 +15,10 @@ from pathlib import Path
 from pydantic import TypeAdapter, ValidationError
 
 from vibe.contract import OpLog, TimelineState, Track, new_id
+from vibe.modules.vision import cache
 from vibe.render.errors import RenderError
 from vibe.render.export import RenderResult, export
-from vibe.storage import Storage, StorageError
+from vibe.storage import Project, Storage, StorageError
 from vibe.video import VideoError
 
 _TRACKS = TypeAdapter(list[Track])
@@ -40,6 +42,13 @@ def _parser() -> argparse.ArgumentParser:
     where.add_argument("--project", help="project id in VIBE_DATA_DIR to render")
     cmd.add_argument("--tracks", type=Path, help="tracks .json (with --project: added to its own)")
     cmd.add_argument(
+        "--analysis",
+        metavar="KEY",
+        help="with --project: which of the video's cached track sets to use (default: the one "
+        "marked as its default, or its only one; `python -m vibe.modules.vision list VIDEO` "
+        "shows them)",
+    )
+    cmd.add_argument(
         "-o", "--output", type=Path, help="the .mp4 to write (default with --project: a new file)"
     )
     return parser
@@ -59,9 +68,34 @@ def _load_tracks(path: Path) -> list[Track]:
         raise CliError(f"can't read tracks {path}: {exc}") from None
 
 
+def _cached_tracks(storage: Storage, project: Project, key: str | None) -> list[Track]:
+    """The detector tracks cached for the project's video (F-10): ``key``'s, or the default set.
+
+    Read here, before the render starts, so the per-frame path never touches the cache. A video
+    that was never analysed gives no tracks and still renders, with the tracks drawn by hand: a
+    mask whose target has no track then hides the whole frame, and the audit lists it as
+    ``no_track`` (privacy fails closed). ``cache.project_tracks`` can't be used for this, because
+    it gives ``None`` for such a video even when boxes were drawn. A ``key`` that isn't cached is
+    an error instead, since a key given by name was meant to exist.
+
+    Raises ``cache.CacheError`` when the cache can't say which set to use: with no ``key``, several
+    sets and no default it's ``AmbiguousAnalysis``, which names the keys to choose from.
+    """
+    sha256 = project.info.video.sha256
+    tracks = cache.load_tracks(storage, sha256, key)
+    if tracks is not None:
+        return tracks
+    if key is None:
+        return []
+    cached = ", ".join(cache.track_keys(storage, sha256)) or "none, the video isn't analysed"
+    raise CliError(f"no cached tracks {key!r} for video {sha256[:12]} (cached: {cached})")
+
+
 def _run(args: argparse.Namespace) -> RenderResult:
     tracks = _load_tracks(args.tracks) if args.tracks is not None else []
     if args.project is None:
+        if args.analysis is not None:
+            raise CliError("--analysis picks a project's cached tracks; use it with --project")
         if args.source is None or args.output is None:
             raise CliError("with --log, pass the clip to render and -o/--output")
         return export(args.source, _load_state(args.log), tracks, args.output)
@@ -72,7 +106,7 @@ def _run(args: argparse.Namespace) -> RenderResult:
     try:
         project = storage.open_project(args.project)
         state = project.state()
-        tracks = project.user_tracks() + tracks
+        tracks = _cached_tracks(storage, project, args.analysis) + project.user_tracks() + tracks
     except (StorageError, ValueError) as exc:
         raise CliError(str(exc)) from None
     output = args.output or project.exports_dir / f"{new_id('export')}.mp4"
@@ -83,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         result = _run(args)
-    except (CliError, RenderError, VideoError, OSError) as exc:
+    except (CliError, cache.CacheError, RenderError, VideoError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     summary = dataclasses.asdict(result) | {
