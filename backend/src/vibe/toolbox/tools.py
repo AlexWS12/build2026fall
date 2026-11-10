@@ -4,16 +4,13 @@ Query tools return compact JSON (ids, ranges, counts), never images. Edit tools 
 ops and append them to the timeline; they never touch pixels or audio.
 """
 
-import math
-import re
-
 from pydantic import Field
 
 from vibe.contract import AddAudioFilter, AddMask, ContractError, Cut, Mute, Op, TimeRange
 from vibe.contract.common import Effect, Model
 from vibe.toolbox.context import ToolContext
 from vibe.toolbox.spec import ToolError
-from vibe.toolbox.timecodes import TimeParseError, is_bare_number, parse_timestamp
+from vibe.toolbox.time_range import TimeRangeError, resolve_range
 
 # --- find_objects -------------------------------------------------------------------------
 
@@ -49,7 +46,8 @@ class ResolveTimeArgs(Model):
     phrase: str = Field(
         min_length=1,
         description='A time phrase that needs the video\'s length: "first half", '
-        '"second half", "first 5 seconds", "last 0:10".',
+        '"second half", "the last third", "first 5 seconds", "last 0:10", "after 0:30", '
+        '"before 1:00", "between 0:10 and 0:40".',
     )
 
 
@@ -57,37 +55,14 @@ class ResolveTimeResult(Model):
     time_range: TimeRange
 
 
-_EDGE = re.compile(r"(first|last)\s+(.+)")
-
-
 def resolve_time(args: ResolveTimeArgs, ctx: ToolContext) -> ResolveTimeResult:
+    """The range ``args.phrase`` means in this video (F-12's ``resolve_range``)."""
     if ctx.duration is None:
         raise ToolError(f"resolve_time: needs the video duration to resolve {args.phrase!r}")
-    if not math.isfinite(ctx.duration) or ctx.duration <= 0:
-        raise ToolError(f"resolve_time: the video duration must be positive, not {ctx.duration}")
-    d, phrase = ctx.duration, args.phrase.strip().lower()
-    if phrase == "first half":
-        return ResolveTimeResult(time_range=TimeRange(start=0, end=d / 2))
-    if phrase == "second half":
-        return ResolveTimeResult(time_range=TimeRange(start=d / 2))
-    match = _EDGE.fullmatch(phrase)
-    if match is None or is_bare_number(match.group(2)):
-        raise ToolError(f"resolve_time: can't resolve {args.phrase!r}")
     try:
-        seconds = parse_timestamp(match.group(2))
-    except TimeParseError as exc:
-        raise ToolError(f"resolve_time: {exc}") from None
-    if seconds <= 0:
-        raise ToolError(f"resolve_time: {args.phrase!r} is an empty range")
-    if seconds >= d:
-        # Don't stretch it to the whole video: "cut the last 2 minutes" of a 1-minute clip
-        # would silently cut everything. Fail so the user is asked.
-        raise ToolError(
-            f"resolve_time: {args.phrase!r} is as long as the whole video ({d:g} seconds)"
-        )
-    if match.group(1) == "first":
-        return ResolveTimeResult(time_range=TimeRange(start=0, end=seconds))
-    return ResolveTimeResult(time_range=TimeRange(start=d - seconds))
+        return ResolveTimeResult(time_range=resolve_range(args.phrase, ctx.duration))
+    except TimeRangeError as exc:
+        raise TimeRangeError(f"resolve_time: {exc}") from None
 
 
 # --- Edit tools ---------------------------------------------------------------------------

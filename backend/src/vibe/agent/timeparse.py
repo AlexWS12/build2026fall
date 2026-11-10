@@ -29,7 +29,7 @@ _RANGE = re.compile(rf"(?:from\s+)?({_TS})\s*(?:to|until|till|through|-|–)\s*(
 _BETWEEN = re.compile(rf"between\s+({_TS})\s*and\s*({_TS})")
 """Only "between" makes "X and Y" a range: "mute 0:10 and 0:20" may mean two moments."""
 _WHOLE = re.compile(r"(?:the\s+)?(?:whole|entire|full)\s+(?:video|clip|thing)")
-_HALF = re.compile(r"(?:the\s+)?((?:first|second) half)")
+_HALF = re.compile(r"(?:the\s+)?((?:first|second) half|(?:first|middle|last) third)")
 _FIRST = re.compile(rf"(?:the\s+)?first\s+({_TS})")
 _LAST = re.compile(rf"(?:the\s+)?last\s+({_TS})")
 _AFTER = re.compile(rf"(?:after|from|starting at|since)\s+({_TS})(?:\s+on(?:wards?)?)?")
