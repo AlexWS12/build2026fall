@@ -114,6 +114,53 @@ def test_a_rejected_op_writes_nothing(store: Storage, clip: Path) -> None:
     assert project.timeline_path.read_bytes() == before
 
 
+def test_a_batch_of_ops_survives_reopening(store: Storage, clip: Path) -> None:
+    project = store.create_project(clip)
+
+    project.append_many([blur("r_1", "trk_1"), blur("r_1", "trk_2")])
+
+    reopened = store.open_project(project.id)
+    assert len(reopened.log()) == 2
+    assert set(reopened.state().masks) == {"trk_1", "trk_2"}
+
+
+def test_a_batch_with_one_bad_op_writes_nothing(store: Storage, clip: Path) -> None:
+    project = store.create_project(clip)
+    project.append(blur("r_1"))
+    before = project.timeline_path.read_bytes()
+
+    with pytest.raises(ContractError):
+        project.append_many(
+            [blur("r_2"), Undo(request_id="r_2", source="user", undo_request_id="r_9")]
+        )
+
+    assert project.timeline_path.read_bytes() == before
+
+
+def test_a_batch_is_written_with_one_write(
+    store: Storage, clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failure part way can't leave the first op on disk without the second: there is
+    only one write, so it lands or raises as a whole (short of a crash mid-write)."""
+    project = store.create_project(clip)
+    writes: list[str] = []
+    real_open = Path.open
+
+    def recording_open(self: Path, *args, **kwargs):
+        f = real_open(self, *args, **kwargs)
+        if self == project.timeline_path and args and args[0] == "a":
+            real_write = f.write
+            f.write = lambda text: (writes.append(text), real_write(text))[1]
+        return f
+
+    monkeypatch.setattr(Path, "open", recording_open)
+
+    project.append_many([blur("r_1", "trk_1"), blur("r_1", "trk_2")])
+
+    assert len(writes) == 1
+    assert writes[0].count("\n") == 2
+
+
 def test_an_incomplete_last_line_is_dropped(store: Storage, clip: Path) -> None:
     project = store.create_project(clip)
     project.append(blur("r_1"))

@@ -21,6 +21,7 @@ import os
 import re
 import shutil
 import tempfile
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -131,13 +132,23 @@ class Project:
         caller must apply one request at a time per project (the contract needs a request's
         ops to be contiguous).
         """
-        self.log().append(op)  # validates; raises before anything is written
-        line = OP_ADAPTER.dump_json(op, exclude_none=True).decode() + "\n"
+        return self.append_many([op])[0]
+
+    def append_many(self, ops: Sequence[Op]) -> list[Op]:
+        """Validate ``ops`` together against the whole log, then append them in one write.
+
+        Raises (and writes nothing) if any op breaks a contract rule, so a request's ops land
+        together or not at all. Known gap (R-2, open): a crash during a write can leave a
+        partial last line. ``log`` drops it when reading, but the next append writes right
+        after it, which glues the two into one unreadable line.
+        """
+        batch = self.log().append_many(ops)  # validates; raises before anything is written
+        text = "".join(OP_ADAPTER.dump_json(op, exclude_none=True).decode() + "\n" for op in batch)
         with self.timeline_path.open("a", encoding="utf-8", newline="\n") as f:
-            f.write(line)
+            f.write(text)
             f.flush()
             os.fsync(f.fileno())
-        return op
+        return batch
 
     def state(self) -> TimelineState:
         return self.log().state()

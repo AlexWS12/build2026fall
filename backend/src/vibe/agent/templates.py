@@ -9,19 +9,27 @@ import re
 from collections.abc import Callable
 from typing import Any, Literal
 
-from vibe.agent.plan import Plan, ToolCall, ref
+from vibe.agent.plan import Plan, ToolCall, ref, too_many_keeps
 from vibe.agent.timeparse import TimeParseError, parse_time_phrase
 from vibe.contract import WHOLE_CLIP, TimeRange
 
-_VERBS = (
+_EDIT_VERBS = (
     r"blur|pixelate|black ?box|box|hide|mute|silence|unmute|restore|cut|remove|delete"
     r"|denoise|reduce"
 )
+_KEEP_VERBS = r"keep|(?:only|just) keep"
+_VERBS = f"{_EDIT_VERBS}|{_KEEP_VERBS}"
 """No "trim": it means "cut this" or "keep only this" depending on who says it, so it's asked."""
 
 _CLAUSE_SPLIT = re.compile(
-    rf"\s*(?:,\s*and then|,\s*then|,\s*and|,|\s+and then|\s+then|\s+and)\s+(?=(?:{_VERBS})\b)"
+    r"\s*(?:,\s*and then|,\s*then|,\s*and|,|\s+and then|\s+then|\s+and)\s+"
+    rf"(?=(?:{_VERBS})\b)"
+    rf"|\s*,?\s+but\s+(?=(?:{_EDIT_VERBS})\b)"
 )
+"""Splits before a verb only: "keep 0:10 to 0:20 but blur faces" is two edits, while "keep
+everything but 0:10 to 0:20" stays one clause (and is asked about). "but keep" never splits:
+"cut 0:10 to 0:20 but keep 0:15" or "blur faces but keep 0:10 to 0:20" may be an exception to
+the first edit, not a second one, so those are asked about."""
 
 _MASK = re.compile(
     r"(blur|pixelate|black ?box|box|hide)(?:\s+out)?\s+"
@@ -46,6 +54,8 @@ _DENOISE = re.compile(
 and "delete" are asked about instead (see ``_denoise``)."""
 NOISE_WORDS = frozenset({"noise", "noises", "hiss", "hisses", "hum", "hums"})
 _CUT = re.compile(r"(?:cut|remove|delete)(?:\s+out)?\b(.*)")
+_KEEP = re.compile(r"(?:(?:only|just)\s+)?keep(?:\s+(?:only|just))?\b(.*)")
+"""Keep only a range: the toolbox cuts everything around it."""
 
 _EFFECTS = {"blur": "blur", "hide": "blur", "pixelate": "pixelate", "box": "box"}
 _LABELS = {
@@ -89,11 +99,11 @@ class MixedTimeError(TimeParseError):
 _NO_TIME = object()
 """The clause has no time words: the edit applies to the whole clip."""
 
-Matched = Literal["timed", "untimed"] | None
+Matched = Literal["timed", "untimed", "keep"] | None
 """Whether a clause said when (a range, or "for the whole video") or didn't; None: no match.
 
 A request mixing both ("blur faces and mute 0:10 to 0:20") is asked about, because the time
-may have been meant for every part."""
+may have been meant for every part. "keep" edits the whole timeline, so it never takes part."""
 
 
 def _time(rest: str) -> TimeRange | str | object | None:
@@ -158,12 +168,21 @@ def _cut(match: re.Match[str], steps: _Steps) -> Matched:
     return "timed"
 
 
+def _keep(match: re.Match[str], steps: _Steps) -> Matched:
+    when = _time(match.group(1))
+    if when is None or when is _NO_TIME or when == WHOLE_CLIP:  # never guess what to keep
+        return None
+    steps.add("keep_range", {"time_range": steps.time_arg(when)})
+    return "keep"
+
+
 _TEMPLATES: tuple[tuple[re.Pattern[str], Callable[[re.Match[str], _Steps], Matched]], ...] = (
     (_MASK, _mask),
     (_MUTE, _mute),
     (_UNMUTE, _unmute),
     (_DENOISE, _denoise),
     (_CUT, _cut),
+    (_KEEP, _keep),
 )
 
 
@@ -194,6 +213,8 @@ def parse(text: str) -> Plan | None:
         if scope is None:
             return None
         scopes.add(scope)
+    if too_many_keeps(steps.calls):
+        return None  # asked about; validate_plan would refuse it too
     if {"untimed", "timed"} <= scopes:
         raise MixedTimeError(
             "Only part of that request has a time. Should the rest cover the whole video, or "
