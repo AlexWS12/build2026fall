@@ -164,6 +164,154 @@ def test_requests_that_are_not_plain_give_none(text: str) -> None:
     assert parse(text) is None
 
 
+# --- keep (F-20) ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "keep 0:10 to 0:20",
+        "keep only 0:10 to 0:20",
+        "keep just 0:10 to 0:20",
+        "only keep 0:10 to 0:20",
+        "just keep 0:10 to 0:20",
+        "please just keep 0:10 to 0:20",
+        "please keep only 0:10 to 0:20",
+        "keep from 0:10 to 0:20",
+    ],
+)
+def test_keep_a_time_range_plans_keep_range(text: str) -> None:
+    assert calls(text) == [
+        {
+            "step_id": "s1",
+            "tool": "keep_range",
+            "args": {"time_range": {"start": 10.0, "end": 20.0}},
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    ("text", "phrase"),
+    [
+        ("keep the first half", "first half"),
+        ("keep only the last 10 seconds", "last 10 seconds"),
+        ("keep the first 30 seconds", "first 30 seconds"),
+    ],
+)
+def test_keep_a_duration_relative_range_resolves_the_time_first(text: str, phrase: str) -> None:
+    assert calls(text) == [
+        {"step_id": "s1", "tool": "resolve_time", "args": {"phrase": phrase}},
+        {"step_id": "s2", "tool": "keep_range", "args": {"time_range": {"$ref": "s1"}}},
+    ]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "keep",
+        "keep only",
+        "keep it",
+        "keep the whole video",
+        "keep faces blurred",
+        "keep the audio muted",
+        "keep the noise down",
+        "keep everything except 0:10 to 0:20",
+        "keepsake",
+        "keep 0:10 to 0:20 and keep 0:30 to 0:40",
+        "keep 0:10 to 0:20, then keep 0:30 to 0:40",
+        "keep 0:10 to 0:20 and then keep 0:30 to 0:40",
+        "keep 0:10 to 0:20 and only keep 0:30 to 0:40",
+        "only keep 0:10 to 0:20 and keep 0:30 to 0:40",
+    ],
+)
+def test_keep_requests_that_are_not_plain_give_none(text: str) -> None:
+    assert parse(text) is None  # more than one keep would silently keep only their overlap
+
+
+def test_keep_with_a_bare_number_asks_seconds_or_minutes_like_cut() -> None:
+    with pytest.raises(TimeParseError, match="seconds or minutes"):
+        parse("keep 10 to 20")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "blur faces and only keep 0:10 to 0:20",
+        "blur faces and just keep 0:10 to 0:20",
+        "blur faces, then only keep 0:10 to 0:20",
+    ],
+)
+def test_only_keep_and_just_keep_start_a_new_clause(text: str) -> None:
+    assert [c["tool"] for c in calls(text)] == ["find_objects", "add_mask", "keep_range"]
+
+
+@pytest.mark.parametrize(
+    ("text", "tools"),
+    [
+        ("keep 0:10 to 0:20 but blur faces", ["keep_range", "find_objects", "add_mask"]),
+        ("keep 0:10 to 0:20 but mute 0:12 to 0:14", ["keep_range", "mute"]),
+    ],
+)
+def test_but_before_a_verb_starts_a_new_clause(text: str, tools: list[str]) -> None:
+    assert [c["tool"] for c in calls(text)] == tools
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "keep everything but 0:10 to 0:20",  # "but" before a time, not a verb: no split
+        "mute everything but 0:10 to 0:20",
+        "blur faces but not 0:10 to 0:20",
+    ],
+)
+def test_but_before_something_other_than_a_verb_doesnt_split(text: str) -> None:
+    assert parse(text) is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "cut 0:10 to 0:20 but keep 0:05 to 0:30",  # an exception to the cut, or a second edit?
+        "blur faces but keep 0:10 to 0:20",  # unblurred there, or cut the rest?
+        "mute 0:10 to 0:20 but only keep 0:05 to 0:30",
+    ],
+)
+def test_but_keep_is_asked_about_not_split(text: str) -> None:
+    assert parse(text) is None
+
+
+def test_keep_after_a_cut_is_two_steps_in_order() -> None:
+    result = calls("cut 0:05 to 0:08 and keep 0:10 to 0:20")
+
+    assert [c["tool"] for c in result] == ["cut_range", "keep_range"]
+    assert [c["step_id"] for c in result] == ["s1", "s2"]
+
+
+def test_keep_doesnt_trigger_the_mixed_time_question() -> None:
+    # Keep is a whole-timeline edit, so a mask or mute with no time next to it isn't ambiguous
+    # (unlike "blur faces and cut 0:10 to 0:20"): the blur covers the video, keep cuts the rest.
+    assert [c["tool"] for c in calls("blur faces and keep 0:10 to 0:20")] == [
+        "find_objects",
+        "add_mask",
+        "keep_range",
+    ]
+    assert [c["tool"] for c in calls("keep 0:10 to 0:20 and mute")] == ["keep_range", "mute"]
+
+
+def test_a_timed_edit_outside_the_kept_range_still_plans() -> None:
+    # The mute lands in a part keep cuts away, so it changes nothing: harmless, since it can't
+    # leave anything unhidden. Pinned so a change to this is deliberate.
+    assert [c["tool"] for c in calls("mute 0:30 to 0:40 and keep 0:10 to 0:20")] == [
+        "mute",
+        "keep_range",
+    ]
+
+
+def test_cut_next_to_an_untimed_edit_still_asks() -> None:
+    with pytest.raises(TimeParseError):
+        parse("blur faces and cut 0:10 to 0:20")
+
+
 def test_backwards_range_raises_so_the_planner_can_ask() -> None:
     with pytest.raises(TimeParseError):
         parse("mute 0:20 to 0:10")

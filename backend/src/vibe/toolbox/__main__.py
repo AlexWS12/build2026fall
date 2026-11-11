@@ -10,6 +10,7 @@ import json
 import os
 import re
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 from pydantic import TypeAdapter, ValidationError
@@ -22,12 +23,16 @@ from vibe.toolbox.spec import ToolError, ToolSpec
 
 _TRACKS = TypeAdapter(list[Track])
 
+NEEDS_DURATION = ("resolve_time", "keep_range")
+"""Tools that read the video's length, so they need ``--duration``."""
+
 EXAMPLES = {
     "find_objects": '{"label": "face"}',
     "resolve_time": '{"phrase": "first half"}',
     "add_mask": '{"targets": ["trk_1"], "effect": {"type": "blur"}, '
     '"time_range": {"start": 0, "end": 5}}',
     "cut_range": '{"time_range": {"start": 10, "end": 20}}',
+    "keep_range": '{"time_range": {"start": 10, "end": 20}}',
     "mute": '{"time_range": {"start": 10, "end": 20}}',
     "unmute": '{"time_range": {"start": 12, "end": 15}}',
     "denoise": '{"time_range": {"start": 10, "end": 20}, "strength": 0.5}',
@@ -52,6 +57,8 @@ def _arguments_help(spec: ToolSpec) -> str:
         lines.append(f"  {name}: {_type_name(field.annotation)} ({need})")
         if field.description:
             lines.append(f"      {field.description}")
+    if spec.name in NEEDS_DURATION:
+        lines.append("\nneeds --duration SECONDS (the length of the video)")
     if spec.name in EXAMPLES:
         lines.append(f"\nexample:\n  --args '{EXAMPLES[spec.name]}'")
     return "\n".join(lines)
@@ -75,7 +82,9 @@ def _parser() -> argparse.ArgumentParser:
         cmd.add_argument(
             "--tracks", type=Path, help="tracks .json to search (find_objects; required)"
         )
-        cmd.add_argument("--duration", type=float, help="video length in seconds (resolve_time)")
+        cmd.add_argument(
+            "--duration", type=float, help="video length in seconds (resolve_time, keep_range)"
+        )
         cmd.add_argument("--request-id", help="request id for the ops (default: a new one)")
     return parser
 
@@ -93,29 +102,36 @@ def _load_args(text: str) -> dict:
 class _TimelineFile:
     """A timeline .jsonl outside any project (e.g. a copy of a contract example).
 
-    Appends one line per op and syncs it, like ``storage.Project.append``; it never rewrites
-    the file, so a concurrent writer's ops can't be lost. For a project's timeline, use
-    ``--project``, which goes through storage itself.
+    Appends one line per op in one write and syncs it, like ``storage.Project.append_many``;
+    it never rewrites the file, so a concurrent writer's ops can't be lost. For a project's
+    timeline, use ``--project``, which goes through storage itself.
     """
 
     def __init__(self, path: Path) -> None:
         self.path = path
 
     def append(self, op: Op) -> Op:
+        return self.append_many([op])[0]
+
+    def _read(self) -> OpLog:
         text = self.path.read_text(encoding="utf-8")
         if text and not text.endswith("\n"):
             # Appending after a half-written line would glue the op onto it and make the
             # whole file unreadable. Refuse; the person removes the broken line first.
             raise CliError(f"{self.path} ends with an incomplete line; remove it first")
-        OpLog.from_jsonl(text).append(op)  # validates against the whole log; raises first
+        return OpLog.from_jsonl(text)
+
+    def append_many(self, ops: Sequence[Op]) -> list[Op]:
+        batch = self._read().append_many(ops)  # validates all first; raises before writing
+        lines = "".join(OP_ADAPTER.dump_json(op, exclude_none=True).decode() + "\n" for op in batch)
         with self.path.open("a", encoding="utf-8", newline="\n") as f:
-            f.write(OP_ADAPTER.dump_json(op, exclude_none=True).decode() + "\n")
+            f.write(lines)
             f.flush()
             os.fsync(f.fileno())
-        return op
+        return batch
 
     def state(self) -> TimelineState:
-        return OpLog.from_jsonl(self.path.read_text(encoding="utf-8")).state()
+        return self._read().state()
 
 
 def _open_timeline(args: argparse.Namespace) -> OpSink:

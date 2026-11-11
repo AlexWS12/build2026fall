@@ -41,7 +41,7 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 ### Cuts
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
-| F-20 | Cut / keep a time range | Must | F-04 | idea | Source→output time mapping in the derived state |
+| F-20 | Cut / keep a time range | Must | F-04 | in progress | Source→output time mapping in the derived state |
 | F-21 | Cut by transcript ("cut where she talks about X") | Should | F-31 | idea | |
 | F-22 | Cut by on-screen content ("cut the part with the dog") | Stretch | F-10 | idea | |
 
