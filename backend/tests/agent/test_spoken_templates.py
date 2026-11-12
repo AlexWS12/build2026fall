@@ -48,6 +48,11 @@ def test_topics_and_missing_words_are_not_templated(text: str) -> None:
         "cut the part where she said goodbye in the last minute",
         "mute where he says hello from 0:30 to 0:50",
         "mute where he says hello 10 to 20",
+        # F-12's thirds, and ends no grammar reads yet
+        "mute where he says hello in the middle third",
+        "mute where he says hello in the second third",
+        "mute where he says hello until the end",
+        "cut the part where she said goodbye before the end",
     ],
 )
 def test_a_time_after_the_words_is_asked_not_searched_for(text: str) -> None:

@@ -139,11 +139,13 @@ def _mask(match: re.Match[str], steps: _Steps) -> Matched:
     return _scope(when)
 
 
-_TIME_WORDS = re.compile(r"\b(?:first|last|half|whole|entire|minutes?|seconds?)\b|\d")
-"""Words that may be a time ("goodbye in the last minute") rather than speech. ponytail: a word
-list, not a parse (``parse_time_phrase`` doesn't read "the last minute"), so "he says 3" is
-asked too; quoting the words skips it. Add a ``within`` range to ``find_speech`` if it's too
-strict."""
+_TIME_WORDS = re.compile(
+    r"\b(?:first|last|middle|half|thirds?|whole|entire|end|minutes?|seconds?)\b|\d"
+)
+"""Words that may be a time ("goodbye in the last minute", "hello in the middle third", "until
+the end") rather than speech. ponytail: a word list, not a parse (``parse_time_phrase`` doesn't
+read "the last minute"), so "he says 3" or "says the end" is asked too; quoting the words skips
+it. Add a ``within`` range to ``find_speech`` if it's too strict."""
 
 
 def _spoken(rest: str, steps: _Steps, bare_words: bool = False) -> dict[str, Any] | None:

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
 import App from './App'
 import type { ApiClient } from './api'
@@ -107,6 +107,26 @@ describe('App shell', () => {
     expect(await screen.findByText('Transcribing…')).toBeInTheDocument()
     expect(input).toBeDisabled()
     expect(screen.getByLabelText('Video file')).toBeDisabled()
+  })
+
+  test('transcribe waits while a new upload runs', async () => {
+    // Started then, the old video's transcript would land under the new one.
+    const base = mock()
+    let uploads = 0
+    const api: ApiClient = {
+      ...base,
+      createProject: (file) =>
+        uploads++ === 0 ? base.createProject(file) : new Promise(() => {}),
+    }
+    render(<App api={api} />)
+    upload('street.mp4')
+    await screen.findByText('street')
+    const button = screen.getByRole('button', { name: 'Transcribe' })
+    expect(button).toBeEnabled()
+
+    upload('park.mp4')
+
+    await waitFor(() => expect(button).toBeDisabled())
   })
 
   test('transcript times round before splitting minutes', () => {

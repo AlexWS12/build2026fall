@@ -100,7 +100,8 @@ function App({ api = defaultClient }: { api?: ApiClient }) {
           />
           <TranscriptPanel
             transcript={transcript}
-            disabled={!project || thinking}
+            // Started mid-upload, the old video's transcript would land under the new one.
+            disabled={!project || thinking || uploading}
             busy={transcribing}
             error={transcriptError}
             onTranscribe={handleTranscribe}

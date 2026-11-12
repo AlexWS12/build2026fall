@@ -308,6 +308,20 @@ def test_a_video_without_audio_is_400(
 
     assert response.status_code == 400
     assert response.json()["detail"] == "this video has no audio"
+    assert projects._busy == set()
+
+
+def test_transcribing_a_busy_project_is_409(
+    client: TestClient, storage: Storage, clip: Path
+) -> None:
+    project_id = upload(client, clip)["project_id"]
+    cache_transcript(storage, project_id)
+    with projects._one_request_at_a_time(project_id):  # a chat request is in flight
+        response = client.post(f"/api/projects/{project_id}/transcript")
+    assert response.status_code == 409
+    # Free again once that request is done.
+    assert client.post(f"/api/projects/{project_id}/transcript").status_code == 200
+    assert projects._busy == set()
 
 
 def test_an_unreadable_cached_transcript_is_503_not_500(

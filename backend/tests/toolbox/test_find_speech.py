@@ -1,10 +1,13 @@
 """F-21 / F-31: ``find_speech`` finds when words are said, from a transcript. No model needed."""
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
+from vibe.contract import Mute, OpLog
 from vibe.modules.transcribe import Segment, Transcript, Word
 from vibe.toolbox import ToolContext, ToolError, call_tool
 from vibe.toolbox.__main__ import main
@@ -56,6 +59,19 @@ def test_the_end_is_clamped_to_the_duration() -> None:
     assert find("amigo hola").end == 9.95
 
 
+def test_a_word_at_the_very_end_can_be_muted() -> None:
+    # Unclamped, the padding would end past the video, which every edit tool refuses (F-12).
+    log = OpLog()
+    ctx = ToolContext("req_1", "agent", log=log, duration=9.95, transcript=TRANSCRIPT)
+
+    found = call_tool("find_speech", {"text": "amigo hola"}, ctx)
+    call_tool("mute", {"time_range": found.time_range.model_dump()}, ctx)
+
+    (op,) = log.ops
+    assert isinstance(op, Mute)
+    assert op.time_range == found.time_range
+
+
 def test_said_twice_asks_which_one() -> None:
     with pytest.raises(ToolError, match=r"said 2 times \(at 7.00s, 9.00s\)") as e:
         find("hola")
@@ -102,3 +118,13 @@ def test_cli_reads_a_transcript_file(tmp_path: Path, capsys: pytest.CaptureFixtu
 
     assert code == 0
     assert json.loads(capsys.readouterr().out)["time_range"]["start"] == 7.5 - SPEECH_PAD
+
+
+def test_the_toolbox_and_planner_load_no_media_or_model_code() -> None:
+    # ToolContext names Transcript for type checkers only, so planning needs no av or numpy.
+    code = (
+        "import sys, vibe.agent, vibe.toolbox\n"
+        "print(','.join(m for m in ('av', 'numpy', 'vibe.modules') if m in sys.modules))"
+    )
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    assert out.stdout.strip() == ""
