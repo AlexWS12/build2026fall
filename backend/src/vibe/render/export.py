@@ -55,9 +55,10 @@ class RenderResult:
     issues: tuple[RenderIssue, ...]
     """What the renderer masked more because of (see ``FrameRenderer.issues``)."""
     audit: MaskAudit
-    """Every masked stretch, in continuous time, where ``issues`` is what frames actually hit. A
-    lost stretch too short to reach a frame is here but not in ``issues``, so ``audit.clean`` can
-    be false with no issues. A rule never gets this far, so ``rules_not_audited`` is empty."""
+    """Every masked stretch, in continuous time, where ``issues`` is what frames actually hit.
+    ``audit.clean`` means no ``lost``/``no_track`` time, in continuous time, and no unchecked
+    rules, so it can be false with no issues: a lost stretch too short to reach a frame is here
+    but not in ``issues``. A rule never gets this far, so ``rules_not_audited`` is empty."""
 
 
 def export(

@@ -87,7 +87,7 @@ class MaskAudit:
 
     @property
     def clean(self) -> bool:
-        """True when the renderer would report nothing and there are no rules left unchecked."""
+        """No ``lost``/``no_track`` time, in continuous time, and no unchecked rules."""
         totals = self.totals
         return not (totals["lost"] or totals["no_track"] or self.rules_not_audited)
 
