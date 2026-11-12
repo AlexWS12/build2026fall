@@ -15,6 +15,8 @@ from vibe.agent.providers import (
     OllamaProvider,
     OpenAIProvider,
     Provider,
+    RateLimited,
+    provider_error,
 )
 
 SCHEMA: dict[str, Any] = {
@@ -81,3 +83,32 @@ def test_a_missing_key_is_never_replaced_by_the_openai_key(
 
     with pytest.raises(KeyError):
         OpenAIProvider("model", base_url="https://example.test", api_key_env="OPENROUTER_API_KEY")
+
+
+class _Status(Exception):
+    def __init__(self, **attrs: Any) -> None:
+        super().__init__("boom")
+        for name, value in attrs.items():
+            setattr(self, name, value)
+
+
+class _Response:
+    status_code = 429
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [_Status(status_code=429), _Status(code=429), _Status(response=_Response())],
+    ids=["anthropic-openai", "google-genai", "httpx"],
+)
+def test_a_429_is_rate_limited(exc: Exception) -> None:
+    """The benchmark stops on a rate limit instead of scoring a free tier's cap as a failure."""
+    error = provider_error("p:m", exc)
+
+    assert isinstance(error, RateLimited)
+    assert isinstance(error, LlmError)  # the planner still asks the user to retry
+
+
+@pytest.mark.parametrize("exc", [_Status(status_code=500), _Status(code="429"), ValueError("x")])
+def test_any_other_failure_is_a_plain_llm_error(exc: Exception) -> None:
+    assert type(provider_error("p:m", exc)) is LlmError

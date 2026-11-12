@@ -1,8 +1,8 @@
 """**DRAFT, eval-only** tools: the toolbox (F-06) plus tools it doesn't have yet.
 
 **Not the toolbox and not a shared file.** These exist so R-1 can see how candidate LLMs handle
-the requests that need them (descriptive targets, speech, speakers, rules, undo), which the five
-real tools can only answer with a question. Names follow docs/ARCHITECTURE.md ("Toolbox");
+the requests that need them (descriptive targets, speech, speakers, rules, undo), which the real
+tools can only answer with a question. Names follow docs/ARCHITECTURE.md ("Toolbox");
 whoever builds them (F-06, F-13, F-21, F-32, F-51) decides the real names and arguments. Every
 ``run`` raises: plans using them are scored, never executed.
 """
@@ -14,7 +14,7 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from vibe.contract.common import Model, TimeRange
+from vibe.contract.common import Model
 from vibe.toolbox import TOOLS, ToolContext, ToolSpec
 
 
@@ -42,10 +42,6 @@ class FindSpeechArgs(Model):
 
 class FindSpeakersArgs(Model):
     description: str = Field(min_length=1, description='Who speaks, e.g. "the woman on the left".')
-
-
-class DenoiseArgs(Model):
-    time_range: TimeRange | None = Field(default=None, description="Null = the whole clip.")
 
 
 class AddRuleArgs(Model):
@@ -107,13 +103,6 @@ _EXTRA = (
         returns="speaker_id",
     ),
     _spec(
-        "denoise",
-        "edit",
-        "Reduce background noise over a time range.",
-        DenoiseArgs,
-        ref_args={"time_range": "time_range"},
-    ),
-    _spec(
         "add_rule",
         "edit",
         "A standing rule from now on, also live: mask every target of a category, except the "
@@ -127,11 +116,12 @@ _EXTRA = (
 EXTRAS: Mapping[str, ToolSpec] = MappingProxyType(
     {
         **TOOLS,
-        # mute can take a speaker found by find_speakers instead of a made-up id.
-        "mute": replace(
-            TOOLS["mute"], ref_args={**TOOLS["mute"].ref_args, "speaker": "speaker_id"}
-        ),
+        # mute and unmute can take a speaker found by find_speakers instead of a made-up id.
+        **{
+            name: replace(TOOLS[name], ref_args={**TOOLS[name].ref_args, "speaker": "speaker_id"})
+            for name in ("mute", "unmute")
+        },
         **{spec.name: spec for spec in _EXTRA},
     }
 )
-"""The five real tools plus the eval-only ones, for the ``extras`` requests."""
+"""The real tools plus the eval-only ones, for the ``extras`` requests."""

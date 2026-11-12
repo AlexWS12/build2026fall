@@ -19,11 +19,13 @@ from vibe.agent.providers import Provider, Reply
 from vibe.toolbox import ToolSpec
 
 KNOWN_LABELS: tuple[str, ...] = ("face", "person", "license_plate")
-"""Detector labels ``find_objects`` can find. An assumption until F-10 settles the detectors'
-labels: an LLM can't guess them, and a near miss ("plates") would find nothing."""
+"""Detector labels ``find_objects`` can find: F-10's contract labels
+(``modules/vision/detection.py``). An LLM can't guess them, and a near miss ("plates") would
+find nothing."""
 
-RENDERER_FIELDS = frozenset({"padding", "strength"})
-"""Effect settings the renderer owns. The LLM only picks the effect type."""
+RENDERER_FIELDS: Mapping[str, frozenset[str]] = {"effect": frozenset({"padding", "strength"})}
+"""Settings the renderer owns, by argument: the LLM only picks the effect type. Other
+arguments with the same names stay (``denoise``'s own ``strength`` is the user's to set)."""
 
 _UNSUPPORTED = frozenset(
     {
@@ -122,21 +124,26 @@ ids yourself. find_objects knows exactly these labels: {labels}.
 "after 1:30", "from 30 seconds in") becomes a literal time_range like {"start": 10, "end": 20}. \
 "end": null means until the end of the video. "1:30" is 90 seconds.
 3. A time that depends on the video's length goes through resolve_time, and the edit uses its \
-result. resolve_time understands exactly: "first half", "second half", "first <N> seconds", \
-"last <N> seconds", "first <N> minutes", "last <N> minutes", with N in digits (e.g. \
-"last 10 seconds"), or a clock time like "last 0:10".
+result. resolve_time understands exactly: "first half", "second half", "first third", \
+"middle third", "last third", "first <N> seconds", "last <N> seconds", "first <N> minutes", \
+"last <N> minutes", with N in digits (e.g. "last 10 seconds"), or a clock time like "last 0:10".
 4. No time means the whole video: time_range is null.
 5. Effects are "blur", "pixelate" or "box" (a solid black box). "Hide", "censor" and "cover" mean \
 blur unless the user names another effect.
-6. Ask instead of guessing, with the question in "clarify" and no calls, when:
+6. "Keep only X" means keep_range over X: it cuts everything else. A plan has at most one \
+keep_range. unmute brings back sound that a mute silenced. denoise reduces background noise \
+(hiss, hum, fans); it doesn't cut anything.
+7. Ask instead of guessing, with the question in "clarify" and no calls, when:
    - it isn't clear who or what to edit ("blur him"), or the request is vague ("make it nicer");
    - a number has no unit and could be seconds or minutes ("cut 10 to 20");
-   - a cut has no clear time range: never make up a time to cut;
+   - a cut or keep has no clear time range: never make up a time to cut or keep;
+   - "cut the noise" with a time range could mean reducing the noise or cutting that part out;
+   - the user wants to keep two separate parts: one keep_range would cut the other;
    - only some of the actions have a time and it's unclear whether it covers the others \
 ("blur faces and mute 0:10 to 0:20"); "for the whole video" or "the whole time" settles it;
    - no tool can do what was asked (for example removing a person from the video). Say what you \
 can do instead.
-7. Several actions in one request go in one plan, in the order they were asked."""
+8. Several actions in one request go in one plan, in the order they were asked."""
 
 _EXAMPLES = (
     (
@@ -195,10 +202,29 @@ _EXAMPLES = (
         },
     ),
     (
+        "just keep 0:30 to 1:45 and clean up the hum",
+        {
+            "clarify": None,
+            "calls": [
+                {
+                    "step_id": "s1",
+                    "tool": "keep_range",
+                    "args": {"time_range": {"start": 30, "end": 105}},
+                },
+                {
+                    "step_id": "s2",
+                    "tool": "denoise",
+                    "args": {"time_range": None, "strength": None},
+                },
+            ],
+        },
+    ),
+    (
         "make it look cinematic",
         {
             "clarify": "I can't change the look of the video. I can blur, pixelate or box "
-            "faces, people or license plates, cut a time range, or mute. What would you like?",
+            "faces, people or license plates, cut or keep a time range, mute or unmute, and "
+            "reduce background noise. What would you like?",
             "calls": [],
         },
     ),
@@ -293,7 +319,24 @@ def _args_schema(spec: ToolSpec, ref_key: str, labels: tuple[str, ...]) -> dict[
             props[name] = _union(props[name], ref_schema(ref_key))
     if "label" in props and labels:
         props["label"] = {"type": "string", "enum": list(labels)}
+    for name, hidden in RENDERER_FIELDS.items():
+        if name in props:
+            props[name] = _without(props[name], hidden)
     return schema
+
+
+def _without(schema: Mapping[str, Any], hidden: frozenset[str]) -> dict[str, Any]:
+    """``schema`` with the ``hidden`` properties of its object (or objects, in an anyOf) gone."""
+    if "anyOf" in schema:
+        return {**schema, "anyOf": [_without(option, hidden) for option in schema["anyOf"]]}
+    if schema.get("type") != "object":
+        return dict(schema)
+    props = {k: v for k, v in schema["properties"].items() if k not in hidden}
+    return {
+        **schema,
+        "properties": props,
+        "required": [k for k in schema["required"] if k in props],
+    }
 
 
 def _portable(node: Any, defs: Mapping[str, Any]) -> Any:
@@ -319,7 +362,6 @@ def _portable(node: Any, defs: Mapping[str, Any]) -> Any:
                 if name in required
                 else _nullable(_portable(prop, defs))
                 for name, prop in value.items()
-                if name not in RENDERER_FIELDS
             }
         else:
             out[key] = _portable(value, defs)

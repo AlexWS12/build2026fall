@@ -87,6 +87,14 @@ def test_labels_are_an_enum_and_renderer_settings_are_left_out() -> None:
 
     assert label["enum"] == list(KNOWN_LABELS)
     assert effect["properties"].keys() == {"type"}
+    assert effect["required"] == ["type"]
+
+
+def test_denoise_keeps_its_own_strength() -> None:
+    """Only the effect's renderer settings are hidden: denoise's strength is the user's."""
+    args = call_variant("denoise", reply_schema(TOOLS))["properties"]["args"]["properties"]
+
+    assert args.keys() == {"time_range", "strength"}
 
 
 def test_ref_key_can_be_changed_on_the_wire() -> None:

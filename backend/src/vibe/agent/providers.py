@@ -4,7 +4,9 @@ The SDKs are an optional dependency group (``uv sync --group llm``), imported on
 adapter is built, so the rest of the backend and its tests never need them. Keys come from the
 environment (``ANTHROPIC_API_KEY``, ``OPENAI_API_KEY``, ``GEMINI_API_KEY``,
 ``OPENROUTER_API_KEY``). Every provider failure (network, rate limit, refused request) becomes
-``LlmError``, so the planner asks the user to retry; anything else is a bug and raises.
+``LlmError``, so the planner asks the user to retry; anything else is a bug and raises. A rate
+limit (HTTP 429) is the ``RateLimited`` subclass, so the benchmark can stop and resume later
+instead of scoring a free tier's daily cap as the model failing.
 """
 
 import os
@@ -21,6 +23,28 @@ MAX_RETRIES = 0
 failure shows up as ``LlmError`` instead (the benchmark scores it ``provider_error``)."""
 MAX_OUTPUT_TOKENS = 4096
 """A plan is a few hundred tokens; the rest is room for models that think before answering."""
+
+
+class RateLimited(LlmError):
+    """The provider said 429: too many requests for now, or a free tier's daily cap."""
+
+
+def _status(exc: BaseException) -> int | None:
+    """The HTTP status of an SDK or httpx error, if it has one."""
+    for value in (
+        getattr(exc, "status_code", None),  # anthropic, openai
+        getattr(exc, "code", None),  # google-genai
+        getattr(getattr(exc, "response", None), "status_code", None),  # httpx
+    ):
+        if isinstance(value, int):
+            return value
+    return None
+
+
+def provider_error(name: str, exc: BaseException) -> LlmError:
+    """``exc`` from provider ``name`` as the planner's error type."""
+    cls = RateLimited if _status(exc) == 429 else LlmError
+    return cls(f"{name}: {exc}")
 
 
 @dataclass(frozen=True)
@@ -107,7 +131,7 @@ class AnthropicProvider:
                 **extra,
             )
         except self._errors as exc:
-            raise LlmError(f"{self.name}: {exc}") from exc
+            raise provider_error(self.name, exc) from exc
         seconds = perf_counter() - start
         u = message.usage
         details = u.output_tokens_details
@@ -187,7 +211,7 @@ class OpenAIProvider:
                 **extra,
             )
         except self._errors as exc:
-            raise LlmError(f"{self.name}: {exc}") from exc
+            raise provider_error(self.name, exc) from exc
         seconds = perf_counter() - start
         choice = response.choices[0]
         u = response.usage
@@ -225,8 +249,8 @@ class OpenAIProvider:
 
 
 class GeminiProvider:
-    """Gemini through ``response_json_schema``. Use a paid key: free-tier content may be used
-    to improve Google's products (R-4)."""
+    """Gemini through ``response_json_schema``. On the free tier, Google may use what's sent to
+    improve its products. Only text goes (the request and the tool list), which D-017 allows."""
 
     _REFUSALS = frozenset({"SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "RECITATION"})
 
@@ -280,7 +304,7 @@ class GeminiProvider:
                 model=self.model, contents=user, config=config
             )
         except self._errors as exc:
-            raise LlmError(f"{self.name}: {exc}") from exc
+            raise provider_error(self.name, exc) from exc
         seconds = perf_counter() - start
         u = response.usage_metadata
         cached = (u.cached_content_token_count or 0) if u else 0
@@ -349,7 +373,7 @@ class OllamaProvider:
             response = self.http.post("/api/chat", json=body)
             response.raise_for_status()
         except self._errors as exc:
-            raise LlmError(f"{self.name}: {exc}") from exc
+            raise provider_error(self.name, exc) from exc
         seconds = perf_counter() - start
         data = response.json()
         eval_count = data.get("eval_count", 0)
@@ -381,5 +405,5 @@ class OllamaProvider:
             response = self.http.post("/api/show", json={"model": self.model})
             response.raise_for_status()
         except self._errors as exc:
-            raise LlmError(f"{self.name}: {exc}") from exc
+            raise provider_error(self.name, exc) from exc
         return {"id": self.model, "details": response.json().get("details")}

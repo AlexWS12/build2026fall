@@ -1,5 +1,5 @@
 {
-  "about": "R-1 request set for the LLM planner, used together with requests_draft.json (F-05). Same entry format, plus: route (llm = the template parser must not claim it), tools (core = the five toolbox tools; extras = the eval-only draft tools in vibe/agent/bench/extras.py), category, and optional alternatives (other plans that are just as correct). An argument {\"$keywords\": [...]} is free text that must contain every keyword; a nested list is any one of its words. Times are source seconds; the benchmark scores relative times on a 120 s clip.",
+  "about": "R-1 request set for the LLM planner, used together with requests_draft.json (F-05). Same entry format, plus: route (llm = the template parser must not claim it), tools (core = the toolbox's tools; extras = the eval-only draft tools in vibe/agent/bench/extras.py), category, and optional alternatives (other plans that are just as correct). An argument {\"$keywords\": [...]} is free text that must contain every keyword; a nested list is any one of its words. Times are source seconds; the benchmark scores relative times on a 120 s clip.",
   "requests": [
     {
       "request": "hide everyone's faces in the second half",
@@ -111,6 +111,55 @@
         {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}, "time_range": {"start": 60}}}
       ]
     },
+    {
+      "request": "clean up the hiss in the first half",
+      "route": "llm", "tools": "core", "category": "audio",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "resolve_time", "args": {"phrase": "first half"}},
+        {"step_id": "s2", "tool": "denoise", "args": {"time_range": {"$ref": "s1"}}}
+      ]
+    },
+    {
+      "request": "get rid of the fan hum",
+      "route": "llm", "tools": "core", "category": "audio",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "denoise", "args": {}}
+      ]
+    },
+    {
+      "request": "make the audio less noisy",
+      "route": "llm", "tools": "core", "category": "audio",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "denoise", "args": {}}
+      ]
+    },
+    {
+      "request": "turn the audio back on after 1:00",
+      "route": "llm", "tools": "core", "category": "paraphrase",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "unmute", "args": {"time_range": {"start": 60}}}
+      ]
+    },
+    {
+      "request": "bring the sound back",
+      "route": "llm", "tools": "core", "category": "paraphrase",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "unmute", "args": {}}
+      ]
+    },
+    {
+      "request": "keep only the part from one minute to the end",
+      "route": "llm", "tools": "core", "category": "number words",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "keep_range", "args": {"time_range": {"start": 60}}}
+      ]
+    },
     {"request": "cut the boring part", "route": "llm", "tools": "core", "category": "should ask", "expect": "clarify"},
     {"request": "mute the swearing", "route": "llm", "tools": "core", "category": "should ask", "expect": "clarify"},
     {"request": "make the video shorter", "route": "llm", "tools": "core", "category": "should ask", "expect": "clarify"},
@@ -181,14 +230,6 @@
       "calls": [
         {"step_id": "s1", "tool": "find_speakers", "args": {"description": {"$keywords": ["right"]}}},
         {"step_id": "s2", "tool": "mute", "args": {"speaker": {"$ref": "s1"}}}
-      ]
-    },
-    {
-      "request": "remove the background noise",
-      "route": "llm", "tools": "extras", "category": "audio",
-      "expect": "plan",
-      "calls": [
-        {"step_id": "s1", "tool": "denoise", "args": {}}
       ]
     },
     {

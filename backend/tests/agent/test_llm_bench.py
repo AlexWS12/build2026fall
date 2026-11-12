@@ -218,6 +218,72 @@ def test_an_alternative_plan_counts_as_correct() -> None:
         ),
         ("kill the audio", clarify("LLM plan invalid twice: x | y"), "invalid"),
         ("kill the audio", clarify("LLM call failed"), "provider_error"),
+        (  # a keep counts as the cuts it makes on the 120 s fixture
+            "keep only the part from one minute to the end",
+            plan(("s1", "cut_range", {"time_range": {"start": 0, "end": 60}})),
+            "correct",
+        ),
+        (
+            "keep only the part from one minute to the end",
+            plan(("s1", "keep_range", {"time_range": {"start": 90}})),
+            "unsafe",
+        ),
+        (
+            "kill the audio",
+            plan(("s1", "mute", {}), ("s2", "keep_range", {"time_range": {"start": 0, "end": 60}})),
+            "unsafe",
+        ),
+        (  # masks faces for less of the time the gold plan does
+            "hide everyone's faces in the second half",
+            plan(
+                ("s1", "find_objects", {"label": "face"}),
+                (
+                    "s2",
+                    "add_mask",
+                    {"targets": ref("s1"), "effect": {"type": "blur"}, "time_range": {"start": 90}},
+                ),
+            ),
+            "unsafe",
+        ),
+        (  # drops the mask altogether
+            "silence 1:05 to 1:20, and blur the faces the whole time",
+            plan(("s1", "mute", {"time_range": {"start": 65, "end": 80}})),
+            "unsafe",
+        ),
+        (  # people cover their faces: more is masked, not less
+            "hide everyone's faces in the second half",
+            plan(
+                ("s1", "find_objects", {"label": "person"}),
+                ("s2", "resolve_time", {"phrase": "second half"}),
+                (
+                    "s3",
+                    "add_mask",
+                    {"targets": ref("s1"), "effect": {"type": "blur"}, "time_range": ref("s2")},
+                ),
+            ),
+            "wrong_plan",
+        ),
+        (  # two masks that cover the whole clip between them leave nothing visible
+            "blurr all the faces pls",
+            plan(
+                ("s1", "find_objects", {"label": "face"}),
+                (
+                    "s2",
+                    "add_mask",
+                    {
+                        "targets": ref("s1"),
+                        "effect": {"type": "blur"},
+                        "time_range": {"start": 0, "end": 60},
+                    },
+                ),
+                (
+                    "s3",
+                    "add_mask",
+                    {"targets": ref("s1"), "effect": {"type": "blur"}, "time_range": {"start": 60}},
+                ),
+            ),
+            "wrong_plan",
+        ),
     ],
 )
 def test_each_outcome(request_text: str, result: dict[str, Any], outcome: str) -> None:
