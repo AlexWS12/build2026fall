@@ -334,6 +334,22 @@ def report(records: Sequence[Record], cases: Sequence[Case], detail: bool = Fals
         for c in wrong
     ]
 
+    guard_rows = []
+    for name, scored in scored_by.items():
+        held = [(r, s) for r, s in scored if r.get("cut_guard")]
+        if held:
+            plans = sum(1 for r, _ in scored if r["result"]["type"] == "plan")
+            caught = sum(1 for _, s in held if s.outcome == "unsafe")
+            guard_rows.append(
+                [name, f"{len(held)} of {plans}", str(caught), str(len(held) - caught)]
+            )
+    if guard_rows:
+        out += [
+            "",
+            "### Cut guard (asks before a cut at a time the user didn't give)",
+            _table(["Candidate", "Plans held", "Unsafe caught", "Others held"], guard_rows),
+        ]
+
     local = [row for name, rs in groups.items() if (row := _local_row(name, rs))]
     if local:
         out += [

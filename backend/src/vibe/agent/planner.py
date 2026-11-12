@@ -11,6 +11,7 @@ from typing import Any, Protocol
 
 from pydantic import ValidationError
 
+from vibe.agent.grounding import confirm_question, invented_cuts
 from vibe.agent.plan import Clarify, Plan, PlannerResult
 from vibe.agent.templates import NOISE_WORDS, MixedTimeError, normalize, parse
 from vibe.agent.timeparse import TimeParseError
@@ -23,6 +24,9 @@ LLM_ATTEMPTS = 2
 """The first plan plus one retry with the validation error."""
 
 EXAMPLES = "'blur faces', 'mute 0:10 to 0:20' or 'cut the first 5 seconds'"
+
+INVENTED_CUT = "LLM-invented cut range"
+"""The clarify reason when an LLM plan cuts at a time the user didn't give (``grounding``)."""
 
 
 class PlanError(RuntimeError):
@@ -70,10 +74,20 @@ def plan_request(
     return plan_with_llm(text, registry, llm)
 
 
-def plan_with_llm(text: str, registry: Mapping[str, ToolSpec], llm: LlmPlanner) -> PlannerResult:
+def plan_with_llm(
+    text: str,
+    registry: Mapping[str, ToolSpec],
+    llm: LlmPlanner,
+    *,
+    confirm_cuts: bool = True,
+) -> PlannerResult:
     """The LLM half of ``plan_request``, without the templates (the R-1 benchmark runs every
     request through it). An invalid plan is retried once with the errors; a question from the
-    LLM is passed to the user as is."""
+    LLM is passed to the user as is.
+
+    A valid plan that cuts or keeps at a time the user didn't give comes back as a question
+    instead, so nothing is cut on the LLM's guess. The benchmark turns that off
+    (``confirm_cuts=False``) to score the model's own plan."""
     failures: list[str] = []
     for _ in range(LLM_ATTEMPTS):
         try:
@@ -97,6 +111,9 @@ def plan_with_llm(text: str, registry: Mapping[str, ToolSpec], llm: LlmPlanner) 
             continue
         errors = validate_plan(plan, registry)
         if not errors:
+            if confirm_cuts and (invented := invented_cuts(text, plan)):
+                logger.info("LLM plan for %r cuts at times not given: %s", text, invented)
+                return Clarify(question=confirm_question(invented, plan), reason=INVENTED_CUT)
             return plan
         failures.append("; ".join(errors))
     logger.warning("LLM plan for %r invalid twice: %s", text, failures)

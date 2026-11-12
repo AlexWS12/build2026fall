@@ -4,13 +4,26 @@ The OpenAPI spec is committed as ``openapi.json`` and the UI's types are generat
 after changing a route or a response model, run ``uv run python -m vibe.api`` (a test checks it).
 """
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from pydantic import BaseModel
 
 from vibe import config
+from vibe.agent.llm import planner_from_env
 from vibe.api import projects
 
-app = FastAPI(title="Vibe Editing Agent")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    # A VIBE_PLANNER_LLM the app can't use (unknown, no SDK, no key) stops the server here,
+    # instead of every chat request failing, or planning with templates only, unnoticed.
+    planner_from_env()
+    yield
+
+
+app = FastAPI(title="Vibe Editing Agent", lifespan=lifespan)
 app.include_router(projects.router)
 
 

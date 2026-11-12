@@ -15,6 +15,7 @@ from typing import Any
 from vibe.agent.bench.candidates import CANDIDATES, Candidate, cost
 from vibe.agent.bench.cases import Case, ToolSet, registry_for
 from vibe.agent.bench.extras import EXTRAS
+from vibe.agent.grounding import invented_cuts
 from vibe.agent.llm import SchemaPlanner, reply_schema, system_prompt, user_message
 from vibe.agent.plan import REF_KEY, Clarify, Plan
 from vibe.agent.planner import plan_with_llm
@@ -196,7 +197,11 @@ def run_candidate(
                 started = datetime.now(UTC).isoformat()
                 start = perf_counter()
                 try:
-                    result = plan_with_llm(case.request, registry_for(case), planner)
+                    # The model's own plan is scored; cut_guard records whether production
+                    # would have held it back to ask about a cut (vibe.agent.grounding).
+                    result = plan_with_llm(
+                        case.request, registry_for(case), planner, confirm_cuts=False
+                    )
                 except _Stop as exc:
                     print(f"stopped: rate limited ({exc}). Run again later with --resume.")
                     return path
@@ -215,6 +220,8 @@ def run_candidate(
                     "run": run,
                     "first_call": case.tools not in warm,
                     "result": result_record(result),
+                    "cut_guard": isinstance(result, Plan)
+                    and bool(invented_cuts(case.request, result)),
                     "seconds": seconds,
                     "attempts": attempts,
                     "started_at": started,

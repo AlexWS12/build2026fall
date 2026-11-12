@@ -575,3 +575,39 @@ def test_decision_counts_only_requests_that_reach_the_llm() -> None:
 
 def test_decision_waits_for_results() -> None:
     assert decision({}, LLM_CASES) == ["No results on the core requests that reach the LLM yet."]
+
+
+class CutsTheMiddle:
+    """Plans a cut at 0:30 to 0:50 for any request: a time nobody gave."""
+
+    name = "fake:cuts"
+    model = "cuts"
+    settings: Mapping[str, Any] = {}
+
+    def complete(self, system: str, user: str, schema: Mapping[str, Any]) -> Reply:
+        call = {
+            "step_id": "s1",
+            "tool": "cut_range",
+            "args": {"time_range": {"start": 30, "end": 50}},
+        }
+        return Reply(json.dumps({"clarify": None, "calls": [call]}), Usage(), 0.1, "end_turn")
+
+    def describe(self) -> dict[str, Any]:
+        return {}
+
+
+def test_the_bench_scores_the_plan_and_records_the_cut_guard(tmp_path: Path) -> None:
+    path = run_candidate(
+        Candidate("fake-cuts", CutsTheMiddle, "local"),
+        [BY_REQUEST["cut the boring part"]],
+        1,
+        max_usd=None,
+        hardware_label="test",
+        network="none",
+        out_dir=tmp_path,
+    )
+    records = load_records([path])
+
+    assert records[0]["result"]["type"] == "plan"  # the guard is off: the model's own plan
+    assert records[0]["cut_guard"] is True
+    assert "| fake-cuts | 1 of 1 | 1 | 0 |" in report(records, CASES)

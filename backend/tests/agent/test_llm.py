@@ -11,17 +11,21 @@ from typing import Any
 import pytest
 
 from vibe.agent import Clarify, LlmError, Plan, plan_request, validate_plan
+from vibe.agent import llm as llm_module
+from vibe.agent.bench.candidates import CANDIDATES, Candidate
 from vibe.agent.llm import (
     _EXAMPLES,
     _UNSUPPORTED,
     KNOWN_LABELS,
+    PlannerConfigError,
     SchemaPlanner,
     parse_reply,
+    planner_from_env,
     ref_schema,
     reply_schema,
     system_prompt,
 )
-from vibe.agent.providers import Reply, Usage
+from vibe.agent.providers import Provider, Reply, Usage
 from vibe.toolbox import TOOLS
 
 
@@ -275,3 +279,69 @@ def test_schema_planner_sends_the_schema_for_the_registry_it_is_given() -> None:
     SchemaPlanner(provider).plan("kill the audio", only_mute, None)
 
     assert provider.schemas[0] == reply_schema(only_mute)
+
+
+# --- The planner the app uses ---------------------------------------------------------------
+
+
+@pytest.fixture
+def fresh_providers() -> Iterator[None]:
+    llm_module._provider.cache_clear()
+    yield
+    llm_module._provider.cache_clear()
+
+
+def test_no_planner_llm_means_templates_only(
+    monkeypatch: pytest.MonkeyPatch, fresh_providers: None
+) -> None:
+    monkeypatch.delenv("VIBE_PLANNER_LLM", raising=False)
+
+    assert planner_from_env() is None
+
+
+def test_an_unknown_planner_llm_is_refused(
+    monkeypatch: pytest.MonkeyPatch, fresh_providers: None
+) -> None:
+    monkeypatch.setenv("VIBE_PLANNER_LLM", "gpt-17")
+
+    with pytest.raises(PlannerConfigError, match="isn't a known model; try: groq-gpt-oss-120b"):
+        planner_from_env()
+
+
+@pytest.mark.parametrize(
+    ("error", "says"),
+    [
+        (ImportError("No module named 'openai'"), "needs the llm dependency group"),
+        (KeyError("GROQ_API_KEY"), "needs GROQ_API_KEY in the environment"),
+    ],
+)
+def test_a_planner_llm_that_cant_be_built_says_why(
+    monkeypatch: pytest.MonkeyPatch, fresh_providers: None, error: Exception, says: str
+) -> None:
+    def build() -> Provider:
+        raise error
+
+    monkeypatch.setitem(CANDIDATES, "broken", Candidate("broken", build, "free"))
+    monkeypatch.setenv("VIBE_PLANNER_LLM", "broken")
+
+    with pytest.raises(PlannerConfigError, match=says):
+        planner_from_env()
+
+
+def test_each_request_gets_its_own_planner_on_one_provider(
+    monkeypatch: pytest.MonkeyPatch, fresh_providers: None
+) -> None:
+    built: list[object] = []
+
+    def build() -> Provider:
+        built.append(object())
+        return built[-1]  # type: ignore[return-value]
+
+    monkeypatch.setitem(CANDIDATES, "fake", Candidate("fake", build, "free"))
+    monkeypatch.setenv("VIBE_PLANNER_LLM", "fake")
+
+    first, second = planner_from_env(), planner_from_env()
+
+    assert first is not second  # a SchemaPlanner keeps one request's attempts
+    assert first is not None and second is not None
+    assert first.provider is second.provider and len(built) == 1

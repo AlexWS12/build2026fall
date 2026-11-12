@@ -59,3 +59,12 @@ def remote_hosts() -> frozenset[str]:
 def remote_token() -> str | None:
     """Shared secret between the ``remote`` backend and the model server (``.env``, never git)."""
     return os.environ.get("VIBE_REMOTE_TOKEN") or None
+
+
+def planner_llm() -> str | None:
+    """Which LLM plans the requests the template parser doesn't take: an R-1 benchmark
+    candidate's name, e.g. ``groq-gpt-oss-20b`` (``python -m vibe.agent.bench --help`` lists
+    them). Its key goes in ``.env``. Unset means templates only, with no network calls, which is
+    what tests and CI use. Set ``VIBE_PLANNER_LLM`` to change it.
+    """
+    return os.environ.get("VIBE_PLANNER_LLM", "").strip() or None

@@ -4,7 +4,7 @@ The test clip is encoded with PyAV, so these tests don't need the ffmpeg CLI.
 """
 
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import av
@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
+from vibe.agent.llm import PlannerConfigError
 from vibe.api import projects
 from vibe.api.app import app
 from vibe.storage import Storage
@@ -193,6 +194,70 @@ def test_clarify_replies_without_writing_ops(client: TestClient, clip: Path) -> 
     assert empty(client.get(f"/api/projects/{project_id}/state").json())
 
 
+class OnePlan:
+    """A fake planner LLM that writes the same plan for every request."""
+
+    def __init__(self, calls: list[dict]) -> None:
+        self.calls = calls
+
+    def plan(self, request: str, tools: object, error: str | None) -> dict:
+        return {"calls": self.calls}
+
+
+@pytest.fixture
+def llm() -> Iterator[Callable[[list[dict]], None]]:
+    def use(calls: list[dict]) -> None:
+        app.dependency_overrides[projects.get_planner] = lambda: OnePlan(calls)
+
+    yield use
+    app.dependency_overrides.pop(projects.get_planner, None)
+
+
+def test_a_request_the_templates_dont_take_is_planned_by_the_llm(
+    client: TestClient, storage: Storage, clip: Path, llm: Callable[[list[dict]], None]
+) -> None:
+    llm(
+        [
+            {"step_id": "s1", "tool": "find_objects", "args": {"label": "license_plate"}},
+            {
+                "step_id": "s2",
+                "tool": "add_mask",
+                "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}},
+            },
+        ]
+    )
+    project_id = upload(client, clip)["project_id"]
+
+    text = "can you make the license plates unreadable"
+    reply = client.post(f"/api/projects/{project_id}/requests", json={"text": text}).json()
+
+    assert reply["status"] == "not_applied"  # planned; the executor is a separate card
+    assert "find_objects" in reply["reply"] and "add_mask" in reply["reply"]
+    assert len(storage.open_project(project_id).log()) == 0
+
+
+def test_an_llm_cut_at_a_time_nobody_gave_is_asked_about(
+    client: TestClient, clip: Path, llm: Callable[[list[dict]], None]
+) -> None:
+    llm([{"step_id": "s1", "tool": "cut_range", "args": {"time_range": {"start": 30, "end": 50}}}])
+    project_id = upload(client, clip)["project_id"]
+
+    url = f"/api/projects/{project_id}/requests"
+    reply = client.post(url, json={"text": "cut the boring part"}).json()
+
+    assert reply["status"] == "clarify"
+    assert "say 'cut 0:30 to 0:50'" in reply["reply"]
+
+
+def test_a_planner_llm_the_app_cant_use_stops_it_at_startup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VIBE_PLANNER_LLM", "no-such-model")
+
+    with pytest.raises(PlannerConfigError, match="no-such-model"), TestClient(app):
+        pass
+
+
 def test_each_request_gets_its_own_id(client: TestClient, clip: Path) -> None:
     project_id = upload(client, clip)["project_id"]
     url = f"/api/projects/{project_id}/requests"
@@ -220,7 +285,7 @@ def test_planner_failures_get_a_clear_error_and_write_nothing(
 ) -> None:
     project_id = upload(client, clip)["project_id"]
 
-    def fail(text: str) -> None:
+    def fail(text: str, **kwargs: object) -> None:
         raise error
 
     monkeypatch.setattr(projects, "plan_request", fail)

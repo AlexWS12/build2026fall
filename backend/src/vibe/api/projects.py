@@ -22,7 +22,8 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from pydantic import Field, ValidationError
 
-from vibe.agent import Clarify, LlmError, Plan, PlanError, plan_request
+from vibe.agent import Clarify, LlmError, LlmPlanner, Plan, PlanError, plan_request
+from vibe.agent.llm import planner_from_env
 from vibe.contract import TimelineState, new_id
 from vibe.contract.common import Model
 from vibe.storage import Project, ProjectInfo, Storage, StorageError
@@ -48,6 +49,15 @@ def get_storage() -> Storage:
 
 
 StorageDep = Annotated[Storage, Depends(get_storage)]
+
+
+def get_planner() -> LlmPlanner | None:
+    """The planner LLM ``VIBE_PLANNER_LLM`` names, fresh for each request, or None for templates
+    only (the default, and what tests use). Tests override this dependency with a fake."""
+    return planner_from_env()
+
+
+PlannerDep = Annotated[LlmPlanner | None, Depends(get_planner)]
 
 
 class ChatRequest(Model):
@@ -160,7 +170,9 @@ def create_project(file: UploadFile, storage: StorageDep) -> ProjectInfo:
 
 
 @router.post("/{project_id}/requests")
-def send_request(project_id: str, body: ChatRequest, storage: StorageDep) -> ChatReply:
+def send_request(
+    project_id: str, body: ChatRequest, storage: StorageDep, planner: PlannerDep
+) -> ChatReply:
     """Plan a chat request and reply. 409 if the project is already handling one.
 
     Until the plan executor exists, nothing is applied: a plan replies ``not_applied``.
@@ -169,7 +181,7 @@ def send_request(project_id: str, body: ChatRequest, storage: StorageDep) -> Cha
     with _one_request_at_a_time(project.id):
         request_id = new_id("r")
         try:
-            result = plan_request(body.text)
+            result = plan_request(body.text, llm=planner)
         except LlmError as e:
             logger.warning("planner LLM failed for %s: %s", request_id, e)
             raise HTTPException(

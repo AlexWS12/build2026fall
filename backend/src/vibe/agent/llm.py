@@ -9,10 +9,12 @@ The schema keeps to the JSON Schema subset every provider's structured-output mo
 nullable). Limits the schema can't express are checked afterwards by ``validate_plan``.
 """
 
+import functools
 import json
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+from vibe import config
 from vibe.agent.plan import REF_KEY
 from vibe.agent.planner import LlmError
 from vibe.agent.providers import Provider, Reply
@@ -439,3 +441,43 @@ class SchemaPlanner:
         if reply.stop_reason == "refusal":
             raise LlmError(f"{self.provider.name} refused the request")
         return parse_reply(reply.text, self.ref_key)
+
+
+# --- The planner the app uses ---------------------------------------------------------------
+
+
+class PlannerConfigError(RuntimeError):
+    """``VIBE_PLANNER_LLM`` names a model the app can't use: unknown, or its SDK or key is
+    missing. Raised at startup, so a misconfigured server never runs templates-only quietly."""
+
+
+@functools.cache
+def _provider(name: str) -> Provider:
+    """One provider per model for the process. SDK clients are safe to share between threads;
+    a ``SchemaPlanner`` isn't, so each request gets its own."""
+    from vibe.agent.bench.candidates import CANDIDATES  # the models the benchmark compared
+
+    candidate = CANDIDATES.get(name)
+    if candidate is None:
+        known = ", ".join(n for n, c in CANDIDATES.items() if c.access != "paid")
+        raise PlannerConfigError(f"VIBE_PLANNER_LLM={name!r} isn't a known model; try: {known}")
+    try:
+        return candidate.build()
+    except ImportError as exc:
+        raise PlannerConfigError(
+            f"VIBE_PLANNER_LLM={name!r} needs the llm dependency group: run the backend with "
+            f"`uv run --group llm`. ({exc})"
+        ) from exc
+    except KeyError as exc:
+        raise PlannerConfigError(
+            f"VIBE_PLANNER_LLM={name!r} needs {exc.args[0]} in the environment, e.g. in .env "
+            "loaded with `uv run --env-file ../.env`"
+        ) from exc
+
+
+def planner_from_env() -> SchemaPlanner | None:
+    """The planner LLM ``VIBE_PLANNER_LLM`` names, fresh for one request, or None (templates
+    only). Raises ``PlannerConfigError`` if it's set but can't be used."""
+    name = config.planner_llm()
+    return None if name is None else SchemaPlanner(_provider(name))
+
