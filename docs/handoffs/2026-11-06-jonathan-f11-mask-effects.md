@@ -97,7 +97,7 @@ None is architecture-level.
 
 ## Gotchas
 - **The audit repeats the renderer's rules.** Sharing the constants doesn't stop the logic drifting. The comparison with `FrameRenderer` in `test_mask_report.py` is what catches that, so keep it passing rather than loosening it.
-- **The audit and the renderer differ by one frame on a boundary.** A frame exactly `HOLD_SECONDS` from a keyframe isn't lost yet in the renderer, while a `lost` stretch includes its start. The tests avoid this by keeping frames off the boundaries: don't compare the two with an exact frame on one.
+- **The one-frame difference at a hold boundary was fixed in the review:** see [2026-11-11-jonathan-f11-review-fixes.md](2026-11-11-jonathan-f11-review-fixes.md).
 - **An issue runs across a cut, and audit stretches don't.** A track lost on both sides of a cut is one `RenderIssue` and two stretches.
 - **`rules_not_audited` is always empty on a `RenderResult`,** because standing rules are refused first. It only matters when `audit_masks` is called on its own.
 - **A normal clip can't tell `index.end` from `probe` duration:** both were 4.0 on the test clip. That's why the test patches `probe`.
