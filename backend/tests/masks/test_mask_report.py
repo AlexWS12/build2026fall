@@ -264,18 +264,22 @@ def test_standing_rules_are_listed_and_stop_it_being_clean() -> None:
 
 
 def shown_frames(state: TimelineState, duration: float) -> list[float]:
-    """Frame times halfway through each 1/FPS step, so none lands on a stretch boundary. A frame
-    exactly on one isn't lost yet in the renderer, while a stretch includes its start."""
+    """Frame times halfway through each 1/FPS step, so none lands on a stretch boundary, where
+    floating-point rounding can tip a frame either way. Exact boundaries are tested on their own,
+    on times that add up exactly."""
     times = [(i + 0.5) / FPS for i in range(round(duration * FPS))]
     return [t for t in times if not state.is_cut(t)]
 
 
 def flagged_by_renderer(
-    state: TimelineState, tracks: list[Track], duration: float
+    state: TimelineState,
+    tracks: list[Track],
+    duration: float,
+    times: list[float] | None = None,
 ) -> set[tuple[str, float]]:
     """Each (track id, frame) the renderer reports, skipping cut frames as export does."""
     renderer = FrameRenderer(state, tracks)
-    times = shown_frames(state, duration)
+    times = shown_frames(state, duration) if times is None else times
     for t in times:
         renderer.render(np.zeros((4, 4, 3), np.uint8), t)
     return {
@@ -287,15 +291,19 @@ def flagged_by_renderer(
 
 
 def flagged_by_audit(
-    state: TimelineState, tracks: list[Track], duration: float
+    state: TimelineState,
+    tracks: list[Track],
+    duration: float,
+    times: list[float] | None = None,
 ) -> set[tuple[str, float]]:
+    times = shown_frames(state, duration) if times is None else times
     return {
         (span.track_id, t)
         for span in audit(state, tracks, duration).spans
         for stretch in span.stretches
         if stretch.kind in ("lost", "no_track")
-        for t in shown_frames(state, duration)
-        if stretch.start <= t < stretch.end
+        for t in times
+        if stretch.contains(t)
     }
 
 
@@ -331,6 +339,18 @@ def test_the_audit_flags_the_same_frames_as_the_renderer(tracks: list[Track]) ->
     flagged = flagged_by_renderer(state, tracks, 10)
     assert flagged
     assert flagged_by_audit(state, tracks, 10) == flagged
+
+
+def test_a_frame_exactly_at_the_end_of_a_hold_is_not_lost_as_in_the_renderer() -> None:
+    """The renderer counts a box as lost only past ``HOLD_SECONDS``, so a frame exactly at the
+    end of a hold isn't lost. Quarter-second frames land exactly on every hold edge here: 0.5 and
+    2.5 start a hold, 1.5 and 3.5 end one."""
+    state, tracks = masked().state(), [track("trk_1", 1.0, 3.0)]
+    times = [i / 4 for i in range(4 * 5)]
+    flagged = flagged_by_renderer(state, tracks, 5, times)
+    assert ("trk_1", 1.5) not in flagged
+    assert ("trk_1", 3.5) not in flagged
+    assert flagged_by_audit(state, tracks, 5, times) == flagged
 
 
 # --- Purity and bad input -----------------------------------------------------------------

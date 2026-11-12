@@ -10,13 +10,15 @@ can list the guesses for review.
 frame by frame. A test keeps the two in step, because this repeats the renderer's rules.
 
 Pure: no files, no video and no network. Times are source seconds, start included, end
-excluded, like ``Span.contains``. Cut ranges are left out, because nobody sees them.
+excluded, like ``Span.contains``, except that a ``lost`` stretch starting where a hold ends leaves
+out its start, as the renderer does (``Stretch.contains``). Cut ranges are left out, because
+nobody sees them.
 """
 
 import math
 from bisect import bisect_right
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import pairwise
 from typing import Any, Literal, get_args
 
@@ -41,10 +43,18 @@ class Stretch:
     kind: StretchKind
     start: float
     end: float
+    start_included: bool = True
+    """False for a ``lost`` stretch that starts where a hold ends: the renderer counts a box as
+    lost only past ``HOLD_SECONDS``, so the moment exactly at the end of a hold isn't lost."""
 
     @property
     def seconds(self) -> float:
         return self.end - self.start
+
+    def contains(self, t: float) -> bool:
+        """Whether ``t`` is in this stretch, as the renderer would see a frame at ``t``."""
+        after_start = self.start <= t if self.start_included else self.start < t
+        return after_start and t < self.end
 
 
 @dataclass(frozen=True)
@@ -91,7 +101,13 @@ class MaskAudit:
                     "request_id": span.request_id,
                     "effect": span.effect.model_dump(mode="json"),
                     "stretches": [
-                        {"kind": s.kind, "start": s.start, "end": s.end} for s in span.stretches
+                        {
+                            "kind": s.kind,
+                            "start": s.start,
+                            "end": s.end,
+                            "start_included": s.start_included,
+                        }
+                        for s in span.stretches
                     ],
                 }
                 for span in self.spans
@@ -180,7 +196,12 @@ def _visible(start: float, end: float, cuts: Sequence[TimeRange]) -> list[tuple[
 
 
 def _classify(window: tuple[float, float], paths: list[list[_Piece]]) -> list[Stretch]:
-    """Split ``window`` wherever the answer changes, joining neighbours of the same kind."""
+    """Split ``window`` wherever the answer changes, joining neighbours of the same kind.
+
+    Going from not lost to lost only happens where a hold ends (a piece's end), and the renderer
+    doesn't count that moment as lost yet, so such a ``lost`` stretch leaves out its start. Going
+    the other way, a piece's start is in the piece, as in the renderer.
+    """
     start, end = window
     edges = {start, end}
     for pieces in paths:
@@ -192,9 +213,10 @@ def _classify(window: tuple[float, float], paths: list[list[_Piece]]) -> list[St
     for a, b in pairwise(sorted(edges)):
         kind = _kind_at((a + b) / 2, lookups)
         if stretches and stretches[-1].kind == kind:
-            stretches[-1] = Stretch(kind, stretches[-1].start, b)
+            stretches[-1] = replace(stretches[-1], end=b)
         else:
-            stretches.append(Stretch(kind, a, b))
+            after_a_hold = kind == "lost" and bool(stretches)
+            stretches.append(Stretch(kind, a, b, start_included=not after_a_hold))
     return stretches
 
 

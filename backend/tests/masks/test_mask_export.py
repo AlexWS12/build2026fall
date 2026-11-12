@@ -2,8 +2,9 @@
 frames, and ``--project`` with the tracks cached for its video. Clips come from PyAV, so none of
 this needs ffmpeg.
 
-Keyframes sit off the 10 fps frame grid, so no frame lands on a stretch boundary, where the audit
-and the renderer differ by one frame (see ``test_mask_report.py``).
+Keyframes sit off the 10 fps frame grid, so no frame lands on a stretch boundary, where a
+floating-point rounding can tip a frame either way. ``test_mask_report.py`` checks the exact
+boundaries on their own.
 """
 
 import dataclasses
@@ -201,7 +202,12 @@ def test_the_cli_prints_the_audit(
     assert audit["clean"] is False
     assert audit["totals"]["lost"] == pytest.approx(END - 1.03)
     assert audit["spans"][0]["effect"] == {"type": "blur", "padding": 0.15, "strength": None}
-    assert audit["spans"][0]["stretches"][0] == {"kind": "held", "start": 0, "end": 0.03}
+    assert audit["spans"][0]["stretches"][0] == {
+        "kind": "held",
+        "start": 0,
+        "end": 0.03,
+        "start_included": True,
+    }
 
 
 def test_to_json_survives_json_dumps_with_rules_and_no_video() -> None:
