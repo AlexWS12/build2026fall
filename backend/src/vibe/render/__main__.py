@@ -120,8 +120,11 @@ def main(argv: list[str] | None = None) -> int:
     except (CliError, cache.CacheError, RenderError, VideoError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    summary = dataclasses.asdict(result) | {
+    summary = {
         "path": str(result.path),
+        "frames": result.frames,
+        "duration": result.duration,
+        "issues": [dataclasses.asdict(issue) for issue in result.issues],
         "audit": result.audit.to_json(),
     }
     print(json.dumps(summary, indent=2))

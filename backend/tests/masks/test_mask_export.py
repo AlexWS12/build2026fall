@@ -230,7 +230,15 @@ def test_the_cli_prints_the_audit(
     )  # fmt: skip
     out, err = capsys.readouterr()
     assert code == 0, err
-    audit = json.loads(out)["audit"]
+    summary = json.loads(out)
+    assert list(summary) == ["path", "frames", "duration", "issues", "audit"]
+    assert summary["path"] == str(tmp_path / "out.mp4")
+    assert summary["frames"] == FRAMES
+    assert summary["duration"] == pytest.approx(END)
+    [issue] = summary["issues"]
+    assert list(issue) == ["track_id", "message", "first_seen", "last_seen"]
+    assert issue["track_id"] == "trk_1"
+    audit = summary["audit"]
     assert audit["clean"] is False
     assert audit["totals"]["lost"] == pytest.approx(END - 1.03)
     assert audit["spans"][0]["effect"] == {"type": "blur", "padding": 0.15, "strength": None}
