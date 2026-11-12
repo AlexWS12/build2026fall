@@ -473,6 +473,8 @@ def _provider(name: str) -> Provider:
             f"VIBE_PLANNER_LLM={name!r} needs {exc.args[0]} in the environment, e.g. in .env "
             "loaded with `uv run --env-file ../.env`"
         ) from exc
+    except ValueError as exc:  # google-genai: "No API key was provided"
+        raise PlannerConfigError(f"VIBE_PLANNER_LLM={name!r} can't be set up: {exc}") from exc
 
 
 def planner_from_env() -> SchemaPlanner | None:
@@ -480,4 +482,3 @@ def planner_from_env() -> SchemaPlanner | None:
     only). Raises ``PlannerConfigError`` if it's set but can't be used."""
     name = config.planner_llm()
     return None if name is None else SchemaPlanner(_provider(name))
-

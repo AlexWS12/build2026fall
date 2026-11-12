@@ -313,6 +313,7 @@ def test_an_unknown_planner_llm_is_refused(
     [
         (ImportError("No module named 'openai'"), "needs the llm dependency group"),
         (KeyError("GROQ_API_KEY"), "needs GROQ_API_KEY in the environment"),
+        (ValueError("No API key was provided."), "can't be set up: No API key"),
     ],
 )
 def test_a_planner_llm_that_cant_be_built_says_why(

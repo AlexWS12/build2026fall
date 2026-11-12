@@ -45,6 +45,9 @@ PRICES_AS_OF = "2026-10-31"
 """
 
 GROQ_URL = "https://api.groq.com/openai/v1"
+GROQ_RPM = 2
+"""Groq's free plan allows 30 RPM but only 8K tokens a minute. A call here is about 3.3K tokens
+(an estimate: the prompt and schema are 13.3K characters at ~4 per token), so 2 a minute."""
 OPENROUTER_URL = "https://openrouter.ai/api/v1"
 
 Access = Literal["local", "free", "paid"]
@@ -104,19 +107,19 @@ _CANDIDATES = (
         "groq-gpt-oss-120b",
         lambda: _groq("openai/gpt-oss-120b", reasoning_effort="low"),
         "free",
-        rpm=30,
+        rpm=GROQ_RPM,
     ),
     Candidate(
         "groq-gpt-oss-20b",
         lambda: _groq("openai/gpt-oss-20b", reasoning_effort="low"),
         "free",
-        rpm=30,
+        rpm=GROQ_RPM,
     ),
     Candidate(
         "groq-qwen3.8-27b",
         lambda: _groq("qwen/qwen3.8-27b", reasoning_effort="none"),
         "free",
-        rpm=30,
+        rpm=GROQ_RPM,
     ),
     Candidate(
         "gemini-3.8-flash",
