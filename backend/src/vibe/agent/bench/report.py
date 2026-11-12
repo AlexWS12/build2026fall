@@ -7,9 +7,10 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from vibe.agent.bench.candidates import CANDIDATES, PRICES_AS_OF, cost
+from vibe.agent.bench import DECISION_RUNS, GATE_CORRECT_PCT, GATE_P95_SECONDS
+from vibe.agent.bench.candidates import CANDIDATES, FREE_TIERS_AS_OF, PRICES_AS_OF, cost
 from vibe.agent.bench.cases import Case
-from vibe.agent.bench.run import result_record
+from vibe.agent.bench.run import REGISTRIES, prompt_hash, result_record
 from vibe.agent.bench.score import OUTCOMES, Score, score, template_claims
 from vibe.agent.planner import plan_request
 
@@ -40,6 +41,19 @@ def _s(value: float | None) -> str:
     return "n/a" if value is None else f"{value:.2f}"
 
 
+def current(records: Sequence[Record]) -> tuple[list[Record], Counter[str]]:
+    """The records made with today's prompt and schema, and how many older ones each candidate
+    has. Older results were shown a different prompt, so they aren't mixed in."""
+    hashes = {tools: prompt_hash(tools) for tools in REGISTRIES}
+    kept, stale = [], Counter()
+    for r in records:
+        if r.get("prompt_hash") == hashes.get(r["tools"]):
+            kept.append(r)
+        else:
+            stale[r["candidate"]] += 1
+    return kept, stale
+
+
 def _scored(records: Sequence[Record], cases: Mapping[str, Case]) -> list[tuple[Record, Score]]:
     out = []
     for r in records:
@@ -47,6 +61,11 @@ def _scored(records: Sequence[Record], cases: Mapping[str, Case]) -> list[tuple[
         if case is not None:  # a request since removed from the set
             out.append((r, score(case, r["result"], r["attempts"])))
     return out
+
+
+def _access(name: str) -> str:
+    candidate = CANDIDATES.get(name)
+    return candidate.access if candidate is not None else "unknown"
 
 
 def template_scores(cases: Iterable[Case]) -> dict[str, tuple[bool, Score]]:
@@ -58,8 +77,11 @@ def template_scores(cases: Iterable[Case]) -> dict[str, tuple[bool, Score]]:
     return out
 
 
-def candidate_row(name: str, scored: Sequence[tuple[Record, Score]]) -> list[str]:
+def candidate_row(name: str, scored: Sequence[tuple[Record, Score]]) -> list[str] | None:
+    """One row of the main table, or None when none of the candidate's results is in the set."""
     n = len(scored)
+    if not n:
+        return None
     outcomes = Counter(s.outcome for _, s in scored)
     first_try = sum(
         1
@@ -90,6 +112,7 @@ def candidate_row(name: str, scored: Sequence[tuple[Record, Score]]) -> list[str
     repeated = [c for c, k in runs_per_case.items() if k > 1 and c.startswith("core:")]
     consistent = _pct(sum(1 for c in repeated if len(by_case[c]) == 1), len(repeated))
     price = CANDIDATES[name].price if name in CANDIDATES else None
+    free = _access(name) if price is None else None
     return [
         name,
         f"{len(runs_per_case)} x {max(runs_per_case.values(), default=0)}",
@@ -102,9 +125,9 @@ def candidate_row(name: str, scored: Sequence[tuple[Record, Score]]) -> list[str
         _s(_quantile(seconds, 0.50)),
         _s(_quantile(seconds, 0.95)),
         _s(statistics.mean(first) if first else None),
-        "local" if price is None else f"${statistics.mean(usd):.5f}",
-        "local" if price is None else f"${statistics.mean(usd_uncached):.5f}",
-        f"{statistics.mean(tokens_in):.0f} / {statistics.mean(tokens_out):.0f}" if n else "n/a",
+        free or f"${statistics.mean(usd):.5f}",
+        free or f"${statistics.mean(usd_uncached):.5f}",
+        f"{statistics.mean(tokens_in):.0f} / {statistics.mean(tokens_out):.0f}",
         consistent,
     ]
 
@@ -154,14 +177,11 @@ def _local_row(name: str, records: Sequence[Record]) -> list[str] | None:
     ]
 
 
-CEILING = "opus-5-5"
-GATE_POINTS = 5.0
-"""Core correctness must be within this many percentage points of the ceiling."""
-GATE_P95_SECONDS = 5.0
-
-
-def _core_stats(name: str, scored: Sequence[tuple[Record, Score]]) -> dict[str, Any] | None:
-    core = [(r, s) for r, s in scored if r["tools"] == "core"]
+def _core_stats(
+    scored: Sequence[tuple[Record, Score]], llm_cases: frozenset[str]
+) -> dict[str, Any] | None:
+    """The decision's numbers: over the core requests that reach the LLM, every run."""
+    core = [(r, s) for r, s in scored if r["case"] in llm_cases]
     if not core:
         return None
     seconds = [r["seconds"] for r, _ in core if not r["first_call"]]
@@ -170,70 +190,65 @@ def _core_stats(name: str, scored: Sequence[tuple[Record, Score]]) -> dict[str, 
         "unsafe": sum(1 for _, s in core if s.outcome == "unsafe"),
         "correct": 100 * sum(1 for _, s in core if s.outcome == "correct") / len(core),
         "p95": _quantile(seconds, 0.95),
-        "usd": statistics.mean(cost(name, r["attempts"]) for r, _ in core),
     }
 
 
-def decision(scored_by: Mapping[str, Sequence[tuple[Record, Score]]]) -> list[str]:
-    """Apply the decision rule fixed in ``vibe.agent.bench`` before any run."""
+def decision(
+    scored_by: Mapping[str, Sequence[tuple[Record, Score]]], llm_cases: frozenset[str]
+) -> list[str]:
+    """Apply the decision rule fixed in ``vibe.agent.bench`` before any scored run."""
     stats = {
         name: st
         for name, scored in scored_by.items()
-        if (st := _core_stats(name, scored)) is not None
-        and "quality-only" not in getattr(CANDIDATES.get(name), "tags", ())
+        if (st := _core_stats(scored, llm_cases)) is not None
     }
-    if CEILING not in stats:
-        return [f"Needs the {CEILING} ceiling run first."]
-    ceiling = stats[CEILING]["correct"]
-    ceiling_runs = stats[CEILING]["runs"]
-    if more := [n for n, st in stats.items() if st["runs"].total() > ceiling_runs.total()]:
-        names = ", ".join(more)
-        return [f"The {CEILING} ceiling ran less than {names}: run it the same way first."]
-    # Only runs of the same requests can be compared: a partial run has fewer chances to fail.
-    same_runs = {n for n, st in stats.items() if st["runs"] == ceiling_runs}
-    fewest_unsafe = min(stats[n]["unsafe"] for n in same_runs)
+    if not stats:
+        return ["No results on the core requests that reach the LLM yet."]
+    full = Counter(dict.fromkeys(llm_cases, DECISION_RUNS))
+    compared = {
+        n for n, st in stats.items() if st["runs"] == full and _access(n) in ("free", "local")
+    }
+    fewest_unsafe = min((stats[n]["unsafe"] for n in compared), default=0)
     rows, passing, local = [], [], []
     for name, st in stats.items():
+        candidate = CANDIDATES.get(name)
+        quality_only = candidate is not None and "quality-only" in candidate.tags
         gates = [
             st["unsafe"] == fewest_unsafe,
-            st["correct"] >= ceiling - GATE_POINTS,
-            st["p95"] is not None and st["p95"] < GATE_P95_SECONDS,
+            st["correct"] >= GATE_CORRECT_PCT,
+            not quality_only and st["p95"] is not None and st["p95"] < GATE_P95_SECONDS,
         ]
-        candidate = CANDIDATES.get(name)
-        is_local = candidate is not None and candidate.price is None
-        if name in same_runs and is_local:
-            local.append((name, st, sum(gates)))
-        elif name in same_runs and all(gates):
-            passing.append((name, st, sum(gates)))
-        rows.append(
-            [
-                name,
-                str(st["unsafe"]),
-                f"{st['correct']:.0f}%",
-                f"{st['correct'] - ceiling:+.0f}",
-                _s(st["p95"]),
-                "local" if is_local else f"${st['usd']:.5f}",
-                " ".join("pass" if g else "FAIL" for g in gates)
-                if name in same_runs
-                else f"not compared: {st['runs'].total()} core results, "
-                f"{ceiling_runs.total()} on the ceiling",
-            ]
-        )
+        access = _access(name)
+        if name not in compared:
+            why = (
+                "paid: not in the decision (no budget)"
+                if access == "paid"
+                else f"not compared: {st['runs'].total()} results, needs {full.total()} "
+                f"({len(llm_cases)} requests x {DECISION_RUNS} runs)"
+            )
+        else:
+            why = " ".join("pass" if g else "FAIL" for g in gates[:2])
+            why += " n/a (quality only)" if quality_only else (" pass" if gates[2] else " FAIL")
+            if access == "local":
+                local.append((name, st, sum(gates)))
+            elif all(gates):
+                passing.append((name, st))
+        rows.append([name, access, str(st["unsafe"]), f"{st['correct']:.0f}%", _s(st["p95"]), why])
     header = [
         "Candidate",
-        "Core unsafe",
-        "Core correct",
-        "vs ceiling",
+        "Access",
+        "Unsafe",
+        "Correct",
         "p95 s",
-        "$/request",
-        f"Gates: unsafe (fewest = {fewest_unsafe}), correct, p95 < {GATE_P95_SECONDS:g} s",
+        f"Gates: unsafe (fewest = {fewest_unsafe}), correct >= {GATE_CORRECT_PCT:g}%, "
+        f"p95 < {GATE_P95_SECONDS:g} s",
     ]
     lines = [_table(header, rows), ""]
     if passing:
-        name, st, _ = min(passing, key=lambda p: p[1]["usd"])
-        lines.append(f"**Winner: {name}** (cheapest hosted candidate passing every gate).")
+        name, st = max(passing, key=lambda p: (p[1]["correct"], -p[1]["p95"]))
+        lines.append(f"**Winner: {name}** (free hosted, every gate, most correct then fastest).")
     else:
-        lines.append("**No hosted candidate passes every gate.**")
+        lines.append("**No free hosted candidate passes every gate.**")
     if local:
         name, st, gates = max(local, key=lambda p: (p[2], p[1]["correct"]))
         lines.append(f"**Offline fallback: {name}** ({gates} of 3 gates).")
@@ -242,18 +257,26 @@ def decision(scored_by: Mapping[str, Sequence[tuple[Record, Score]]]) -> list[st
 
 def report(records: Sequence[Record], cases: Sequence[Case], detail: bool = False) -> str:
     by_id = {c.id: c for c in cases}
+    records, stale = current(records)
     groups: dict[str, list[Record]] = defaultdict(list)
     for r in records:
         groups[r["candidate"]].append(r)
     template = template_scores(cases)
-    out = [f"Prices as of {PRICES_AS_OF}. Unsafe and over-asked are counts; the rest are shares."]
+    llm_cases = frozenset(c.id for c in cases if c.tools == "core" and not template[c.id][0])
+    out = [
+        f"Free tiers as of {FREE_TIERS_AS_OF}, paid prices as of {PRICES_AS_OF}. Unsafe and "
+        "over-asked are counts; the rest are shares."
+    ]
+    if stale:
+        out.append(
+            "Left out, made with an older prompt or schema: "
+            + ", ".join(f"{n} {k}" for n, k in sorted(stale.items()))
+            + "."
+        )
 
     scored_by = {name: _scored(rs, by_id) for name, rs in groups.items()}
-    out += [
-        "",
-        "### All requests",
-        _table(MAIN_HEADER, (candidate_row(n, s) for n, s in scored_by.items())),
-    ]
+    main_rows = [row for n, s in scored_by.items() if (row := candidate_row(n, s)) is not None]
+    out += ["", "### All requests", _table(MAIN_HEADER, main_rows)]
 
     split_header = [
         "Candidate",
@@ -288,7 +311,14 @@ def report(records: Sequence[Record], cases: Sequence[Case], detail: bool = Fals
             ]
         )
     out += ["", "### Correct, by split", _table(split_header, rows)]
-    out += ["", "### Decision rule (vibe/agent/bench/__init__.py)", *decision(scored_by)]
+    out += [
+        "",
+        "### Decision rule (vibe/agent/bench/__init__.py)",
+        f"Over the {len(llm_cases)} core requests the templates don't take, "
+        f"{DECISION_RUNS} runs each.",
+        "",
+        *decision(scored_by, llm_cases),
+    ]
 
     core = [c for c in cases if c.tools == "core"]
     claimed = [c for c in core if template[c.id][0]]

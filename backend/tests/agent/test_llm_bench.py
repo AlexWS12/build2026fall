@@ -9,15 +9,17 @@ from typing import Any
 import pytest
 
 from vibe.agent import Plan, plan_request, validate_plan
-from vibe.agent.bench.candidates import Candidate
+from vibe.agent.bench import DECISION_RUNS
+from vibe.agent.bench import run as bench_run
+from vibe.agent.bench.candidates import CANDIDATES, Candidate
 from vibe.agent.bench.cases import Case, load_cases, registry_for
 from vibe.agent.bench.report import decision, load_records, report
-from vibe.agent.bench.run import run_candidate
+from vibe.agent.bench.run import PaidCandidate, run_candidate
 from vibe.agent.bench.score import KEYWORDS, Score, score, template_claims
 from vibe.agent.llm import _EXAMPLES
 from vibe.agent.plan import ref
 from vibe.agent.planner import LlmError
-from vibe.agent.providers import Reply, Usage
+from vibe.agent.providers import RateLimited, Reply, Usage
 
 CASES = load_cases()
 BY_REQUEST = {c.request: c for c in CASES}
@@ -331,7 +333,7 @@ class AlwaysAsks:
 
 def test_a_run_saves_every_reply_and_the_report_scores_it(tmp_path: Path) -> None:
     cases = [BY_REQUEST["blur him"], BY_REQUEST["kill the audio"], BY_REQUEST["undo that"]]
-    candidate = Candidate("fake-asks", AlwaysAsks, None)
+    candidate = Candidate("fake-asks", AlwaysAsks, "local")
 
     path = run_candidate(
         candidate, cases, 2, max_usd=None, hardware_label="test", network="none", out_dir=tmp_path
@@ -366,7 +368,7 @@ class TimesOut:
 
 def test_a_failed_call_keeps_the_time_it_took(tmp_path: Path) -> None:
     path = run_candidate(
-        Candidate("fake-times-out", TimesOut, None),
+        Candidate("fake-times-out", TimesOut, "local"),
         [BY_REQUEST["kill the audio"]],
         1,
         max_usd=None,
@@ -381,8 +383,116 @@ def test_a_failed_call_keeps_the_time_it_took(tmp_path: Path) -> None:
     assert record["seconds"] >= 0.01
 
 
-def scored_runs(outcomes: list[str], seconds: float, usage_in: int = 1000) -> list[Any]:
-    usage = {"input": usage_in, "output": 100, "cache_read": 0, "cache_write": 0, "reasoning": 0}
+class RateLimitedAfter:
+    """Answers ``ok`` requests, then says 429 like a free tier at its daily cap."""
+
+    name = "fake:capped"
+    model = "capped"
+    settings: Mapping[str, Any] = {}
+
+    def __init__(self, ok: int) -> None:
+        self.ok = ok
+
+    def complete(self, system: str, user: str, schema: Mapping[str, Any]) -> Reply:
+        if self.ok <= 0:
+            raise RateLimited("429: daily cap")
+        self.ok -= 1
+        return AlwaysAsks().complete(system, user, schema)
+
+    def describe(self) -> dict[str, Any]:
+        return {}
+
+
+def test_a_rate_limit_stops_the_run_and_resume_finishes_it(tmp_path: Path) -> None:
+    cases = [BY_REQUEST["blur him"], BY_REQUEST["kill the audio"], BY_REQUEST["cut it"]]
+    common = {"max_usd": None, "hardware_label": "test", "network": "none", "out_dir": tmp_path}
+
+    first = run_candidate(
+        Candidate("capped", lambda: RateLimitedAfter(1), "free"), cases, 1, **common
+    )
+    assert [r["request"] for r in load_records([first])] == ["blur him"]  # no failure scored
+
+    second = run_candidate(
+        Candidate("capped", lambda: RateLimitedAfter(9), "free"), cases, 1, resume=True, **common
+    )
+    assert [r["request"] for r in load_records([second])] == ["kill the audio", "cut it"]
+
+
+def test_calls_are_paced_to_the_rate_limit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    waits: list[float] = []
+    monkeypatch.setattr(bench_run, "sleep", waits.append)
+    cases = [BY_REQUEST["blur him"], BY_REQUEST["kill the audio"]]
+
+    run_candidate(
+        Candidate("fake-asks", AlwaysAsks, "free"),
+        cases,
+        1,
+        max_usd=None,
+        hardware_label="test",
+        network="none",
+        out_dir=tmp_path,
+        rpm=60,
+    )
+
+    assert len(waits) == 1 and 0.5 < waits[0] <= 1.0  # one second between the two calls
+
+
+def test_a_paid_candidate_never_runs_without_allow_paid(tmp_path: Path) -> None:
+    with pytest.raises(PaidCandidate):
+        run_candidate(
+            CANDIDATES["opus-5-5"],
+            [BY_REQUEST["kill the audio"]],
+            1,
+            max_usd=None,
+            hardware_label="test",
+            network="none",
+            out_dir=tmp_path,
+        )
+    assert not list(tmp_path.iterdir())
+
+
+def test_the_report_leaves_out_results_from_an_older_prompt(tmp_path: Path) -> None:
+    path = run_candidate(
+        Candidate("fake-asks", AlwaysAsks, "local"),
+        [BY_REQUEST["blur him"]],
+        2,
+        max_usd=None,
+        hardware_label="test",
+        network="none",
+        out_dir=tmp_path,
+    )
+    records = load_records([path])
+    records[0]["prompt_hash"] = "0ld"
+
+    text = report(records, CASES)
+
+    assert "Left out, made with an older prompt or schema: fake-asks 1." in text
+    assert "| fake-asks | 1 x 1 |" in text
+
+
+def test_an_empty_candidate_doesnt_crash_the_report(tmp_path: Path) -> None:
+    path = run_candidate(
+        Candidate("gone", AlwaysAsks, "local"),
+        [BY_REQUEST["blur him"]],
+        1,
+        max_usd=None,
+        hardware_label="test",
+        network="none",
+        out_dir=tmp_path,
+    )
+    records = load_records([path])
+    records[0]["case"] = "core:a request since removed from the set"
+
+    main_table = report(records, CASES).split("### Correct, by split")[0]
+
+    assert "| gone |" not in main_table
+
+
+# --- Decision rule --------------------------------------------------------------------------
+
+
+def scored_runs(outcomes: list[str], seconds: float, runs: int = DECISION_RUNS) -> list[Any]:
+    """``runs`` results for each request ``core:<i>``, with ``outcomes[i]`` every time."""
     return [
         (
             {
@@ -390,56 +500,78 @@ def scored_runs(outcomes: list[str], seconds: float, usage_in: int = 1000) -> li
                 "tools": "core",
                 "first_call": False,
                 "seconds": seconds,
-                "attempts": [{"seconds": seconds, "usage": usage}],
+                "attempts": [{"seconds": seconds, "usage": {}}],
             },
             Score(o),
         )
+        for _ in range(runs)
         for i, o in enumerate(outcomes)
     ]
 
 
-def test_decision_picks_the_cheapest_hosted_candidate_that_passes_every_gate() -> None:
+LLM_CASES = frozenset(f"core:{i}" for i in range(10))
+
+
+def test_decision_picks_the_most_correct_free_candidate_passing_every_gate() -> None:
     lines = decision(
         {
-            "opus-5-5": scored_runs(["correct"] * 20, 3.0),
-            "sonnet-5-5": scored_runs(["correct"] * 19 + ["wrong_plan"], 2.0),  # 95%: passes
-            "haiku-5-5": scored_runs(["correct"] * 19 + ["unsafe"], 1.0),  # an unsafe: fails
-            "gpt-5.6-terra": scored_runs(["correct"] * 20, 6.0),  # p95 too slow: fails
-            "qwen3.5-9b": scored_runs(["correct"] * 18 + ["wrong_plan"] * 2, 2.0),
-        }
+            "groq-gpt-oss-120b": scored_runs(["correct"] * 10, 6.0),  # p95 too slow
+            "groq-gpt-oss-20b": scored_runs(["correct"] * 9 + ["wrong_plan"], 2.0),  # 90%
+            "groq-qwen3.8-27b": scored_runs(["correct"] * 8 + ["wrong_plan"] * 2, 1.0),  # 80%
+            "gemini-3.8-flash": scored_runs(["correct"] * 9 + ["unsafe"], 1.0),  # an unsafe
+            "opus-5-5": scored_runs(["correct"] * 10, 1.0),  # paid: not decided on
+            "openrouter-nemotron-3.5-super-vl": scored_runs(["correct"] * 10, 1.0),
+            "qwen3.5-9b": scored_runs(["correct"] * 7 + ["wrong_plan"] * 3, 2.0),  # 70%
+        },
+        LLM_CASES,
     )
+    table = lines[0]
 
-    assert "**Winner: sonnet-5-5** (cheapest hosted candidate passing every gate)." in lines
+    assert "**Winner: groq-gpt-oss-20b** (free hosted, every gate, most correct then fastest)." in (
+        lines
+    )
     assert "**Offline fallback: qwen3.5-9b** (2 of 3 gates)." in lines
+    assert "| groq-qwen3.8-27b | free | 0 | 80% | 1.00 | pass pass pass |" in table
+    assert "| opus-5-5 | paid | 0 | 100% | 1.00 | paid: not in the decision (no budget) |" in table
+    assert "pass pass n/a (quality only)" in table
 
 
-def test_decision_ignores_a_partial_run() -> None:
+def test_decision_breaks_a_tie_on_p95() -> None:
     lines = decision(
         {
-            "opus-5-5": scored_runs(["correct"] * 19 + ["unsafe"], 3.0),
-            "sonnet-5-5": scored_runs(["correct"] * 19 + ["unsafe"], 2.0),
-            "haiku-5-5": scored_runs(["correct"] * 5, 1.0),  # cheapest, and no unsafe in 5
-            "qwen3.5-9b": scored_runs(["correct"] * 5, 1.0),
-        }
+            "groq-gpt-oss-20b": scored_runs(["correct"] * 9 + ["wrong_plan"], 2.0),
+            "groq-qwen3.8-27b": scored_runs(["correct"] * 9 + ["wrong_plan"], 1.5),
+        },
+        LLM_CASES,
     )
 
-    assert "**Winner: sonnet-5-5** (cheapest hosted candidate passing every gate)." in lines
-    assert not any("Offline fallback" in line for line in lines)
-    assert "not compared: 5 core results, 20 on the ceiling" in lines[0]
+    assert "**Winner: groq-qwen3.8-27b** (free hosted, every gate, most correct then fastest)." in (
+        lines
+    )
 
 
-def test_decision_refuses_a_ceiling_that_ran_less_than_a_candidate() -> None:
+def test_decision_only_compares_complete_runs() -> None:
     lines = decision(
         {
-            "opus-5-5": scored_runs(["correct"] * 5, 3.0),
-            "haiku-5-5": scored_runs(["correct"] * 20, 1.0),
-        }
+            "groq-gpt-oss-120b": scored_runs(["correct"] * 9 + ["unsafe"], 2.0),
+            "groq-gpt-oss-20b": scored_runs(["correct"] * 10, 1.0, runs=3),  # no unsafe in 3
+        },
+        LLM_CASES,
     )
 
-    assert lines == ["The opus-5-5 ceiling ran less than haiku-5-5: run it the same way first."]
+    # The partial run's zero doesn't become the bar: the complete one has the fewest, 1.
+    assert "**Winner: groq-gpt-oss-120b**" in lines[-1]
+    assert "not compared: 30 results, needs 50 (10 requests x 5 runs)" in lines[0]
 
 
-def test_decision_waits_for_the_ceiling() -> None:
-    assert decision({"haiku-5-5": scored_runs(["correct"], 1.0)}) == [
-        "Needs the opus-5-5 ceiling run first."
-    ]
+def test_decision_counts_only_requests_that_reach_the_llm() -> None:
+    template_taken = scored_runs(["unsafe"] * 12, 1.0)[10:12]  # core:10, core:11
+    lines = decision(
+        {"groq-gpt-oss-20b": scored_runs(["correct"] * 10, 1.0) + template_taken}, LLM_CASES
+    )
+
+    assert "**Winner: groq-gpt-oss-20b**" in lines[-1]
+
+
+def test_decision_waits_for_results() -> None:
+    assert decision({}, LLM_CASES) == ["No results on the core requests that reach the LLM yet."]
