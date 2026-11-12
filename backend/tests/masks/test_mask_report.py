@@ -341,6 +341,43 @@ def test_the_audit_flags_the_same_frames_as_the_renderer(tracks: list[Track]) ->
     assert flagged_by_audit(state, tracks, 10) == flagged
 
 
+def test_a_mask_starting_between_frames_is_audited_from_the_frame_it_starts_on() -> None:
+    """The renderer applies a mask starting at 0.55 to the frame from 0.5 (``until``), with the
+    box at 0.5. A keyframe at 1.03 is held from 0.53, so that frame is lost."""
+    state = masked(time_range=TimeRange(start=0.55, end=1.0)).state()
+    tracks = [track("trk_1", 1.03)]
+    times = [i / 10 for i in range(20)]
+    renderer = FrameRenderer(state, tracks)
+    for t, until in zip(times, [*times[1:], 2.0], strict=True):
+        renderer.render(np.zeros((4, 4, 3), np.uint8), t, until)
+    assert [(i.first_seen, i.last_seen) for i in renderer.issues] == [(0.5, 0.5)]
+
+    result = audit_masks(state, tracks, duration=2, frame_times=times)
+    assert stretches(result) == [
+        ("lost", 0.5, pytest.approx(0.53)),
+        ("held", pytest.approx(0.53), 1.0),
+    ]
+    assert not result.clean
+    # Without frame times, it's audited from where the mask starts.
+    assert stretches(audit(state, tracks, duration=2)) == [("held", 0.55, 1.0)]
+
+
+def test_a_mask_starting_on_a_frame_or_after_a_cut_frame_keeps_its_start() -> None:
+    times = [i / 10 for i in range(20)]
+    tracks = [track("trk_1", 0.5, 1.0, 1.5)]
+    on_a_frame = masked(time_range=TimeRange(start=0.6, end=1.0)).state()
+    result = audit_masks(on_a_frame, tracks, duration=2, frame_times=times)
+    assert result.spans[0].stretches[0].start == pytest.approx(0.6)
+    # The frame from 0.5 is cut, so export never shows it: the mask first shows at 0.6.
+    cut = Cut(request_id="r_2", source="agent", time_range=TimeRange(start=0.5, end=0.52))
+    after_a_cut = masked(cut, time_range=TimeRange(start=0.55, end=1.0)).state()
+    result = audit_masks(after_a_cut, tracks, duration=2, frame_times=times)
+    assert result.spans[0].stretches[0].start == 0.55
+    # Starting at the end of the video, it never shows, even with the last frame before it.
+    at_the_end = masked(time_range=TimeRange(start=2.0, end=3.0)).state()
+    assert audit_masks(at_the_end, tracks, duration=2, frame_times=times).spans == ()
+
+
 def test_a_frame_exactly_at_the_end_of_a_hold_is_not_lost_as_in_the_renderer() -> None:
     """The renderer counts a box as lost only past ``HOLD_SECONDS``, so a frame exactly at the
     end of a hold isn't lost. Quarter-second frames land exactly on every hold edge here: 0.5 and

@@ -16,7 +16,7 @@ nobody sees them.
 """
 
 import math
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from itertools import pairwise
@@ -118,8 +118,20 @@ class MaskAudit:
         }
 
 
-def audit_masks(state: TimelineState, tracks: Iterable[Track], *, duration: float) -> MaskAudit:
-    """Audit every mask in ``state`` against ``tracks``, for a video ``duration`` seconds long."""
+def audit_masks(
+    state: TimelineState,
+    tracks: Iterable[Track],
+    *,
+    duration: float,
+    frame_times: Sequence[float] | None = None,
+) -> MaskAudit:
+    """Audit every mask in ``state`` against ``tracks``, for a video ``duration`` seconds long.
+
+    ``frame_times`` are the source times of the video's frames, in order. With them, a mask
+    starting while a frame is on screen is audited from that frame, as ``FrameRenderer`` applies
+    it there (``until``), with the box at that frame's time. Without them (say, a preview before
+    any render), each mask is audited from where it starts.
+    """
     if not (math.isfinite(duration) and duration > 0):
         raise ValueError(f"duration must be finite and above 0, got {duration}")
 
@@ -130,7 +142,10 @@ def audit_masks(state: TimelineState, tracks: Iterable[Track], *, duration: floa
     spans = []
     for track_id in sorted(state.masks):
         for span in state.masks[track_id]:
-            stretches = _audit_span(span, paths.get(track_id), state.cuts, duration)
+            start = span.start
+            if frame_times is not None and span.start < duration:
+                start = _first_frame_shown(span.start, frame_times, state)
+            stretches = _audit_span(start, span, paths.get(track_id), state.cuts, duration)
             if stretches:
                 spans.append(
                     SpanAudit(track_id, span.op_id, span.request_id, span.effect, stretches)
@@ -161,7 +176,19 @@ def _held_kind(keyframe: Keyframe) -> StretchKind:
     return "uncertain" if keyframe.state == "uncertain" else "held"
 
 
+def _first_frame_shown(start: float, frame_times: Sequence[float], state: TimelineState) -> float:
+    """When a mask starting at ``start`` first shows: the frame on screen at ``start``, if it
+    began earlier and isn't cut (export skips cut frames), or else ``start`` itself."""
+    i = bisect_left(frame_times, start)  # the first frame at or after start
+    if i < len(frame_times) and frame_times[i] == start:
+        return start  # a frame starts with the mask: the one before is gone by then
+    if i > 0 and not state.is_cut(frame_times[i - 1]):
+        return frame_times[i - 1]
+    return start
+
+
 def _audit_span(
+    start: float,
     span: MaskSpan,
     paths: list[list[_Piece]] | None,
     cuts: Sequence[TimeRange],
@@ -169,7 +196,7 @@ def _audit_span(
 ) -> tuple[Stretch, ...]:
     end = duration if span.end is None else min(span.end, duration)
     stretches: list[Stretch] = []
-    for window in _visible(span.start, end, cuts):
+    for window in _visible(start, end, cuts):
         if paths is None:
             stretches.append(Stretch("no_track", *window))
         else:

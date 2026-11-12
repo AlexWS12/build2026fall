@@ -119,7 +119,10 @@ def black(image: np.ndarray) -> bool:
 def test_the_result_holds_what_audit_masks_gives_on_its_own(clip: Path, tmp_path: Path) -> None:
     state, tracks = masked().state(), [track(0.03, 0.53)]
     result = export(clip, state, tracks, tmp_path / "out.mp4")
-    assert result.audit == audit_masks(state, tracks, duration=FrameIndex.build(clip).end)
+    index = FrameIndex.build(clip)
+    assert result.audit == audit_masks(
+        state, tracks, duration=index.end, frame_times=index.times.tolist()
+    )
     assert result.audit.spans
 
 
@@ -159,6 +162,35 @@ def test_a_lost_target_across_a_cut_is_two_stretches_and_one_issue(
     by_audit = [t for t in shown if any(start <= t < end for start, end in lost)]
     assert by_audit == by_issue
     assert by_audit
+
+
+def test_a_mask_starting_between_frames_is_audited_from_the_frame_it_starts_on(
+    clip: Path, tmp_path: Path
+) -> None:
+    # The mask starts at 0.55, while the frame from 0.5 is on screen, so the renderer masks that
+    # frame, with the box at 0.5. One keyframe at 1.03 is held from 0.53: at 0.5 it's lost.
+    log = OpLog()
+    log.append(
+        AddMask(
+            request_id="r_1",
+            source="agent",
+            targets=["trk_1"],
+            effect=Effect(type="blur"),
+            time_range=TimeRange(start=0.55, end=1.0),
+        )
+    )
+    result = export(clip, log.state(), [track(1.03)], tmp_path / "out.mp4")
+
+    [issue] = result.issues
+    assert (issue.first_seen, issue.last_seen) == (0.5, 0.5)
+    [span] = result.audit.spans
+    lost = [s for s in span.stretches if s.kind == "lost"]
+    assert any(s.contains(issue.first_seen) for s in lost)  # issues are a subset of the audit
+    assert not result.audit.clean
+    assert kinds(result.audit) == [
+        ("lost", 0.5, pytest.approx(0.53)),
+        ("held", pytest.approx(0.53), 1.0),
+    ]
 
 
 def test_a_mask_with_no_track_is_no_track_for_the_whole_clip(clip: Path, tmp_path: Path) -> None:

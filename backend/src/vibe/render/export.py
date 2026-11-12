@@ -83,7 +83,7 @@ def export(
     renderer = FrameRenderer(state, tracks)
     info = probe(source)
     index = FrameIndex.build(source)
-    audit = audit_masks(state, tracks, duration=index.end)
+    audit = audit_masks(state, tracks, duration=index.end, frame_times=index.times.tolist())
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fd, name = tempfile.mkstemp(dir=out_path.parent, prefix=f".{out_path.stem}.", suffix=".mp4")
