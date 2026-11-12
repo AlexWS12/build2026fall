@@ -25,7 +25,8 @@ from pydantic import Field, ValidationError
 from vibe.agent import Clarify, LlmError, Plan, PlanError, plan_request
 from vibe.contract import TimelineState, new_id
 from vibe.contract.common import Model
-from vibe.modules.transcribe import TranscribeError, Transcript, transcribe_video
+from vibe.modules import ModuleError
+from vibe.modules.transcribe import Transcript, transcribe_video
 from vibe.storage import Project, ProjectInfo, Storage, StorageError
 from vibe.video import NoAudioStream, VideoError, probe
 
@@ -211,7 +212,9 @@ def transcribe_project(project_id: str, storage: StorageDep) -> Transcript:
     with _one_request_at_a_time(project.id):
         try:
             return transcribe_video(storage, project.info.video)
-        except TranscribeError as e:
+        # F-08's errors: also the model server failing, or a corrupt cached transcript (the
+        # log names the file to delete). TranscribeError is one of them.
+        except ModuleError as e:
             logger.warning("transcribing %s failed: %s", project.id, e)
             raise HTTPException(
                 status_code=503, detail="transcription isn't available on this server"

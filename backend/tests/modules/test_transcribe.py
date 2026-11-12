@@ -1,25 +1,30 @@
 """F-31: transcription. No GPU, no network, no model: faster-whisper is replaced by a fake."""
 
+import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from fastapi.testclient import TestClient
 
+from vibe.modules import ModuleError, NoAnalysis, make_analysis, run_analysis
+from vibe.modules.remote import RemoteClient, create_app
 from vibe.modules.transcribe import (
     TranscribeError,
+    TranscriptAnalysis,
     _whisper,
     cached_transcript,
     main,
     transcribe,
     transcribe_video,
-    transcript_key,
 )
 from vibe.storage import Storage, VideoRef
 from vibe.video import write_wav
 
 RATE = 16000
+KEY = TranscriptAnalysis().key
 
 
 class FakeWhisper:
@@ -68,7 +73,7 @@ def stored(tmp_path: Path) -> tuple[Storage, VideoRef]:
 def test_local_keeps_segments_words_times_and_language(whisper: type[FakeWhisper]) -> None:
     t = transcribe(np.zeros(RATE, np.float32), RATE, backend="local")
 
-    assert t.language == "en" and t.model == transcript_key()
+    assert t.language == "en" and t.model == KEY
     [segment] = t.segments
     assert (segment.start, segment.end, segment.text) == (0.1, 0.8, "Hello there.")
     assert [(w.text, w.start, w.end) for w in segment.words] == [
@@ -103,7 +108,7 @@ def test_a_video_is_transcribed_once_then_read_from_the_cache(
     first = transcribe_video(storage, ref, backend="local")
     again = transcribe_video(storage, ref, backend="local")
 
-    assert storage.cache_path(ref.sha256, "transcript", transcript_key()).is_file()
+    assert storage.cache_path(ref.sha256, "transcript", KEY).is_file()
     assert again == first and whisper.calls == 1
 
 
@@ -111,7 +116,7 @@ def test_stub_replays_the_cache_and_never_invents_an_empty_transcript(
     whisper: type[FakeWhisper], stored: tuple[Storage, VideoRef]
 ) -> None:
     storage, ref = stored
-    with pytest.raises(TranscribeError, match="no cached transcript"):
+    with pytest.raises(NoAnalysis, match="no cached transcript"):
         transcribe_video(storage, ref, backend="stub")
 
     made = transcribe_video(storage, ref, backend="local")
@@ -126,19 +131,64 @@ def test_the_model_is_loaded_once(whisper: type[FakeWhisper]) -> None:
     assert (whisper.calls, whisper.loads) == (2, 1)
 
 
-def test_an_unreadable_cache_is_a_miss_and_gets_replaced(
-    whisper: type[FakeWhisper], stored: tuple[Storage, VideoRef]
+@pytest.mark.parametrize("content", ["{not json", '{"old": "format"}'])
+def test_an_unreadable_cache_is_an_error_naming_the_file_and_is_kept(
+    whisper: type[FakeWhisper], stored: tuple[Storage, VideoRef], content: str
+) -> None:
+    # F-08 never replaces a cache file silently; the error says which one to delete.
+    storage, ref = stored
+    path = storage.cache_path(ref.sha256, "transcript", KEY)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+
+    with pytest.raises(ModuleError, match=f"{re.escape(path.name)}.*delete it"):
+        cached_transcript(storage, ref)
+    with pytest.raises(ModuleError, match=f"{re.escape(path.name)}.*delete it"):
+        transcribe_video(storage, ref, backend="local")
+    assert path.read_text() == content and whisper.calls == 0
+
+    path.unlink()
+    assert transcribe_video(storage, ref, backend="local") == cached_transcript(storage, ref)
+
+
+def test_the_key_names_the_model_and_changes_with_it() -> None:
+    assert KEY.startswith("faster-whisper-small-int8-")
+    assert TranscriptAnalysis("tiny").key.startswith("faster-whisper-tiny-int8-")
+    assert TranscriptAnalysis("tiny").key != KEY
+
+
+def test_the_model_server_can_rebuild_it_from_its_settings() -> None:
+    # The server gets only the module name and settings, and calls cls(**settings).
+    analysis = TranscriptAnalysis("tiny")
+    rebuilt = make_analysis(analysis.module, analysis.settings)
+    assert isinstance(rebuilt, TranscriptAnalysis) and rebuilt.key == analysis.key
+
+
+def test_remote_transcribes_on_the_model_server_and_caches_here(
+    whisper: type[FakeWhisper],
+    stored: tuple[Storage, VideoRef],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     storage, ref = stored
-    path = storage.cache_path(ref.sha256, "transcript", transcript_key())
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text('{"old": "format"}')
+    http = TestClient(create_app(Storage(tmp_path / "server")))
 
-    assert cached_transcript(storage, ref) is None
-    with pytest.raises(TranscribeError, match="no cached transcript"):
-        transcribe_video(storage, ref, backend="stub")
-    made = transcribe_video(storage, ref, backend="local")
-    assert cached_transcript(storage, ref) == made
+    def transport(method, url, headers, body, timeout):
+        content = body.read_bytes() if isinstance(body, Path) else body
+        r = http.request(
+            method, url.removeprefix("http://gpu-box:8765"), headers=headers, content=content
+        )
+        return r.status_code, r.json()
+
+    client = RemoteClient("http://gpu-box:8765", frozenset({"gpu-box"}), transport=transport)
+    monkeypatch.setattr(RemoteClient, "from_env", classmethod(lambda cls: client))
+
+    made = transcribe_video(storage, ref, backend="remote")
+
+    assert made.segments[0].text == "Hello there." and whisper.calls == 1
+    # Cached here, so this machine can now replay it with the stub.
+    assert transcribe_video(storage, ref, backend="stub") == made
+    assert run_analysis(storage, ref, TranscriptAnalysis(), "stub").source == "cache"
 
 
 def test_cli_prints_the_cache_path_and_words(
@@ -154,7 +204,7 @@ def test_cli_prints_the_cache_path_and_words(
 
     assert main([str(wav)]) == 0
     out = capsys.readouterr().out
-    assert transcript_key() in out and "Hello there." in out and "Hello@0.10" in out
+    assert KEY in out and "Hello there." in out and "Hello@0.10" in out
 
     assert main([str(tmp_path / "missing.mp4")]) == 1
     assert capsys.readouterr().err.startswith("error:")

@@ -1,14 +1,16 @@
-"""Transcription with word timestamps (F-31), cached per video.
+"""Transcription with word timestamps (F-31), cached per video through F-08's ``run_analysis``.
 
 Times are source seconds (D-013): ``extract_audio`` puts sample 0 at the clip's time 0, so a
 word's ``start``/``end`` can go straight into a ``TimeRange`` for ``mute`` or ``cut_range``.
 
-Backends (``VIBE_BACKEND``, docs/ARCHITECTURE.md "Compute"):
+Backends (``VIBE_BACKEND``, docs/ARCHITECTURE.md "Compute"), picked by ``run_analysis``:
 - ``stub``: no model. ``transcribe_video`` replays a cached transcript (e.g. one copied from a
-  teammate's ``cache/<sha256>/transcript/``) and raises if there is none, never an empty one.
+  teammate's ``cache/<sha256>/transcript/``) and raises ``NoAnalysis`` if there is none, never
+  an empty one.
 - ``local``: faster-whisper (MIT; tentative, no decision row yet). Not a project dependency:
   install it by hand with ``uv pip install faster-whisper``. The first run downloads the model.
-- ``remote``: not built; raises.
+- ``remote``: the model server runs :class:`TranscriptAnalysis` (it needs faster-whisper), and
+  the result is cached here.
 
 ``transcribe`` takes samples, not a file, so a per-chunk caller (live) can reuse it later.
 
@@ -17,7 +19,6 @@ CLI: ``uv run python -m vibe.modules.transcribe CLIP [--model small]``.
 
 import argparse
 import functools
-import logging
 import sys
 from pathlib import Path
 
@@ -26,23 +27,19 @@ from pydantic import ValidationError
 
 from vibe.config import Backend, model_backend
 from vibe.contract.common import Model
+from vibe.modules.backend import Analysis, register, run_analysis
+from vibe.modules.cache import ModuleError, read_json
 from vibe.storage import Storage, StorageError, VideoRef
-
-# shortcut: private storage helper; use a public one when storage exports it (shared file)
-from vibe.storage.store import _atomic_write
 from vibe.video import VideoError, extract_audio
 from vibe.video.audio import DEFAULT_SAMPLE_RATE
 
-logger = logging.getLogger(__name__)
-
 DEFAULT_MODEL = "small"
 COMPUTE_TYPE = "int8"  # shortcut: CPU int8 only; add a device option when someone needs a GPU
-TRANSCRIPT_VERSION = 1
-"""Bump when the cached format or the conversion below changes, so old caches aren't reused."""
 
 
-class TranscribeError(Exception):
-    """The backend can't transcribe (stub with no cache, package missing, not built)."""
+class TranscribeError(ModuleError):
+    """Whisper can't run here (package missing, not the local backend), or a cached transcript
+    isn't in this version's format."""
 
 
 class Word(Model):
@@ -67,9 +64,28 @@ class Transcript(Model):
     segments: list[Segment]
 
 
-def transcript_key(model: str = DEFAULT_MODEL) -> str:
-    """The analysis cache key, e.g. ``faster-whisper-small-int8@1``."""
-    return f"faster-whisper-{model}-{COMPUTE_TYPE}@{TRANSCRIPT_VERSION}"
+@register
+class TranscriptAnalysis(Analysis):
+    """Whisper on the video's whole audio track. The model server rebuilds it from ``settings``,
+    so they match ``__init__``'s arguments exactly."""
+
+    module = "transcript"
+    kind = "transcript"
+    version = 1
+    """Bump when the cached format or the conversion in ``transcribe`` changes."""
+
+    def __init__(self, model: str = DEFAULT_MODEL) -> None:
+        super().__init__(model=model)
+        self.model = model
+
+    @property
+    def name(self) -> str:
+        return f"faster-whisper-{self.model}-{COMPUTE_TYPE}"
+
+    def compute(self, video_path: Path) -> object:
+        samples, rate = extract_audio(video_path)
+        # "local" whatever VIBE_BACKEND says: this is the local run, here or on the model server.
+        return transcribe(samples, rate, self.model, backend="local").model_dump(mode="json")
 
 
 @functools.lru_cache(maxsize=2)
@@ -104,7 +120,7 @@ def transcribe(
         )
     segments, info = _whisper(model).transcribe(samples.astype(np.float32), word_timestamps=True)
     return Transcript(
-        model=transcript_key(model),
+        model=TranscriptAnalysis(model).key,
         language=info.language,
         segments=[
             Segment(
@@ -126,17 +142,15 @@ def cached_transcript(
 ) -> Transcript | None:
     """The cached transcript, or ``None`` if the video was never transcribed with ``model``.
 
-    An unreadable cache file (corrupt, or hand-copied in an old format) counts as a miss, so
-    ``local`` replaces it instead of every retry failing.
+    A cache file that's corrupt or in another format (e.g. hand-copied from an old version)
+    raises ``ModuleError`` naming it, like every F-08 cache: delete it to redo. It's never
+    replaced silently.
     """
-    path = storage.cache_path(video.sha256, "transcript", transcript_key(model))
-    if not path.exists():
+    key = TranscriptAnalysis(model).key
+    data = read_json(storage, video.sha256, TranscriptAnalysis.kind, key)
+    if data is None:
         return None
-    try:
-        return Transcript.model_validate_json(path.read_bytes())
-    except ValidationError as e:
-        logger.warning("ignoring unreadable cached transcript %s: %s", path, e)
-        return None
+    return _parse(data, storage.cache_path(video.sha256, TranscriptAnalysis.kind, key))
 
 
 def transcribe_video(
@@ -145,20 +159,24 @@ def transcribe_video(
     model: str = DEFAULT_MODEL,
     backend: Backend | None = None,
 ) -> Transcript:
-    """The video's transcript from the analysis cache, transcribing and caching it if needed."""
-    backend = backend or model_backend()
-    if (cached := cached_transcript(storage, video, model)) is not None:
-        return cached
-    path = storage.cache_path(video.sha256, "transcript", transcript_key(model))
-    if backend == "stub":
+    """The video's transcript from the analysis cache, made by ``backend`` and cached if needed.
+
+    Raises ``ModuleError`` when it can't (``NoAnalysis``: stub with nothing cached), and
+    ``NoAudioStream`` when the video has no audio (``local``; under ``remote`` that's the model
+    server's error, a ``RemoteError``).
+    """
+    result = run_analysis(storage, video, TranscriptAnalysis(model), backend)
+    return _parse(result.data, result.path)
+
+
+def _parse(data: object, path: Path) -> Transcript:
+    try:
+        return Transcript.model_validate(data)
+    except ValidationError as e:
         raise TranscribeError(
-            f"no cached transcript {path.name} for video {video.sha256[:12]}: run with "
-            f"VIBE_BACKEND=local, or copy cache/{video.sha256}/transcript/ from a teammate"
-        )
-    samples, rate = extract_audio(storage.video_path(video))
-    transcript = transcribe(samples, rate, model, backend)
-    _atomic_write(path, transcript.model_dump_json() + "\n")
-    return transcript
+            f"cached transcript {path} isn't in this version's format "
+            f"({e.error_count()} problems); delete it to redo"
+        ) from e
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -177,10 +195,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         ref = storage.add_video(args.video)
         transcript = transcribe_video(storage, ref, args.model)
-    except (TranscribeError, StorageError, VideoError, ValueError) as e:
+    except (ModuleError, StorageError, VideoError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
-    print(storage.cache_path(ref.sha256, "transcript", transcript_key(args.model)))
+    key = TranscriptAnalysis(args.model).key
+    print(storage.cache_path(ref.sha256, TranscriptAnalysis.kind, key))
     for s in transcript.segments:
         print(f"{s.start:8.2f} {s.end:8.2f}  {s.text}")
         print("    " + " ".join(f"{w.text}@{w.start:.2f}" for w in s.words))

@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from vibe.api import projects
 from vibe.api.app import app
-from vibe.modules.transcribe import Segment, Transcript, Word, transcript_key
+from vibe.modules.transcribe import Segment, Transcript, TranscriptAnalysis, Word
 from vibe.storage import Storage
 
 
@@ -271,7 +271,7 @@ HOLA = Transcript(
 def cache_transcript(storage: Storage, project_id: str, transcript: Transcript = HOLA) -> None:
     """Put a transcript in the analysis cache, as if the project's video had been transcribed."""
     video = storage.open_project(project_id).info.video
-    path = storage.cache_path(video.sha256, "transcript", transcript_key())
+    path = storage.cache_path(video.sha256, "transcript", TranscriptAnalysis().key)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(transcript.model_dump_json(), encoding="utf-8")
 
@@ -324,16 +324,28 @@ def test_transcribing_a_busy_project_is_409(
     assert projects._busy == set()
 
 
-def test_an_unreadable_cached_transcript_is_503_not_500(
-    client: TestClient, storage: Storage, clip: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("content", ["{not json", '{"old": "format"}'])
+def test_an_unreadable_cached_transcript_is_503_and_the_log_names_it(
+    client: TestClient,
+    storage: Storage,
+    clip: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    content: str,
 ) -> None:
-    monkeypatch.setenv("VIBE_BACKEND", "stub")
+    monkeypatch.setenv("VIBE_BACKEND", "local")  # still not replaced: F-08 never does that
     project_id = upload(client, clip)["project_id"]
-    cache_transcript(storage, project_id)
     video = storage.open_project(project_id).info.video
-    storage.cache_path(video.sha256, "transcript", transcript_key()).write_text("{not json")
+    path = storage.cache_path(video.sha256, "transcript", TranscriptAnalysis().key)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
 
-    assert client.post(f"/api/projects/{project_id}/transcript").status_code == 503
+    response = client.post(f"/api/projects/{project_id}/transcript")
+
+    assert response.status_code == 503
+    assert path.name in caplog.text and "delete it" in caplog.text
+    assert path.read_text() == content
+    assert projects._busy == set()
 
 
 def test_unreadable_audio_is_a_logged_500(
