@@ -158,6 +158,33 @@
     {"request": "cut the first 3 seconds, then pixelate faces", "expect": "clarify"},
     {"request": "cut 10 to 20", "expect": "clarify"},
     {"request": "mute 0:10 and 0:20", "expect": "clarify"},
-    {"request": "mute before 0:00", "expect": "clarify"}
+    {"request": "mute before 0:00", "expect": "clarify"},
+    {"request": "keep", "expect": "clarify"},
+    {"request": "keep faces blurred", "expect": "clarify"},
+    {"request": "keep everything except 0:10 to 0:20", "expect": "clarify"},
+    {"request": "keep 10 to 20", "expect": "clarify"},
+    {"request": "keep 0:10 to 0:20 and keep 0:30 to 0:40", "expect": "clarify"},
+    {
+      "request": "keep only 0:10 to 0:20",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "keep_range", "args": {"time_range": {"start": 10, "end": 20}}}
+      ]
+    },
+    {
+      "request": "only keep 0:05-0:08",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "keep_range", "args": {"time_range": {"start": 5, "end": 8}}}
+      ]
+    },
+    {
+      "request": "keep the first half",
+      "expect": "plan",
+      "calls": [
+        {"step_id": "s1", "tool": "resolve_time", "args": {"phrase": "first half"}},
+        {"step_id": "s2", "tool": "keep_range", "args": {"time_range": {"$ref": "s1"}}}
+      ]
+    }
   ]
 }

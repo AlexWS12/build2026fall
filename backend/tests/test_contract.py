@@ -214,6 +214,20 @@ def test_speaker_mutes_are_separate_from_all_audio_mutes() -> None:
     assert [(m.speaker, m.start, m.end) for m in fold(ops).mutes] == [("spk_1", 0, 10)]
 
 
+def test_mutes_at_answers_per_frame() -> None:
+    state = fold(
+        [
+            Mute(request_id="r_1", source="agent", speaker="spk_1", time_range=tr(0, 10)),
+            Mute(request_id="r_2", source="agent", time_range=tr(5, 6)),
+            Mute(request_id="r_3", source="agent", time_range=tr(8)),
+        ]
+    )
+    assert [m.speaker for m in state.mutes_at(5.5)] == ["spk_1", None]
+    assert [m.speaker for m in state.mutes_at(6)] == ["spk_1"]  # the end is excluded
+    assert [m.request_id for m in state.mutes_at(50)] == ["r_3"]  # open-ended
+    assert state.mutes_at(-1) == []
+
+
 def test_audio_filter_add_and_remove() -> None:
     ops = [
         AddAudioFilter(request_id="r_1", source="agent", filter="denoise", strength=0.5),
@@ -313,6 +327,31 @@ def test_log_refuses_a_bad_op_and_stays_unchanged() -> None:
     with pytest.raises(ContractError):
         log.append(Undo(request_id="r_2", source="user", undo_request_id="r_9"))
     assert len(log) == 1
+
+
+def test_log_appends_a_batch_in_order() -> None:
+    log = OpLog([mask("r_1", ["a"])])
+    batch = [mask("r_2", ["b"]), mask("r_2", ["c"])]
+
+    appended = log.append_many(batch)
+
+    assert appended == batch
+    assert list(log.ops)[1:] == batch
+
+
+def test_log_refuses_a_whole_batch_when_any_op_is_bad() -> None:
+    log = OpLog([mask("r_1", ["a"])])
+    batch = [mask("r_2", ["b"]), Undo(request_id="r_2", source="user", undo_request_id="r_9")]
+
+    with pytest.raises(ContractError):
+        log.append_many(batch)
+
+    assert len(log) == 1  # not even the good first op
+
+
+def test_log_refuses_an_empty_batch() -> None:
+    with pytest.raises(ValueError, match="no ops"):
+        OpLog().append_many([])
 
 
 def test_duplicate_op_ids_are_rejected() -> None:

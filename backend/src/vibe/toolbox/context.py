@@ -4,16 +4,23 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from vibe.contract import Op, Track
+from vibe.contract import Op, TimelineState, Track
 from vibe.contract.common import Source
 from vibe.modules.transcribe import Transcript
 
 
 class OpSink(Protocol):
     """Where edit tools write. ``contract.OpLog`` (in memory) and ``storage.Project`` (on disk)
-    both fit: ``append`` validates the op against the whole log and raises before writing."""
+    both fit: ``append`` validates the op against the whole log and raises before writing.
+    ``append_many`` does the same for several ops as one unit, so a request that writes more
+    than one op (``keep_range``) lands whole or not at all. ``state`` is the folded timeline,
+    for tools that check what's there first (``unmute``, ``keep_range``)."""
 
     def append(self, op: Op) -> Op: ...
+
+    def append_many(self, ops: Sequence[Op]) -> list[Op]: ...
+
+    def state(self) -> TimelineState: ...
 
 
 @dataclass(frozen=True)
@@ -24,7 +31,7 @@ class ToolContext:
     log: OpSink | None = None
     """The timeline edit tools write to. Query tools don't need one."""
     duration: float | None = None
-    """Video length in seconds, for ``resolve_time``."""
+    """Video length in seconds, for ``resolve_time`` and ``keep_range``."""
     tracks: Sequence[Track] | None = None
     """Tracks from the analysis cache (stub: given by the caller; real: F-08 / F-10). ``None``
     means the video hasn't been analysed; ``[]`` means it was and nothing was found."""

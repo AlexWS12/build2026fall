@@ -5,6 +5,7 @@ argument whose value is ``{"$ref": "s1"}`` means "the result of step s1", e.g. t
 ``find_objects`` found. Refs are only allowed as whole argument values.
 """
 
+from collections.abc import Iterable
 from typing import Any
 
 from pydantic import Field
@@ -43,3 +44,18 @@ def as_ref(value: Any) -> str | None:
     if isinstance(value, dict) and value.keys() == {REF_KEY} and isinstance(value[REF_KEY], str):
         return value[REF_KEY]
     return None
+
+
+TOO_MANY_KEEPS = (
+    "more than one keep_range call: each keeps only its own range, so only their overlap "
+    "would be left"
+)
+
+
+def too_many_keeps(calls: Iterable[ToolCall]) -> bool:
+    """A plan may keep one range at most: each keep cuts what the other keeps.
+
+    Shared by the template parser (which declines such a request) and ``validate_plan`` (which
+    refuses such a plan), so the two can't drift apart.
+    """
+    return sum(call.tool == "keep_range" for call in calls) > 1

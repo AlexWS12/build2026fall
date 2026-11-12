@@ -14,7 +14,9 @@ def test_the_registry_has_the_planners_tools() -> None:
         "find_speech",
         "add_mask",
         "cut_range",
+        "keep_range",
         "mute",
+        "unmute",
         "denoise",
     }
 
