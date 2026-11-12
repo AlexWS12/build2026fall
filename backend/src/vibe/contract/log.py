@@ -5,7 +5,7 @@ first. Appending an edit is appending a line.
 """
 
 import json
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 
 from vibe.contract.common import SCHEMA_VERSION, ContractError, Source
 from vibe.contract.fold import History, fold, history
@@ -37,6 +37,15 @@ class OpLog:
         fold(candidate)  # raises ContractError (or ValueError) and leaves the log unchanged
         self._ops.append(op)
         return op
+
+    def append_many(self, ops: Sequence[Op]) -> list[Op]:
+        """Add several ops as one unit: all of them, or none if any would break the contract."""
+        if not ops:
+            raise ValueError("append_many: no ops to append")
+        batch = list(ops)
+        fold([*self._ops, *batch])  # raises and leaves the log unchanged
+        self._ops.extend(batch)
+        return batch
 
     def history(self) -> History:
         return history(self._ops)

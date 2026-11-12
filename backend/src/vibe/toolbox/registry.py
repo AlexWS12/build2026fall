@@ -52,6 +52,20 @@ _TOOLS = (
         ref_args={"time_range": "time_range"},
     ),
     ToolSpec(
+        name="keep_range",
+        kind="edit",
+        description=(
+            "Keep only a time range: cut everything before and after it. Times are source time, "
+            "and earlier cuts stay cut. Needs the video duration; refuses a range past the end "
+            "or the whole video."
+        ),
+        args=tools.KeepRangeArgs,
+        result=tools.EditResult,
+        returns="none",
+        run=tools.keep_range,
+        ref_args={"time_range": "time_range"},
+    ),
+    ToolSpec(
         name="mute",
         kind="edit",
         description="Silence all audio, or one speaker, over a time range.",
@@ -59,6 +73,16 @@ _TOOLS = (
         result=tools.EditResult,
         returns="none",
         run=tools.mute,
+        ref_args={"time_range": "time_range"},
+    ),
+    ToolSpec(
+        name="unmute",
+        kind="edit",
+        description="Bring back the sound a mute silenced, over a time range.",
+        args=tools.UnmuteArgs,
+        result=tools.UnmuteResult,
+        returns="none",
+        run=tools.unmute,
         ref_args={"time_range": "time_range"},
     ),
     ToolSpec(
