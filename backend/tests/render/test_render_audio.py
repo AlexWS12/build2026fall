@@ -1,11 +1,13 @@
-"""Audio: mutes silence exactly their samples, cuts remove exactly theirs."""
+"""Audio: mutes silence exactly their samples, cuts remove exactly theirs, denoise changes only
+its spans."""
 
 import numpy as np
 import pytest
 
 from vibe.contract import AddAudioFilter, Cut, Mute, Op, OpLog, TimelineState, TimeRange
+from vibe.modules.denoise import learn_noise
 from vibe.render import UnsupportedEdit
-from vibe.render.audio import apply_audio_edits, render_audio
+from vibe.render.audio import FADE_SECONDS, DenoiseMix, apply_audio_edits, render_audio
 
 RATE = 10  # 10 samples per second keeps the sample numbers easy to read
 
@@ -100,10 +102,102 @@ def test_speaker_mute_is_refused() -> None:
         render_audio(SAMPLES, RATE, state_of(mute(0.0, 1.0, speaker="spk_1")))
 
 
-def test_audio_filter_is_refused() -> None:
-    denoise = AddAudioFilter(request_id="r", source="agent", filter="denoise")
-    with pytest.raises(UnsupportedEdit, match="doesn't apply them yet"):
-        render_audio(SAMPLES, RATE, state_of(denoise))
+# --- Denoise (F-33b) -------------------------------------------------------------------
+
+NOISY_RATE = 16000
+
+
+def denoise_op(
+    start: float = 0.0, end: float | None = None, strength: float | None = None
+) -> AddAudioFilter:
+    return AddAudioFilter(
+        request_id="r",
+        source="agent",
+        filter="denoise",
+        strength=strength,
+        time_range=TimeRange(start=start, end=end),
+    )
+
+
+def noisy_tone(seconds: float = 4.0) -> tuple[np.ndarray, np.ndarray]:
+    """Stereo: a 440 Hz tone on for half of every second, plus hiss; and the "tone off" mask."""
+    t = np.arange(round(seconds * NOISY_RATE)) / NOISY_RATE
+    on = (t % 1.0) < 0.5
+    tone = 0.3 * np.sin(2 * np.pi * 440 * t) * on
+    hiss = 0.03 * np.random.default_rng(0).standard_normal((len(t), 2))
+    return (tone[:, None] + hiss).astype(np.float32), ~on
+
+
+def level(x: np.ndarray) -> float:
+    return float(10 * np.log10(np.mean(np.square(x, dtype=np.float64)) + 1e-20))
+
+
+def test_denoise_turns_the_hiss_down_inside_its_span_only() -> None:
+    noisy, pauses = noisy_tone()
+    out = render_audio(noisy, NOISY_RATE, state_of(denoise_op(2.0, None)))
+
+    t = np.arange(len(noisy)) / NOISY_RATE
+    after, before = pauses & (t >= 2.05), t < 1.95
+    assert level(out[after]) < level(noisy[after]) - 6
+    np.testing.assert_array_equal(out[before], noisy[before])  # untouched, sample for sample
+    assert out.shape == noisy.shape
+
+
+def test_denoise_eases_in_at_its_edges() -> None:
+    """The gated sound is blended in over FADE_SECONDS before the span, so the edge doesn't
+    click, and the span itself gets the full effect."""
+    noisy, _ = noisy_tone()
+    out = render_audio(noisy, NOISY_RATE, state_of(denoise_op(2.0, None)))
+
+    edge, fade = 2 * NOISY_RATE, round(FADE_SECONDS * NOISY_RATE)
+    change = np.abs(out - noisy).max(axis=1)
+    assert change[: edge - fade].max() == 0
+    assert 0 < change[edge - fade // 2] and change[edge - fade + 1 : edge].max() > 0
+
+
+def test_half_strength_is_between_none_and_full() -> None:
+    noisy, pauses = noisy_tone()
+    half = render_audio(noisy, NOISY_RATE, state_of(denoise_op(strength=0.5)))
+    full = render_audio(noisy, NOISY_RATE, state_of(denoise_op()))
+
+    assert level(full[pauses]) < level(half[pauses]) < level(noisy[pauses])
+
+
+def test_where_spans_overlap_the_strongest_wins() -> None:
+    noisy, _ = noisy_tone()
+    both = render_audio(
+        noisy, NOISY_RATE, state_of(denoise_op(strength=0.2), denoise_op(strength=1.0))
+    )
+    full = render_audio(noisy, NOISY_RATE, state_of(denoise_op(strength=1.0)))
+
+    np.testing.assert_allclose(both, full, atol=1e-6)
+
+
+def test_denoise_runs_before_mutes_and_cuts() -> None:
+    noisy, _ = noisy_tone()
+    out = render_audio(noisy, NOISY_RATE, state_of(denoise_op(), mute(1.0, 2.0), cut(3.0, None)))
+
+    assert len(out) == 3 * NOISY_RATE
+    assert not out[NOISY_RATE : 2 * NOISY_RATE].any()  # the mute is still exactly silent
+
+
+@pytest.mark.parametrize("size", [1601, 4800])
+def test_chunked_like_export_gives_the_whole_clip_result(size: int) -> None:
+    """What export does: DenoiseMix a chunk at a time, then mutes and cuts on what comes out,
+    numbered by output sample. Must match the whole clip at once, edges and fades included."""
+    noisy, _ = noisy_tone()
+    state = state_of(denoise_op(0.5, 3.2, strength=0.7), mute(1.0, 1.25), cut(2.0, 2.5))
+    mix = DenoiseMix(learn_noise([noisy], NOISY_RATE), state, noisy.dtype)
+
+    outputs = [mix.push(noisy[i : i + size]) for i in range(0, len(noisy), size)]
+    parts, first = [], 0
+    for samples in [*outputs, mix.finish()]:
+        parts.append(apply_audio_edits(samples, NOISY_RATE, state, first_sample=first))
+        first += len(samples)
+
+    np.testing.assert_allclose(
+        np.concatenate(parts), render_audio(noisy, NOISY_RATE, state), atol=1e-6
+    )
 
 
 # --- Fades at the edges (RATE above is too low for a fade, so these use 1 kHz) ------------

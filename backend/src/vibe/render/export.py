@@ -22,7 +22,14 @@ from av.container import OutputContainer
 from av.video.reformatter import ColorRange, Colorspace
 
 from vibe.contract import TimelineState, Track
-from vibe.render.audio import apply_audio_edits, check_audio
+from vibe.modules.denoise import (
+    DenoiseError,
+    NoiseProfile,
+    ProfileSource,
+    check_backend,
+    learn_noise_from_file,
+)
+from vibe.render.audio import DenoiseMix, apply_audio_edits, check_audio, denoise_spans
 from vibe.render.errors import RenderError
 from vibe.render.frame import FrameRenderer, RenderIssue
 from vibe.video import AudioInfo, FrameIndex, VideoInfo, VideoReader, iter_audio_chunks, probe
@@ -60,8 +67,13 @@ def export(
     state: TimelineState,
     tracks: Iterable[Track],
     out_path: str | Path,
+    noise_profile: ProfileSource | None = None,
 ) -> RenderResult:
     """Render ``source`` with ``state`` and ``tracks`` into an MP4 at ``out_path``.
+
+    ``noise_profile(sample_rate, layout)`` gives the noise profile for denoise spans, e.g. from
+    the analysis cache (``cached_noise_profile``). Without it, export learns one from ``source``
+    first, which reads the sound twice.
 
     Raises ``UnsupportedEdit`` before anything is written if the timeline has an edit this
     renderer can't apply yet, ``RenderError`` if the output can't be made (e.g. the cuts remove
@@ -76,13 +88,14 @@ def export(
     check_audio(state)
     renderer = FrameRenderer(state, tracks)
     info = probe(source)
+    profile = _profile(source, info, state, noise_profile)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fd, name = tempfile.mkstemp(dir=out_path.parent, prefix=f".{out_path.stem}.", suffix=".mp4")
     os.close(fd)
     tmp = Path(name)
     try:
-        frames, duration = _write(source, info, state, renderer, tmp)
+        frames, duration = _write(source, info, state, renderer, tmp, profile)
         os.replace(tmp, out_path)
     except BaseException:
         tmp.unlink(missing_ok=True)
@@ -90,8 +103,41 @@ def export(
     return RenderResult(out_path, frames, duration, tuple(renderer.issues))
 
 
+def _profile(
+    source: Path, info: VideoInfo, state: TimelineState, given: ProfileSource | None
+) -> NoiseProfile | None:
+    """Pass 1 of denoise, before anything is written: the profile at the output's rate and
+    layout, or None when there's nothing to denoise."""
+    if info.audio is None or not denoise_spans(state):
+        return None
+    try:
+        check_backend()
+    except DenoiseError as e:
+        raise RenderError(f"can't apply denoise: {e}") from e
+    rate, layout = _audio_format(info.audio)
+    profile = given(rate, layout) if given else learn_noise_from_file(source, rate, layout)
+    channels = 1 if layout == "mono" else 2
+    if profile.sample_rate != rate or profile.channels != channels:
+        raise RenderError(
+            f"the noise profile is for {profile.sample_rate} Hz, {profile.channels} channels; "
+            f"the export is {rate} Hz, {channels} channels"
+        )
+    return profile
+
+
+def _audio_format(audio: AudioInfo) -> tuple[int, str]:
+    """The output's sample rate and layout. The AAC encoder refuses some layouts, and some files
+    don't name theirs ("2 channels"), so the output is always mono or stereo."""
+    return _encodable_rate(audio.sample_rate), "mono" if audio.channels == 1 else "stereo"
+
+
 def _write(
-    source: Path, info: VideoInfo, state: TimelineState, renderer: FrameRenderer, path: Path
+    source: Path,
+    info: VideoInfo,
+    state: TimelineState,
+    renderer: FrameRenderer,
+    path: Path,
+    profile: NoiseProfile | None,
 ) -> tuple[int, float]:
     index = FrameIndex.build(source)
     # yuv420p stores colour at half resolution, so it needs an even width and height.
@@ -111,7 +157,7 @@ def _write(
             context.color_primaries, context.color_trc = BT709_TAG, BT709_TAG
             sound = None
             if info.audio is not None:
-                sound = _AudioWriter(out, source, info.audio, index.end, state)
+                sound = _AudioWriter(out, source, info.audio, index.end, state, profile)
 
             frames, last_pts = 0, -1
             for frame in reader.iter_frames():
@@ -164,29 +210,45 @@ class _AudioWriter:
         audio: AudioInfo,
         end: float,
         state: TimelineState,
+        profile: NoiseProfile | None,
     ) -> None:
         self._out = out
-        self._rate = _encodable_rate(audio.sample_rate)
-        # The AAC encoder refuses some layouts, and some files don't name theirs ("2 channels"),
-        # so the output is always mono or stereo.
-        self._layout = "mono" if audio.channels == 1 else "stereo"
+        self._rate, self._layout = _audio_format(audio)
         self._stream = out.add_stream(AUDIO_CODEC, rate=self._rate, layout=self._layout)
-        self._chunks = self._edited_chunks(source, round(end * self._rate), state)
+        self._chunks = self._edited_chunks(source, round(end * self._rate), state, profile)
         self._written = 0
 
     def _edited_chunks(
-        self, source: Path, last_sample: int, state: TimelineState
+        self,
+        source: Path,
+        last_sample: int,
+        state: TimelineState,
+        profile: NoiseProfile | None,
     ) -> Iterator[np.ndarray]:
-        """The sound up to ``last_sample`` (none past the last frame), muted and cut."""
-        first = 0
+        """The sound up to ``last_sample`` (none past the last frame), denoised, muted and cut.
+
+        Denoise hands back sound about one FFT frame behind what it's given; ``first`` counts
+        what comes out, so mutes and cuts still land on the right samples.
+        """
+        mix: DenoiseMix | None = None
+        read = first = 0
         for chunk in iter_audio_chunks(
             source, AUDIO_CHUNK_SECONDS, self._rate, mono=False, layout=self._layout
         ):
-            if first >= last_sample:
-                return
-            samples = chunk.samples[: last_sample - first]
-            yield apply_audio_edits(samples, self._rate, state, first_sample=first)
-            first += len(chunk.samples)
+            if read >= last_sample:
+                break
+            samples = chunk.samples[: last_sample - read]
+            read += len(samples)
+            if profile is not None:
+                mix = mix or DenoiseMix(profile, state, samples.dtype)
+                samples = mix.push(samples)
+            if len(samples):
+                yield apply_audio_edits(samples, self._rate, state, first_sample=first)
+                first += len(samples)
+        if mix is not None:
+            samples = mix.finish()
+            if len(samples):
+                yield apply_audio_edits(samples, self._rate, state, first_sample=first)
 
     def write_until(self, time: float) -> None:
         """Encode sound up to ``time`` seconds of output."""

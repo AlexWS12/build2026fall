@@ -1,4 +1,5 @@
-"""The audio side of a render: silence the muted spans, then remove the cut ones.
+"""The audio side of a render: denoise the filtered spans, silence the muted ones, then remove
+the cut ones.
 
 Works on samples from ``vibe.video.extract_audio``, where sample 0 is at source time 0, so a
 span's source times map straight to sample numbers. Video frames are dropped over the same
@@ -7,14 +8,21 @@ source ranges, so picture and sound stay in sync. Pure, like the per-frame path.
 The sound fades out over ``FADE_SECONDS`` before each mute and each cut, and back in after, so
 an edit doesn't click. The fades sit outside the edited range: a muted span stays exactly
 silent, and the samples a cut keeps are the same ones.
+
+Denoise (F-33b) runs on the source sound first, through ``DenoiseMix``: a stream, so an export
+never holds the whole clip. The gate runs over the whole stream and is mixed in over each
+filter span at its strength, with the same ``FADE_SECONDS`` ramps outside the span.
 """
 
 from collections.abc import Callable
 
 import numpy as np
 
-from vibe.contract import TimelineState
+from vibe.contract import AudioFilterSpan, TimelineState
+from vibe.modules.denoise import NoiseGate, NoiseProfile, learn_noise
 from vibe.render.errors import UnsupportedEdit
+
+SUPPORTED_FILTERS = frozenset({"denoise"})
 
 FADE_SECONDS = 0.01
 """How long the sound fades out before a mute or a cut, and back in after. 10 ms is short
@@ -29,19 +37,82 @@ def check_audio(state: TimelineState) -> None:
             f"the timeline mutes one speaker ({', '.join(speakers)}); that needs to know who "
             "speaks when, and comes with F-32"
         )
-    if state.audio_filters:
-        filters = sorted({f.filter for f in state.audio_filters})
+    unknown = sorted({f.filter for f in state.audio_filters} - SUPPORTED_FILTERS)
+    if unknown:
         raise UnsupportedEdit(
-            f"the timeline has audio filters ({', '.join(filters)}), and the renderer doesn't "
-            "apply them yet"
+            f"the timeline has audio filters ({', '.join(unknown)}) the renderer doesn't apply yet"
         )
 
 
+def denoise_spans(state: TimelineState) -> list[AudioFilterSpan]:
+    return [f for f in state.audio_filters if f.filter == "denoise"]
+
+
 def render_audio(samples: np.ndarray, sample_rate: int, state: TimelineState) -> np.ndarray:
-    """A whole clip's ``samples`` ((n,) or (n, channels)) with the mutes silenced and the cuts
-    removed. Returns a new array; ``samples`` is left as it was."""
+    """A whole clip's ``samples`` ((n,) or (n, channels)) denoised, with the mutes silenced and
+    the cuts removed. Returns a new array; ``samples`` is left as it was. Denoise learns its
+    profile from ``samples`` themselves."""
     check_audio(state)
+    if denoise_spans(state):
+        mix = DenoiseMix(learn_noise([samples], sample_rate), state, samples.dtype)
+        samples = np.concatenate([mix.push(samples), mix.finish()])
     return apply_audio_edits(samples, sample_rate, state)
+
+
+class DenoiseMix:
+    """The denoise filter spans over a stream of source sound, one chunk at a time.
+
+    Like ``NoiseGate``, ``push`` returns the samples that are final, lined up with the input
+    (sample ``i`` out is source sample ``i``), and ``finish`` the rest. Outside every span the
+    output is the input exactly; inside, the gated sound blended in at the span's strength (the
+    strongest where spans overlap), which is what ``denoise(strength=s)`` does.
+    """
+
+    def __init__(self, profile: NoiseProfile, state: TimelineState, dtype: object) -> None:
+        self._rate = profile.sample_rate
+        self._spans = [
+            (s.start, s.end, 1.0 if s.strength is None else s.strength)
+            for s in denoise_spans(state)
+        ]
+        self._gate = NoiseGate(profile, 1.0, dtype)
+        self._dry: list[np.ndarray] = []  # input not yet matched by gate output
+        self._first = 0  # source sample number of the next output sample
+
+    def push(self, chunk: np.ndarray) -> np.ndarray:
+        self._dry.append(chunk)
+        return self._mix(self._gate.push(chunk))
+
+    def finish(self) -> np.ndarray:
+        return self._mix(self._gate.finish())
+
+    def _mix(self, wet: np.ndarray) -> np.ndarray:
+        n = len(wet)
+        dry = np.concatenate(self._dry) if self._dry else wet[:0]
+        self._dry = [dry[n:]]
+        dry = dry[:n]
+        weight = self._weights(n)
+        self._first += n
+        if weight is None:
+            return dry.copy()
+        w = weight if dry.ndim == 1 else weight[:, None]
+        return (dry + w * (wet - dry)).astype(dry.dtype)
+
+    def _weights(self, n: int) -> np.ndarray | None:
+        """Per sample, how much of the gated sound to use: the span's strength inside, ramping
+        down to 0 over ``FADE_SECONDS`` after each edge. None when no span reaches the chunk."""
+        fade = round(FADE_SECONDS * self._rate)
+        lo, hi = self._first, self._first + n
+        weight: np.ndarray | None = None
+        for start, end, strength in self._spans:
+            first = round(start * self._rate)
+            last = hi + fade if end is None else round(end * self._rate)
+            if last + fade <= lo or first - fade >= hi:
+                continue
+            i = np.arange(lo, hi, dtype=np.float64)
+            distance = np.maximum(np.maximum(first - i, i - last + 1), 0)
+            w = strength * np.clip(1 - distance / (fade + 1), 0, 1)
+            weight = w if weight is None else np.maximum(weight, w)
+        return weight
 
 
 def apply_audio_edits(
