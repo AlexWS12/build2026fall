@@ -42,10 +42,17 @@ class DescriberError(Exception):
 
 class Describer(Protocol):
     """Looks at the video so a tool doesn't have to: does each track match ``description``
-    ("in red", "wearing a hat")? ``vibe.modules.vision.describe.VideoDescriber`` fits. Returns
-    a verdict per track id and raises :class:`DescriberError` if it can't look."""
+    ("in red", "wearing a hat", "in grey with a bag")? ``scene`` is every track of the video,
+    for descriptions about other things ("with a bag").
+    ``vibe.modules.vision.describe.VideoDescriber`` fits. Returns a verdict per track id and
+    raises :class:`DescriberError` if it can't look."""
 
-    def ask(self, tracks: Sequence[Track], description: str) -> Mapping[str, Verdict]: ...
+    def ask(
+        self,
+        tracks: Sequence[Track],
+        description: str,
+        scene: Sequence[Track] | None = None,
+    ) -> Mapping[str, Verdict]: ...
 
 
 @dataclass(frozen=True)

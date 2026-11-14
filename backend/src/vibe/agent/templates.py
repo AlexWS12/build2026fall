@@ -144,22 +144,52 @@ Only people: "faces except the person in red" needs faces linked to people, whic
 
 No "except me" / "except mine": that's identity (F-52), not something a description can check."""
 
-_DANGLING = frozenset({"in", "with", "wearing", "dressed", "a", "an", "the"})
-# TODO(F-13), known gaps (handoff "Improvements"): a negated time ("except … from 0:10") reads as
-# the opposite range, the first of two time ranges is dropped, compound requests fold into one
-# description, and non-description phrases ("in the video", "with a strong blur", "in 0:10")
-# become whole-clip descriptions. The planner should decline these instead of guessing.
+_SURE_ONLY = re.compile(
+    r",?\s*(?:(?:but|and)\s+)?(?:only\s+(?:if|when)\s+(?:you(?:'re|\s+are)\s+)?(?:sure|certain)"
+    r"|only\s+the\s+(?:sure|certain)\s+(?:ones|matches)"
+    r"|(?:the\s+)?(?:sure|certain)\s+(?:ones|matches)\s+only"
+    r"|(?:skip|not|without)\s+the\s+unsure(?:\s+ones)?)$"
+)
+"""The user giving up "unsure = masked" for this request, in so many words. Nothing vaguer
+("only the person in red") counts: that may just be emphasis."""
+
+_DANGLING = frozenset(
+    {"in", "with", "wearing", "dressed", "a", "an", "the", "and", "or", "of"}
+    | {"from", "to", "at", "for", "until"}
+)
+_NOT_A_DESCRIPTION = frozenset(
+    # a negation: "in red except from 0:10" would mask the opposite of what was asked
+    "except but not excluding unless outside other apart "
+    # someone else: a second target ("in red and the person in blue") or identity (F-52)
+    "person people persons one ones everyone everybody face faces plate plates "
+    "me my mine myself i him her his hers them their us our you your we he she they it "
+    # where, not what they look like: positions come from the boxes, which nothing reads yet
+    "video clip frame scene shot background foreground picture footage image left right "
+    "middle center centre front back bottom side corner here there "
+    # the effect, not the target: "with a strong blur"
+    "blur blurs blurred blurring blurry pixelate pixelated pixelation pixels box boxes "
+    "effect effects mask masks strength intensity".split()
+)
+"""A word that means the text after the person noun isn't (only) a description of how they
+look. The template declines, so the planner asks or the LLM reads it, instead of masking by a
+description nobody gave."""
 
 
-def _described(rest: str, steps: _Steps) -> tuple[str, object] | None:
-    """Split "in red from 0:10 to 0:20" into a ``find_by_description`` step and its time.
+def _described(rest: str, verb: str, steps: _Steps) -> tuple[str, object, bool] | None:
+    """Split "in red from 0:10 to 0:20" into a ``find_by_description`` step, its time, and
+    whether the mask should follow the target (``add_mask``'s ``while_tracked``).
 
     The time is the longest ending that reads as a time phrase; the description is what's
-    before it, kept in the user's words for whatever checks it."""
+    before it, kept in the user's words for whatever checks it. One described target is
+    followed; "everyone except ..." hides bystanders, so their masks hold for the whole range.
+    """
     match = _DESCRIBED.fullmatch(rest.strip())
     if match is None:
         return None
     exclude, text = match.groups()
+    sure_only = _SURE_ONLY.search(text)
+    if sure_only:
+        text = text[: sure_only.start()]
     words = text.split()
     when: object = _NO_TIME
     for i in range(1, len(words)):
@@ -167,26 +197,43 @@ def _described(rest: str, steps: _Steps) -> tuple[str, object] | None:
         if found is not None:
             words, when = words[:i], found
             break
+    description = " ".join(words).strip(" ,")  # the user's words, commas inside included
+    words = [w for w in (word.strip(",") for word in words) if w]
     if len(words) < 2 or words[-1] in _DANGLING:
         return None  # "with the" before a time, or "in" alone: nothing to look for
-    args: dict[str, Any] = {"label": "person", "description": " ".join(words)}
+    if set(words) & _NOT_A_DESCRIPTION or _TIME_WORDS.search(description):
+        return None  # a second time ("... from 0:10 to 0:20 and from 0:30"), a place, an effect
+    if verb.endswith("box") and words == ["in", "black"]:
+        return None  # "box everyone in black": a black box, or the people in black?
+    if exclude and sure_only:
+        return None  # sure of what: who to leave out, or who to hide? Ask.
+    args: dict[str, Any] = {"label": "person", "description": description}
     if exclude:
         args["exclude"] = True
-    return steps.add("find_by_description", args), when
+    if sure_only:
+        args["unsure"] = "leave"
+    return steps.add("find_by_description", args), when, not exclude
 
 
 def _mask(match: re.Match[str], steps: _Steps) -> Matched:
     verb, noun, rest = match.groups()
     when = _time(rest)
+    follow = False
     if when is None:
-        described = _described(rest, steps) if _LABELS[noun] == "person" else None
+        described = _described(rest, verb, steps) if _LABELS[noun] == "person" else None
         if described is None:
             return None
-        targets, when = described
+        targets, when, follow = described
     else:
         targets = steps.add("find_objects", {"label": _LABELS[noun]})
-    effect = {"type": _EFFECTS[verb.replace("black", "").strip()]}
-    steps.add("add_mask", {"targets": ref(targets), "effect": effect, **_time_args(when, steps)})
+    args: dict[str, Any] = {
+        "targets": ref(targets),
+        "effect": {"type": _EFFECTS[verb.replace("black", "").strip()]},
+        **_time_args(when, steps),
+    }
+    if follow:
+        args["while_tracked"] = True
+    steps.add("add_mask", args)
     return _scope(when)
 
 

@@ -9,6 +9,7 @@ import re
 import unicodedata
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from typing import Literal
 
 from pydantic import Field
 
@@ -72,15 +73,22 @@ class FindByDescriptionArgs(Model):
         description='False: the tracks that match ("the person in red"). True: every track '
         'with the label except the ones that match ("everyone except the person in red").',
     )
+    unsure: Literal["mask", "leave"] = Field(
+        default="mask",
+        description='What to do with tracks the answer is unsure for. "mask" (the default, '
+        'privacy fails closed): they are returned too. "leave": only sure answers are returned; '
+        "use it only when the user asks for sure matches only.",
+    )
 
 
 class FindByDescriptionResult(Model):
     track_ids: list[str]
     count: int
     unsure: list[str] = Field(
-        description="The ids in track_ids that are there because the answer was unsure, so "
-        "the agent can say so and the review queue can show them."
+        description="The tracks the answer was unsure for, so the agent can say so and the "
+        'review queue can show them. In track_ids unless the request said unsure="leave".'
     )
+    left_out: int = Field(description="Tracks with the label that are not in track_ids.")
 
 
 def find_by_description(args: FindByDescriptionArgs, ctx: ToolContext) -> FindByDescriptionResult:
@@ -89,6 +97,9 @@ def find_by_description(args: FindByDescriptionArgs, ctx: ToolContext) -> FindBy
     Unsure tracks are returned either way (privacy fails closed): "blur the person in red"
     masks anyone who might be them, and "blur everyone except the person in red" leaves out
     only the tracks that surely are. A track the describer says nothing about is unsure.
+
+    ``unsure="leave"`` is the user saying "only the ones you're sure about": unsure tracks are
+    reported but not returned. Nobody sure is then an error, not an empty answer.
     """
     name = "find_by_description"
     if ctx.tracks is None:
@@ -99,9 +110,9 @@ def find_by_description(args: FindByDescriptionArgs, ctx: ToolContext) -> FindBy
         raise ToolError(f"{name}: nothing here can look at the video to check {args.description!r}")
     candidates = [t for t in ctx.tracks if t.label == args.label]
     if not candidates:
-        return FindByDescriptionResult(track_ids=[], count=0, unsure=[])
+        return FindByDescriptionResult(track_ids=[], count=0, unsure=[], left_out=0)
     try:
-        verdicts = ctx.describer.ask(candidates, args.description)
+        verdicts = ctx.describer.ask(candidates, args.description, ctx.tracks)
     except DescriberError as exc:
         raise ToolError(f"{name}: couldn't check {args.description!r}: {exc}") from None
     leave_out = "yes" if args.exclude else "no"
@@ -110,10 +121,19 @@ def find_by_description(args: FindByDescriptionArgs, ctx: ToolContext) -> FindBy
         verdict = verdicts.get(track.track_id, "unsure")
         if verdict == leave_out:
             continue
-        ids.append(track.track_id)
         if verdict not in ("yes", "no"):
             unsure.append(track.track_id)
-    return FindByDescriptionResult(track_ids=ids, count=len(ids), unsure=unsure)
+            if args.unsure == "leave":
+                continue
+        ids.append(track.track_id)
+    if not ids and unsure:
+        raise ToolError(
+            f"{name}: no {args.label} surely matches {args.description!r}, and {len(unsure)} "
+            "might; ask again without 'only if sure' to hide those too"
+        )
+    return FindByDescriptionResult(
+        track_ids=ids, count=len(ids), unsure=unsure, left_out=len(candidates) - len(ids)
+    )
 
 
 # --- resolve_time -------------------------------------------------------------------------
@@ -220,6 +240,13 @@ class AddMaskArgs(Model):
     targets: list[str] = Field(min_length=1, description="Track ids to hide.")
     effect: Effect
     time_range: TimeRange | None = Field(default=None, description="Null = the whole clip.")
+    while_tracked: bool = Field(
+        default=False,
+        description="False: every target stays hidden for the whole range; where the tracker "
+        "lost it, its last box is held. True: each target is hidden only while its track "
+        "exists (plus up to half a second each side), so the mask follows it and doesn't stay "
+        "behind. For one described target, not for hiding everyone.",
+    )
 
 
 class CutRangeArgs(Model):
@@ -297,15 +324,64 @@ def _write(tool: str, ops: Sequence[Op], ctx: ToolContext) -> EditResult:
     return EditResult(op_ids=[op.op_id for op in ops])
 
 
+TRACKED_PAD_S = 0.25
+"""With ``while_tracked``, the least time before a track's first keyframe and after its last
+one that the mask stays."""
+
+TRACKED_GRID_S = 0.25
+"""``while_tracked`` ranges are rounded outward to this, so targets that come and go together
+share one op instead of each writing its own. Pad plus rounding is under half a second, the
+time after which the renderer calls a held box "lost" (``render.geometry.HOLD_SECONDS``): the
+mask stays exactly as long as something still says where the target is."""
+
+
+def _tracked_ranges(
+    args: AddMaskArgs, targets: Sequence[str], ctx: ToolContext
+) -> dict[tuple[float, float], list[str]]:
+    """Each target's own time on screen, cut to the requested range: ``{(start, end): ids}``."""
+    if ctx.tracks is None:
+        raise ToolError(
+            "add_mask: no analysis for this video, so I can't tell when a target is seen"
+        )
+    by_id = {t.track_id: t for t in ctx.tracks}
+    low = args.time_range.start if args.time_range is not None else 0.0
+    high = args.time_range.end if args.time_range is not None else None
+    if ctx.duration is not None:
+        high = ctx.duration if high is None else min(high, ctx.duration)
+    ranges: dict[tuple[float, float], list[str]] = {}
+    for track_id in targets:
+        track = by_id.get(track_id)
+        if track is None:
+            raise ToolError(f"add_mask: no track {track_id!r} in this video's analysis")
+        first, last = track.keyframes[0].t, track.keyframes[-1].t
+        start = max(low, math.floor((first - TRACKED_PAD_S) / TRACKED_GRID_S) * TRACKED_GRID_S)
+        end = math.ceil((last + TRACKED_PAD_S) / TRACKED_GRID_S) * TRACKED_GRID_S
+        if high is not None:
+            end = min(end, high)
+        if end > start:  # else: not on screen in the requested range
+            ranges.setdefault((start, end), []).append(track_id)
+    if not ranges:
+        raise ToolError("add_mask: none of the targets is on screen in that time range")
+    return ranges
+
+
 def add_mask(args: AddMaskArgs, ctx: ToolContext) -> EditResult:
-    op = AddMask(
-        request_id=ctx.request_id,
-        source=ctx.source,
-        targets=list(dict.fromkeys(args.targets)),  # drop repeats, keep order
-        effect=args.effect,
-        time_range=args.time_range,
-    )
-    return _write("add_mask", [op], ctx)
+    targets = list(dict.fromkeys(args.targets))  # drop repeats, keep order
+    if not args.while_tracked:
+        ranges: dict[tuple[float, float] | None, list[str]] = {None: targets}
+    else:
+        ranges = dict(sorted(_tracked_ranges(args, targets, ctx).items()))
+    ops = [
+        AddMask(
+            request_id=ctx.request_id,
+            source=ctx.source,
+            targets=ids,
+            effect=args.effect,
+            time_range=args.time_range if span is None else TimeRange(start=span[0], end=span[1]),
+        )
+        for span, ids in ranges.items()
+    ]
+    return _write("add_mask", ops, ctx)
 
 
 def cut_range(args: CutRangeArgs, ctx: ToolContext) -> EditResult:

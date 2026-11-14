@@ -5,12 +5,12 @@ branch: luis/f13-targeting-by-description
 features: [F-13]
 base: origin/main @ 1642a7d
 head: see the PR
-status: in progress (first cut committed; review fixes, combined criteria and the VLM judge still open)
+status: in progress (combined criteria and following the target are in PR #33; the VLM judge is still open)
 ---
 
 # F-13 first cut: pick tracks by description ("the person in red"), with a colour stub and a slot for the VLM
 
-> **The path works end to end with a stub judge; the real model isn't chosen or built.** A request like "blur everyone except the person in red" now becomes a plan, runs `find_by_description`, and writes a mask op. The stub only understands clothing colours; everything else comes back *unsure*, which is masked. There are **no measured numbers**: no labeled, consented clip exists (F-09b), so the exit check ("picks the right tracks on a labeled clip") can't be run.
+> **The path works end to end with a stub judge (plus a detection-based rule for objects); the real model isn't chosen or built.** A request like "blur everyone except the person in red" now becomes a plan, runs `find_by_description`, and writes a mask op. The stub only understands clothing colours; everything else comes back *unsure*, which is masked. There are **no measured numbers**: no labeled, consented clip exists (F-09b), so the exit check ("picks the right tracks on a labeled clip") can't be run.
 
 > **Shared file changes, heads-up needed before this merges:** a new toolbox tool `find_by_description` (`toolbox/registry.py`, `tools.py`) and a new optional field `ToolContext.describer` (`toolbox/context.py`). Both are additive: no existing tool, argument or op changes, no `schema_version` bump, no dependency changes.
 
@@ -54,11 +54,27 @@ luis made these on 2026-11-10; say on the PR if you disagree. None is architectu
 5. **Claim the F-13 row in `docs/ROADMAP.md`** (owner and branch; it says `_open_`).
 6. **Track stitching (F-10b)** matters here: 549 person tracks in a 24-second clip means a judge call per fragment and answers that can disagree between pieces of one person.
 
+## Second step: combined criteria, following the target, review fixes
+Done on top of the first cut, after watching the demo video where one box followed the right person.
+- **Several criteria in one request.** "blur the person in a grey t-shirt with a bag" is split into "in a grey t-shirt" (the judge) and "with a bag" (answered from the tracks: is a handbag / backpack / suitcase track inside the person's box in at least half of their keyframes). Combined three-valued: any `no` is a no, all `yes` is a yes, else `unsure`. Any detector label works as the object ("with a dog"); words like "bag" or "phone" map to labels. "With a red bag" needs eyes, so it goes to the judge as a whole. A judge that reads sentences (`Judge.compound = True`, the VLM) gets the whole description instead.
+- **No object track anywhere = unsure, not no** (maybe the detector never looked for bags); a person seen under 10 keyframes never gets a `no` from the object rule.
+- **The mask follows the target.** `add_mask(while_tracked=True)`: each target is masked from just before its track starts to just after it ends (a quarter second plus a quarter-second grid, so never longer than the renderer's 0.5 s hold), targets that come and go together share one op, and it stays inside the requested range. The planner sets it for one described person; "everyone except ..." keeps whole-range masks because it hides bystanders.
+- **"Only if sure."** `find_by_description(unsure="leave")`, only when the user says so in words ("only if sure", "the sure ones only"). Default is still `mask`. Nobody sure is an error, not an empty result; the unsure ones are still reported (`unsure`, `left_out`).
+- **Review findings fixed:** stub judge (dark / pale / teal colours are unsure, skin is not red or orange, colour elsewhere in the box blocks a "no", one crop is never enough, unreadable words make it unsure, clothing words on non-person labels are unsure); keyframes past the end of the video give no crop; crops are copies; cache entries are validated and re-read before writing, a cache key covers the crop pipeline; every module error comes out as `DescribeError`; the planner declines negated or duplicated times, a second target in one description, identity words, places, effect words ("with a strong blur"), "box everyone in black".
+- **The executor now passes a describer** (`execute_plan(describer=...)`, `execute_request` builds `project_describer`), so the chat path works. On a backend with no judge, only a request that describes someone fails, with the reason.
+- **Tests:** 1451 passed, 2 skipped, 1 failed (the Windows-only permissions test). ruff clean.
+
+**Run by hand** (4791180 clip, 28 s, `rfdetr-s` + ByteTrack, 677 person tracks, RTX 4050 Laptop, CPU stub judge; eyeball checks, not measurements):
+- "in a grey t-shirt with a bag": grey 56 yes / 614 unsure / 7 no; bag 49 / 540 / 88; combined **11 yes / 572 unsure / 94 no**.
+- "…, only if sure": 11 tracks, 11 mask ops, 841 frames rendered in 28 s. I checked that the mask of the woman in the grey t-shirt with the white bag (track 23) sits on her box in every frame I sampled between 0.3 s and 4.4 s: she moves from x=0.87 to 0.74 of the frame, and she is small (about 58 px wide), so the box looks nearly still while the camera pans with her.
+- Default (unsure masked): 583 person tracks, 245 ops, 841 frames in 100 s, 87 render notes. Correct by the privacy rule, and crowded: this is the cost of 572 unsure tracks, most of them fragments under 5 keyframes.
+- Wrong or doubtful in the sure-only video: one of the 11 sure tracks is a second person (man in a grey t-shirt pushing a stroller with a pink bag; arguably a match); two are 2-keyframe fragments.
+
 ## What is missing to close F-13
 Exit check: *a request picks the right tracks on a labeled clip; unsure = masked.* Not met yet:
-1. **A real judge.** The colour stub only answers one clothing colour. "With a bag", "in a grey t-shirt and a bag", "the tall one" are all `unsure` today (so masked, and too many tracks). A VLM judge for `local` (and `remote` through F-08's model server) is the main missing piece.
+1. **A real judge.** The colour stub only answers one clothing colour, and objects the detector has labels for. "The tall one", "with a red bag", "wearing glasses" are all `unsure` today (so masked, and too many tracks). A VLM judge for `local` (and `remote` through F-08's model server) is the main missing piece.
 2. **A labeled, consented clip** (F-09b, Jean) and a script that reports right / wrong / unsure per description. Until then every number in this file is an eyeball check, not a measurement.
-3. **Review fixes below**, mainly the ones where the stub says a *confident* answer it shouldn't (fail-open).
+3. **The remaining review findings below** (the ones listed as fixed in the second step are done).
 4. **Team steps:** heads-up about the new tool and `ToolContext.describer`; the owner of the plan executor wires `describer=project_describer(...)`; claim the F-13 row in ROADMAP; D-017 is still *Proposed*.
 
 ## VLM choice (not decided; the team picks, then it goes in the ARCHITECTURE decisions log)
@@ -70,13 +86,13 @@ Needs: runs on a team machine (D-017: crops are media, they don't go to a third-
 
 ## Improvements we have in mind
 **Behaviour (what the demo showed).** On the 24 s street clip and the grey-t-shirt-plus-bag clip, the code masks hundreds of tracks because most are short fragments and `unsure` is masked. Things that would make the result look like a clean one-box-per-person video, without breaking "unsure = masked":
-- **Combine criteria** ("grey t-shirt *and* a bag", any attribute): three-valued AND (any `no` → no, all `yes` → yes, otherwise unsure). A detection-based rule for objects ("with a bag" = overlap with handbag / backpack / suitcase tracks) is cheap and needs no VLM.
+- ~~Combine criteria~~ (done in the second step).
 - **Track stitching with an appearance check (F-10b).** 451 of 677 person tracks last under 0.2 s; geometric-only stitching merged different people in crowds (prototype rejected, not in the repo). Fewer, longer tracks means fewer judge calls and answers that agree.
-- **Per-track lifetime masks** instead of holding the last box: the renderer (F-04) grows the box when a track ends (fail-closed by design), which is why the blur "stayed fixed" on a moving person. Needs the renderer owners' decision.
+- **Per-track lifetime masks** (done in the toolbox as `while_tracked`, no renderer change). The renderer (F-04) still holds and grows the last box when a track ends, by design; the renderer owners may want to tell the executor how long a target can be gone before it counts as lost.
 - **Surface "sure" vs "possible"** in the UI: show confident targets and ask about the unsure ones, instead of silently masking all.
 - **Short noise fragments** (under ~5 keyframes) inside a longer track: decide with the team whether they inherit the longer track's verdict. Measured on the grey + bag clip: 349 of 405 masked tracks had under 5 keyframes (155 inside a yes/unsure track, 167 alone, 27 inside a sure-no track), so this is the biggest lever and also the riskiest for privacy.
 
-**Review findings, confirmed and not fixed yet** (an independent review, items I reproduced):
+**Review findings, confirmed** (an independent review, items I reproduced). Fixed in the second step: the planner's negated / duplicated times, compound and non-description phrases; the stub's fail-open cases; past-the-end keyframes; non-person labels with clothing words; error wrapping, cache validation, crop copies; the unsafe tests. **Still open:**
 - Planner templates: "except … from 0:10" parses a negated time as the opposite range; the first of two time ranges is dropped; compound requests fold into one description; phrases that aren't descriptions after `in` / `with` / `wearing` become whole-clip descriptions ("in 0:10", "in the video", "with a strong blur", "box everyone in black").
 - Stub judge fail-open: confident `no` for navy, burgundy, pastel, dark and teal; confident `yes` on skin tones (e.g. 150,80,60 reads as red); a single usable crop can give a sure verdict (require 2+); a keyframe past the end of the clip is cropped from the last frame yet gets a sure verdict (a test currently locks this in); words the stub can't tokenise are ignored.
 - Tool: accepts non-person labels (the stub then answers clothing questions for faces).

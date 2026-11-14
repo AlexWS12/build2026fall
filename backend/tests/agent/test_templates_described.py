@@ -38,6 +38,89 @@ def test_a_described_person_goes_through_find_by_description(text: str, args: di
     assert result[1]["tool"] == "add_mask"
     assert result[1]["args"]["targets"] == {"$ref": "s1"}
     assert "time_range" not in result[1]["args"]
+    # One described person is followed; "everyone except" hides bystanders for the whole range.
+    assert result[1]["args"].get("while_tracked", False) is not args.get("exclude", False)
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        "in a grey t-shirt with a bag",
+        "in a grey t-shirt and carrying a backpack",
+        "wearing a red jacket, with a dog",
+    ],
+)
+def test_several_criteria_stay_one_description(description: str) -> None:
+    result = calls(f"blur the person {description}")
+
+    assert result[0]["args"] == {"label": "person", "description": description}
+    assert [c["tool"] for c in result] == ["find_by_description", "add_mask"]
+
+
+@pytest.mark.parametrize(
+    "ending",
+    [
+        ", only if sure",
+        " only if you're sure",
+        ", but only the sure ones",
+        " sure matches only",
+        ", skip the unsure ones",
+    ],
+)
+def test_asking_for_sure_matches_only_is_explicit(ending: str) -> None:
+    result = calls(f"blur the person in a grey t-shirt with a bag{ending}")
+
+    assert result[0]["args"] == {
+        "label": "person",
+        "description": "in a grey t-shirt with a bag",
+        "unsure": "leave",
+    }
+
+
+def test_sure_matches_only_can_follow_a_time() -> None:
+    result = calls("blur the person in red from 0:10 to 0:20, only if sure")
+
+    assert result[0]["args"] == {"label": "person", "description": "in red", "unsure": "leave"}
+    assert result[1]["args"]["time_range"] == {"start": 10.0, "end": 20.0}
+
+
+def test_only_alone_is_not_giving_up_on_unsure() -> None:
+    assert parse("blur only the person in red") is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # a negated time would mask the opposite of what was asked
+        "blur the person in red except from 0:10 to 0:20",
+        "blur the person in red but not from 0:10 to 0:20",
+        # two times: the first one used to be swallowed by the description
+        "blur the person in red from 0:10 to 0:20 and from 0:30 to 0:40",
+        # two targets in one description
+        "blur the person in red and the person in blue",
+        "blur the person in red and faces",
+        # identity, not a description (F-52)
+        "blur everyone except the person with me",
+        "blur the person with my bag",
+        # a place, a time or the effect, not what someone looks like
+        "blur the person in 0:10",
+        "blur the people in the video",
+        "blur the people in the background",
+        "blur the person in red on the left",
+        "blur everyone with a strong blur",
+        "pixelate people with a heavy pixelation",
+        "box everyone in black",
+        "black box everyone in black",
+        # sure of what?
+        "blur everyone except the person in red, only if sure",
+    ],
+)
+def test_what_is_not_a_plain_description_is_left_to_the_planner(text: str) -> None:
+    assert parse(text) is None
+
+
+def test_people_in_black_can_still_be_blurred() -> None:
+    assert calls("blur everyone in black")[0]["args"]["description"] == "in black"
 
 
 def test_a_description_can_be_followed_by_a_time() -> None:

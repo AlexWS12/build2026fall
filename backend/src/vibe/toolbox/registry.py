@@ -25,7 +25,8 @@ _TOOLS = (
         name="find_by_description",
         kind="query",
         description="Among the tracks with a label, find the ones matching a description "
-        "('in red'), or all but those. Unsure tracks are included, so they get masked.",
+        "('in red', 'in grey with a bag'), or all but those. Unsure tracks are included, so "
+        "they get masked, unless the user asked for sure matches only.",
         args=tools.FindByDescriptionArgs,
         result=tools.FindByDescriptionResult,
         returns="track_ids",
@@ -52,7 +53,8 @@ _TOOLS = (
     ToolSpec(
         name="add_mask",
         kind="edit",
-        description="Hide tracks with an effect (blur, pixelate, box) over a time range.",
+        description="Hide tracks with an effect (blur, pixelate, box) over a time range, or "
+        "each one only while it is tracked.",
         args=tools.AddMaskArgs,
         result=tools.EditResult,
         returns="none",

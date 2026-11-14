@@ -6,6 +6,7 @@
     list VIDEO                    the cached detection and track keys for a video
     default VIDEO --key KEY       mark a cached track set as the one the app uses for this video
     describe VIDEO "in red"       which tracks match a description (F-13): yes / no / unsure
+                                  ("in a grey t-shirt with a bag" is answered part by part)
 
 Every cached track set is a column in ``python -m vibe.benchmark report``, which is how models
 are compared. Times printed here are wall time on this machine, for orientation only.
@@ -24,7 +25,7 @@ from pydantic import ValidationError
 from vibe.modules import ModuleError
 from vibe.modules.vision import cache
 from vibe.modules.vision.analyze import analyze_video, retrack
-from vibe.modules.vision.describe import VideoDescriber
+from vibe.modules.vision.describe import VideoDescriber, combine
 from vibe.modules.vision.detection import NotInstalled
 from vibe.modules.vision.detectors import DETECTORS, make_detector
 from vibe.modules.vision.tracking import TRACKERS, Tracker, TrackerSettings
@@ -174,12 +175,21 @@ def _describe(storage: Storage, args: argparse.Namespace) -> int:
     tracks = cache.load_tracks(storage, sha, args.key)
     if tracks is None:
         raise cache.CacheError(f"no cached tracks for {args.video.name}; run `analyze` first")
-    tracks = [t for t in tracks if t.label == args.label]
+    scene = tracks
+    tracks = [t for t in scene if t.label == args.label]
     describer = VideoDescriber(storage, sha, args.video)
-    verdicts = describer.ask(tracks, args.description)
-    counts = Counter(verdicts.values())
+    each = describer.ask_each(tracks, args.description, scene)
+    verdicts = {t.track_id: combine(v[t.track_id] for v in each.values()) for t in tracks}
+
+    def tally(answers: dict) -> str:
+        counts = Counter(answers.values())
+        return ", ".join(f"{counts[v]} {v}" for v in ("yes", "unsure", "no"))
+
     print(f"judge: {describer.judge.name}; {len(tracks)} {args.label} tracks")
-    print("verdicts: " + ", ".join(f"{counts[v]} {v}" for v in ("yes", "unsure", "no")))
+    if len(each) > 1:
+        for criterion, answers in each.items():
+            print(f"  {criterion!r}: {tally(answers)}")
+    print(f"verdicts: {tally(verdicts)}")
     shown = [t for t in tracks if args.all or verdicts[t.track_id] != "no"]
     for track in shown:
         first, last = track.keyframes[0].t, track.keyframes[-1].t
