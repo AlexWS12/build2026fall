@@ -59,3 +59,21 @@ def too_many_keeps(calls: Iterable[ToolCall]) -> bool:
     refuses such a plan), so the two can't drift apart.
     """
     return sum(call.tool == "keep_range" for call in calls) > 1
+
+
+HISTORY_TOOLS = frozenset({"undo", "redo"})
+
+HISTORY_NOT_ALONE = (
+    "undo or redo next to another call: they act on whole earlier requests, so each is a "
+    "request of its own"
+)
+
+
+def mixes_history(calls: Iterable[ToolCall]) -> bool:
+    """An undo or redo must be a plan's only call. With other edits in the same request,
+    undoing that request later would take back its edits but not its undo.
+
+    Shared by the template parser and ``validate_plan``, like ``too_many_keeps``.
+    """
+    calls = list(calls)
+    return len(calls) > 1 and any(call.tool in HISTORY_TOOLS for call in calls)

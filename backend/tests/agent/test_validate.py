@@ -32,6 +32,18 @@ def test_one_keep_with_other_edits_is_valid() -> None:
     assert validate_plan(p, TOOLS) == []
 
 
+def test_undo_alone_is_a_valid_plan() -> None:
+    assert validate_plan(plan(("s1", "undo", {})), TOOLS) == []
+    assert validate_plan(plan(("s1", "redo", {})), TOOLS) == []
+
+
+def test_undo_next_to_another_call_is_refused() -> None:
+    errors = validate_plan(plan(("s1", "undo", {}), ("s2", "mute", {})), TOOLS)
+
+    assert len(errors) == 1
+    assert "undo or redo next to another call" in errors[0]
+
+
 def test_a_valid_plan_has_no_errors() -> None:
     p = plan(
         FIND_FACES,

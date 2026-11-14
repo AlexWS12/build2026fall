@@ -95,6 +95,24 @@ _TOOLS = (
         run=tools.denoise,
         ref_args={"time_range": "time_range"},
     ),
+    ToolSpec(
+        name="undo",
+        kind="edit",
+        description="Undo the latest request still in effect: every op it wrote, together.",
+        args=tools.UndoArgs,
+        result=tools.UndoResult,
+        returns="none",
+        run=tools.undo,
+    ),
+    ToolSpec(
+        name="redo",
+        kind="edit",
+        description="Bring back the most recently undone request. A new edit clears redo.",
+        args=tools.RedoArgs,
+        result=tools.RedoResult,
+        returns="none",
+        run=tools.redo,
+    ),
 )
 
 TOOLS: Mapping[str, ToolSpec] = MappingProxyType({t.name: t for t in _TOOLS})

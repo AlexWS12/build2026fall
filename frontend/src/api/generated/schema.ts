@@ -11,13 +11,57 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Projects
+         * @description Every project, newest first.
+         */
+        get: operations["list_projects_api_projects_get"];
         put?: never;
         /**
          * Create Project
          * @description Upload a video and create a project on it. Files that aren't a readable video get 400.
          */
         post: operations["create_project_api_projects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Project
+         * @description The project, its video's facts, and whether the video has been analysed.
+         */
+        get: operations["get_project_api_projects__project_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/video": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Video
+         * @description The source video as uploaded. Supports HTTP Range, so a ``<video>`` element can seek.
+         */
+        get: operations["get_video_api_projects__project_id__video_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -35,11 +79,32 @@ export interface paths {
         put?: never;
         /**
          * Send Request
-         * @description Plan a chat request and reply. 409 if the project is already handling one.
+         * @description Plan a chat request, run the plan, and reply. 409 if the project is already handling one.
          *
-         *     Until the plan executor exists, nothing is applied: a plan replies ``not_applied``.
+         *     ``applied`` means every op of the plan is in the timeline. A step the toolbox refuses gives
+         *     ``not_applied`` and writes nothing.
          */
         post: operations["send_request_api_projects__project_id__requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Messages
+         * @description The chat so far, oldest first, so a reload restores the conversation.
+         */
+        get: operations["get_messages_api_projects__project_id__messages_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -58,6 +123,150 @@ export interface paths {
          * @description The project's timeline state, folded from its op log.
          */
         get: operations["get_state_api_projects__project_id__state_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get History
+         * @description The requests in the op log, and whether undo and redo have something to act on.
+         */
+        get: operations["get_history_api_projects__project_id__history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Undo
+         * @description Undo the latest request in effect. 400 if there is nothing to undo.
+         */
+        post: operations["undo_api_projects__project_id__undo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/redo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redo
+         * @description Bring back the most recently undone request. 400 if there is nothing to redo.
+         */
+        post: operations["redo_api_projects__project_id__redo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/tracks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Tracks
+         * @description Where the targets are over time, for drawing boxes over the preview.
+         */
+        get: operations["get_tracks_api_projects__project_id__tracks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Analyse
+         * @description Make sure the video has a vision analysis (F-10). 503 when this server can't provide one.
+         *
+         *     For now this only replays the shared cache: no detector is connected to the API yet, on any
+         *     backend, so a video nobody analysed gets 503 rather than an empty result.
+         */
+        post: operations["analyse_api_projects__project_id__analysis_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Export
+         * @description Render the timeline into a new MP4 in the project's ``exports/``. 422 with the reason
+         *     when the timeline has an edit the renderer can't apply yet, or cuts that leave nothing.
+         */
+        post: operations["create_export_api_projects__project_id__exports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/exports/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Export
+         * @description One rendered MP4, by the name ``POST .../exports`` returned.
+         */
+        get: operations["get_export_api_projects__project_id__exports__name__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -87,6 +296,16 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AnalysisReply */
+        AnalysisReply: {
+            /** Analysed */
+            analysed: boolean;
+            /**
+             * Tracks
+             * @description How many tracks GET .../tracks now returns.
+             */
+            tracks: number;
+        };
         /** AudioFilterSpan */
         AudioFilterSpan: {
             /** Start */
@@ -113,6 +332,30 @@ export interface components {
             /** File */
             file: string;
         };
+        /**
+         * ChatMessage
+         * @description One past chat request with its reply, as stored in the project's ``chat.jsonl``.
+         */
+        ChatMessage: {
+            /** Request Id */
+            request_id: string;
+            /** Text */
+            text: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "applied" | "clarify" | "not_applied";
+            /** Reply */
+            reply: string;
+            /** Steps */
+            steps?: components["schemas"]["StepReport"][];
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+        };
         /** ChatReply */
         ChatReply: {
             /**
@@ -122,7 +365,7 @@ export interface components {
             request_id: string;
             /**
              * Status
-             * @description applied: the edit is in the timeline (once the plan executor exists). clarify: the reply is a question; nothing was written. not_applied: the request was planned or understood but nothing was written; the reply says why.
+             * @description applied: the plan ran and its ops are in the timeline. clarify: the reply is a question; nothing was written. not_applied: a tool refused, so nothing was written; the reply says why.
              * @enum {string}
              */
             status: "applied" | "clarify" | "not_applied";
@@ -131,6 +374,11 @@ export interface components {
              * @description Shown to the user in the chat.
              */
             reply: string;
+            /**
+             * Steps
+             * @description The tool calls that ran, in order, up to and including one that failed.
+             */
+            steps?: components["schemas"]["StepReport"][];
         };
         /** ChatRequest */
         ChatRequest: {
@@ -162,6 +410,26 @@ export interface components {
              */
             strength?: number | null;
         };
+        /** ExportReply */
+        ExportReply: {
+            /** Name */
+            name: string;
+            /**
+             * Url
+             * @description Where to GET the MP4.
+             */
+            url: string;
+            /**
+             * Duration
+             * @description Length of the output in seconds.
+             */
+            duration: number;
+            /**
+             * Issues
+             * @description What the renderer masked more because of (a lost track, a missing one).
+             */
+            issues: string[];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -176,6 +444,70 @@ export interface components {
              * @enum {string}
              */
             backend: "stub" | "local" | "remote";
+        };
+        /** HistoryEntry */
+        HistoryEntry: {
+            /** Request Id */
+            request_id: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "agent" | "user";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "applied" | "undone";
+            /**
+             * Kinds
+             * @description The kind of each op the request wrote, in log order.
+             */
+            kinds: string[];
+            /**
+             * Text
+             * @description The chat message, if it was a chat request.
+             */
+            text: string | null;
+            /** Reply */
+            reply: string | null;
+        };
+        /** HistoryReply */
+        HistoryReply: {
+            /**
+             * Requests
+             * @description Every request that wrote edits, in log order. Undo and redo aren't listed: they show as the status of the request they acted on.
+             */
+            requests: components["schemas"]["HistoryEntry"][];
+            /** Can Undo */
+            can_undo: boolean;
+            /** Can Redo */
+            can_redo: boolean;
+        };
+        /** Keyframe */
+        Keyframe: {
+            /**
+             * T
+             * @description Source time in seconds.
+             */
+            t: number;
+            /**
+             * Box
+             * @description [x1, y1, x2, y2], normalized to 0..1 of the frame width and height.
+             */
+            box: [
+                number,
+                number,
+                number,
+                number
+            ];
+            /** Conf */
+            conf: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "detected" | "tracked" | "uncertain" | "user";
         };
         /** MaskSpan */
         MaskSpan: {
@@ -210,6 +542,16 @@ export interface components {
              * @description Null = all audio.
              */
             speaker: string | null;
+        };
+        /** ProjectDetail */
+        ProjectDetail: {
+            info: components["schemas"]["ProjectInfo"];
+            video: components["schemas"]["VideoSummary"];
+            /**
+             * Analysed
+             * @description Whether a vision analysis of the video is cached and usable. Until it is, requests that hide people, faces or plates are refused.
+             */
+            analysed: boolean;
         };
         /** ProjectInfo */
         ProjectInfo: {
@@ -251,6 +593,32 @@ export interface components {
             except_identities?: string[];
             effect: components["schemas"]["Effect"];
             time_range?: components["schemas"]["TimeRange"] | null;
+        };
+        /**
+         * StepReport
+         * @description One tool call as it ran.
+         */
+        StepReport: {
+            /** Step Id */
+            step_id: string;
+            /** Tool */
+            tool: string;
+            /**
+             * Args
+             * @description The arguments, with every $ref filled in.
+             */
+            args: {
+                [key: string]: unknown;
+            };
+            /**
+             * Result
+             * @description What the tool returned, as compact JSON. Null if it failed.
+             */
+            result?: {
+                [key: string]: unknown;
+            } | null;
+            /** Ok */
+            ok: boolean;
         };
         /**
          * TimeRange
@@ -300,6 +668,38 @@ export interface components {
              */
             rules?: components["schemas"]["Rule"][];
         };
+        /** Track */
+        Track: {
+            /** Track Id */
+            track_id: string;
+            /**
+             * Label
+             * @description What it is, e.g. "person", "face", "license_plate".
+             */
+            label: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "detector" | "user";
+            /**
+             * Identity
+             * @description Matched enrolled identity, if any (for rules).
+             */
+            identity?: string | null;
+            /** Keyframes */
+            keyframes: components["schemas"]["Keyframe"][];
+        };
+        /** TracksReply */
+        TracksReply: {
+            /** Analysed */
+            analysed: boolean;
+            /**
+             * Tracks
+             * @description The cached analysis's tracks, then the project's hand-drawn ones.
+             */
+            tracks: components["schemas"]["Track"][];
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -325,6 +725,25 @@ export interface components {
             /** Original Name */
             original_name: string;
         };
+        /** VideoSummary */
+        VideoSummary: {
+            /**
+             * Duration
+             * @description Seconds.
+             */
+            duration: number;
+            /**
+             * Width
+             * @description As displayed, after rotation.
+             */
+            width: number;
+            /** Height */
+            height: number;
+            /** Fps */
+            fps: number;
+            /** Has Audio */
+            has_audio: boolean;
+        };
     };
     responses: never;
     parameters: never;
@@ -334,6 +753,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_projects_api_projects_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectInfo"][];
+                };
+            };
+        };
+    };
     create_project_api_projects_post: {
         parameters: {
             query?: never;
@@ -354,6 +793,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_project_api_projects__project_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_video_api_projects__project_id__video_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The video file. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/*": unknown;
                 };
             };
             /** @description Validation Error */
@@ -402,6 +903,37 @@ export interface operations {
             };
         };
     };
+    get_messages_api_projects__project_id__messages_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatMessage"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_state_api_projects__project_id__state_get: {
         parameters: {
             query?: never;
@@ -420,6 +952,224 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TimelineState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_history_api_projects__project_id__history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    undo_api_projects__project_id__undo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    redo_api_projects__project_id__redo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_tracks_api_projects__project_id__tracks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TracksReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analyse_api_projects__project_id__analysis_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_export_api_projects__project_id__exports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_export_api_projects__project_id__exports__name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The MP4. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/mp4": unknown;
                 };
             };
             /** @description Validation Error */

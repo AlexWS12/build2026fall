@@ -6,12 +6,13 @@
 """
 
 from vibe.render.audio import apply_audio_edits, check_audio, render_audio
-from vibe.render.errors import RenderError, UnsupportedEdit
+from vibe.render.errors import NothingToRender, RenderError, UnsupportedEdit
 from vibe.render.export import RenderResult, export
 from vibe.render.frame import FrameRenderer, RenderIssue, check_video, render_frame
 
 __all__ = [
     "FrameRenderer",
+    "NothingToRender",
     "RenderError",
     "RenderIssue",
     "RenderResult",

@@ -9,7 +9,15 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from vibe.agent.plan import TOO_MANY_KEEPS, Plan, ToolCall, as_ref, too_many_keeps
+from vibe.agent.plan import (
+    HISTORY_NOT_ALONE,
+    TOO_MANY_KEEPS,
+    Plan,
+    ToolCall,
+    as_ref,
+    mixes_history,
+    too_many_keeps,
+)
 from vibe.toolbox import Returns, ToolSpec, describe_errors
 
 _PLACEHOLDERS: Mapping[Returns, Any] = {
@@ -35,6 +43,8 @@ def validate_plan(plan: Plan, registry: Mapping[str, ToolSpec]) -> list[str]:
         returns_by_step[call.step_id] = spec.returns
     if too_many_keeps(plan.calls):
         errors.append(TOO_MANY_KEEPS)
+    if mixes_history(plan.calls):
+        errors.append(HISTORY_NOT_ALONE)
     if not any(registry[c.tool].kind == "edit" for c in plan.calls if c.tool in registry):
         errors.append("plan has no edit call, so it would change nothing")
     return errors

@@ -10,7 +10,18 @@ from contextlib import contextmanager
 
 from pydantic import Field
 
-from vibe.contract import AddAudioFilter, AddMask, ContractError, Cut, Mute, Op, TimeRange, Unmute
+from vibe.contract import (
+    AddAudioFilter,
+    AddMask,
+    ContractError,
+    Cut,
+    Mute,
+    Op,
+    Redo,
+    TimeRange,
+    Undo,
+    Unmute,
+)
 from vibe.contract.common import Effect, Model
 from vibe.contract.state import MuteSpan
 from vibe.toolbox.context import ToolContext
@@ -307,3 +318,49 @@ def denoise(args: DenoiseArgs, ctx: ToolContext) -> EditResult:
         time_range=args.time_range,
     )
     return _write("denoise", [op], ctx)
+
+
+# --- undo / redo --------------------------------------------------------------------------
+
+
+class UndoArgs(Model):
+    """No arguments: undo is linear, so it always acts on the latest request in effect."""
+
+
+class RedoArgs(Model):
+    """No arguments: redo always brings back the most recently undone request."""
+
+
+class UndoResult(EditResult):
+    undone_request_id: str = Field(description="The request whose ops are no longer in effect.")
+
+
+class RedoResult(EditResult):
+    redone_request_id: str = Field(description="The request whose ops are in effect again.")
+
+
+def _next_in_history(tool: str, ctx: ToolContext) -> str:
+    """The request ``tool`` ("undo" or "redo") would act on. Refuses when there is none."""
+    if ctx.log is None:
+        raise ToolError(f"{tool}: needs a timeline to write to")
+    with _timeline_errors(tool):
+        history = ctx.log.history()
+    target = history.can_undo if tool == "undo" else history.can_redo
+    if target is None:
+        raise ToolError(f"{tool}: nothing to {tool}")
+    return target
+
+
+def undo(args: UndoArgs, ctx: ToolContext) -> UndoResult:
+    """Write the contract's ``undo`` op for the latest request still in effect. Nothing is
+    deleted: the request's ops stay in the log, so ``redo`` can bring them back."""
+    target = _next_in_history("undo", ctx)
+    op = Undo(request_id=ctx.request_id, source=ctx.source, undo_request_id=target)
+    return UndoResult(op_ids=_write("undo", [op], ctx).op_ids, undone_request_id=target)
+
+
+def redo(args: RedoArgs, ctx: ToolContext) -> RedoResult:
+    """Write the contract's ``redo`` op for the most recently undone request."""
+    target = _next_in_history("redo", ctx)
+    op = Redo(request_id=ctx.request_id, source=ctx.source, redo_request_id=target)
+    return RedoResult(op_ids=_write("redo", [op], ctx).op_ids, redone_request_id=target)

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from vibe.contract import Cut, Mute, OpLog
+from vibe.contract import Cut, Mute, OpLog, Redo, Undo
 from vibe.storage import Storage
 from vibe.toolbox import TOOLS
 from vibe.toolbox.__main__ import main
@@ -42,7 +42,7 @@ def test_help_lists_every_tool(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 @pytest.mark.parametrize(
-    "tool", ["add_mask", "cut_range", "keep_range", "mute", "unmute", "denoise"]
+    "tool", ["add_mask", "cut_range", "keep_range", "mute", "unmute", "denoise", "undo", "redo"]
 )
 def test_edit_tool_help_shows_an_example(tool: str, capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit):
@@ -125,6 +125,36 @@ def test_keep_range_without_a_duration_is_an_error_and_writes_nothing(
 
     assert code == 1
     assert err.startswith("error:") and "duration" in err
+    assert timeline.read_text() == before
+
+
+def test_undo_then_redo_write_history_ops_to_a_timeline_file(
+    capsys: pytest.CaptureFixture[str], timeline: Path
+) -> None:
+    run(capsys, "mute", "--log", str(timeline), "--request-id", "req_mute")
+    muted = OpLog.from_jsonl(timeline.read_text()).state()
+
+    code_undo, out_undo, _ = run(capsys, "undo", "--log", str(timeline))
+    undone = OpLog.from_jsonl(timeline.read_text())
+    code_redo, out_redo, _ = run(capsys, "redo", "--log", str(timeline))
+    redone = OpLog.from_jsonl(timeline.read_text())
+
+    assert (code_undo, code_redo) == (0, 0)
+    assert json.loads(out_undo)["undone_request_id"] == "req_mute"
+    assert json.loads(out_redo)["redone_request_id"] == "req_mute"
+    assert isinstance(undone.ops[-1], Undo) and undone.state().mutes == []
+    assert isinstance(redone.ops[-1], Redo) and redone.state() == muted
+
+
+def test_redo_with_nothing_undone_is_an_error_and_writes_nothing(
+    capsys: pytest.CaptureFixture[str], timeline: Path
+) -> None:
+    before = timeline.read_text()
+
+    code, _, err = run(capsys, "redo", "--log", str(timeline))
+
+    assert code == 1
+    assert err.startswith("error:") and "nothing to redo" in err
     assert timeline.read_text() == before
 
 

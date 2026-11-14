@@ -5,6 +5,7 @@ Shared file (HANDOFF.md). Layout and rules: docs/ARCHITECTURE.md, "Storage".
 
 from vibe.storage.store import (
     STORAGE_VERSION,
+    ChatRecord,
     Project,
     ProjectInfo,
     Storage,
@@ -12,4 +13,12 @@ from vibe.storage.store import (
     VideoRef,
 )
 
-__all__ = ["STORAGE_VERSION", "Project", "ProjectInfo", "Storage", "StorageError", "VideoRef"]
+__all__ = [
+    "STORAGE_VERSION",
+    "ChatRecord",
+    "Project",
+    "ProjectInfo",
+    "Storage",
+    "StorageError",
+    "VideoRef",
+]
