@@ -32,7 +32,96 @@
 
 .agent {
   align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid transparent;
   background: var(--sunken);
+}
+
+.applied {
+  border-color: var(--border);
+}
+
+.clarify {
+  border-color: var(--accent);
+}
+
+.not_applied {
+  border-color: var(--warn);
+}
+
+.error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.focused {
+  border-color: var(--text);
+}
+
+.undone > span:first-child {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.pending {
+  color: var(--muted);
+}
+
+.status {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.note {
+  align-self: center;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.steps {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.steps summary {
+  cursor: pointer;
+}
+
+.steps ol {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.steps code {
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.failedStep {
+  color: var(--danger);
+}
+
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.suggestions button {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.suggestions button:hover {
+  border-color: var(--accent);
+  color: var(--text);
 }
 
 .form {

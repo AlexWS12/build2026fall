@@ -2,19 +2,52 @@ import type { components } from './generated/schema'
 
 // Types for the UI's side of the API. Where a route exists on the backend, its type comes from
 // generated/schema.ts, which `npm run gen:api` builds from backend/src/vibe/api/openapi.json
-// (D-009). Everything else is a hand-written mirror of the backend's models until its route
-// lands: source of truth backend/src/vibe/contract/state.py and backend/src/vibe/storage/store.py.
-// When a route lands, regenerate and replace its hand-written type with the generated one.
+// (D-009). The generated schema marks fields that have defaults as optional even though the
+// server always sends them, so the timeline state stays a hand-written mirror (source of truth:
+// backend/src/vibe/contract/state.py) and the reply types below make those fields required.
 
-export type Health = components['schemas']['Health']
-export type VideoRef = components['schemas']['VideoRef']
-export type ProjectInfo = components['schemas']['ProjectInfo']
+type Schemas = components['schemas']
+
+export type Health = Schemas['Health']
+export type VideoRef = Schemas['VideoRef']
+export type ProjectInfo = Schemas['ProjectInfo']
+export type ProjectDetail = Schemas['ProjectDetail']
+export type VideoSummary = Schemas['VideoSummary']
+/** One tool call as it ran (F-40). */
+export type StepReport = Schemas['StepReport']
 /** Reply to a chat request (`POST /api/projects/{id}/requests`). */
-export type ChatReply = components['schemas']['ChatReply']
+export type ChatReply = Schemas['ChatReply']
+/** One stored chat exchange (`GET /api/projects/{id}/messages`). */
+export type ChatRecord = Schemas['ChatMessage']
+export type HistoryEntry = Schemas['HistoryEntry']
+export type HistoryReply = Schemas['HistoryReply']
+export type AnalysisReply = Schemas['AnalysisReply']
+export type ExportReply = Required<Schemas['ExportReply']>
+
+/** Normalized `[x1, y1, x2, y2]`, each 0..1. */
+export type Box = [number, number, number, number]
+
+export interface Keyframe {
+  t: number
+  box: Box
+  conf: number
+  state: Schemas['Keyframe']['state']
+}
+
+export interface Track {
+  track_id: string
+  label: string
+  source: 'detector' | 'user'
+  identity?: string | null
+  keyframes: Keyframe[]
+}
+
+export interface TracksReply {
+  analysed: boolean
+  tracks: Track[]
+}
 
 // --- Contract: derived timeline state (schema_version 1) --------------------------------
-// Still hand-written, though `GET /api/projects/{id}/state` returns it: the generated schema
-// marks fields with defaults (masks, cuts, end...) optional, but the server always sends them.
 
 /** Source time in seconds. `end: null` means until the end of the video. */
 export interface TimeRange {

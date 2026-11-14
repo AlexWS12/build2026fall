@@ -28,6 +28,36 @@
   transform: translateX(-100%);
 }
 
+.summary {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.body {
+  position: relative;
+}
+
+/* Spans the track area only, so the playhead's percentage matches the spans'. */
+.playheadRail {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  left: var(--name-width);
+  right: 0;
+  pointer-events: none;
+}
+
+.playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--text);
+}
+
 .lanes {
   display: flex;
   flex-direction: column;
@@ -59,7 +89,16 @@
   background: var(--sunken);
 }
 
+.track {
+  cursor: pointer;
+}
+
+.dimmed {
+  opacity: 0.25;
+}
+
 .span {
+  transition: opacity 120ms;
   position: absolute;
   top: 2px;
   bottom: 2px;

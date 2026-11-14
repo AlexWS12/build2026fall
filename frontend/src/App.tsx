@@ -1,91 +1,136 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { defaultClient, type ApiClient } from './api'
-import type { ProjectInfo, TimelineState } from './api/types'
+import type { ProjectInfo } from './api/types'
 import styles from './App.module.css'
-import { ChatPanel, type ChatMessage } from './components/ChatPanel'
-import { Player } from './components/Player'
+import { ChatPanel } from './components/ChatPanel'
+import { Player, type PlayerHandle } from './components/Player'
 import { StatusBadge } from './components/StatusBadge'
 import { TimelineView } from './components/TimelineView'
+import { Toolbar } from './components/Toolbar'
 import { UploadPanel } from './components/UploadPanel'
+import {
+  busyLabel,
+  canExport,
+  canOpen,
+  canRedo,
+  canSend,
+  canUndo,
+  openProject,
+  requestStatuses,
+} from './state/session'
+import { useSession } from './state/useSession'
 
-const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error))
+const NO_ENTRIES: never[] = []
 
-/** The F-07 shell: upload, player, chat and timeline, wired to an ApiClient (mock by default). */
+/** The editor: upload, player, chat and timeline around one session (state/session.ts). */
 function App({ api = defaultClient }: { api?: ApiClient }) {
-  const [project, setProject] = useState<ProjectInfo | null>(null)
-  const [uploading, setUploading] = useState(false)
-  const [uploadError, setUploadError] = useState<string | null>(null)
-  const [videoUrl, setVideoUrl] = useState<string | null>(null)
-  const [duration, setDuration] = useState<number | null>(null)
-  const [timeline, setTimeline] = useState<TimelineState | null>(null)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [thinking, setThinking] = useState(false)
+  const { session, commands } = useSession(api)
+  const project = openProject(session)
+  const player = useRef<PlayerHandle>(null)
 
-  // The player plays the local file; free its object URL when it's replaced.
+  // Both belong to one video: readings taken from a previous one are ignored.
+  const [measured, setMeasured] = useState<{ url: string; seconds: number } | null>(null)
+  const [position, setPosition] = useState<{ url: string; seconds: number } | null>(null)
+  const [focusedRequest, setFocusedRequest] = useState<string | null>(null)
+  const [recent, setRecent] = useState<ProjectInfo[]>([])
+
   useEffect(() => {
-    if (!videoUrl) return
-    return () => URL.revokeObjectURL(videoUrl)
-  }, [videoUrl])
-
-  const say = (from: ChatMessage['from'], text: string) =>
-    setMessages((previous) => [...previous, { id: `${previous.length}`, from, text }])
-
-  async function handleUpload(file: File) {
-    setUploading(true)
-    setUploadError(null)
-    try {
-      const created = await api.createProject(file)
-      setProject(created)
-      setVideoUrl(URL.createObjectURL(file))
-      setDuration(null)
-      setMessages([])
-      setTimeline(await api.getState(created.project_id))
-    } catch (error) {
-      setUploadError(`Upload failed: ${errorText(error)}`)
-    } finally {
-      setUploading(false)
+    let active = true
+    api.listProjects().then(
+      (projects) => active && setRecent(projects),
+      () => {}, // The status badge already says when the backend is down.
+    )
+    return () => {
+      active = false
     }
-  }
+  }, [api])
 
-  async function handleSend(text: string) {
-    if (!project) return
-    say('user', text)
-    setThinking(true)
-    try {
-      const { reply } = await api.sendRequest(project.project_id, text)
-      say('agent', reply)
-      setTimeline(await api.getState(project.project_id))
-    } catch (error) {
-      say('agent', `Request failed: ${errorText(error)}`)
-    } finally {
-      setThinking(false)
+  const videoUrl = project?.videoUrl ?? null
+  const measuredDuration = measured && measured.url === videoUrl ? measured.seconds : null
+  const time = position && position.url === videoUrl ? position.seconds : 0
+
+  const video = project?.detail.video
+  const duration = video?.duration || measuredDuration
+  const undone = useMemo(() => {
+    const ids = new Set<string>()
+    if (project) {
+      for (const [id, status] of requestStatuses(project.history)) {
+        if (status === 'undone') ids.add(id)
+      }
     }
-  }
+    return ids
+  }, [project])
+
+  const opening = session.status === 'opening' ? session.label : null
+  const activity = session.status === 'open' ? busyLabel(session) : null
+  const error = session.status === 'opening' ? null : session.error
 
   return (
     <div className={styles.app}>
       <header className={styles.header}>
         <h1 className={styles.title}>Vibe Editing Agent</h1>
-        <StatusBadge api={api} />
+        <div className={styles.headerRight}>
+          {project && (
+            <Toolbar
+              canUndo={canUndo(session)}
+              canRedo={canRedo(session)}
+              canExport={canExport(session)}
+              exporting={project.activity.kind === 'exporting'}
+              exported={project.export}
+              onUndo={commands.undo}
+              onRedo={commands.redo}
+              onExport={commands.exportVideo}
+            />
+          )}
+          <StatusBadge api={api} />
+        </div>
       </header>
       <main className={styles.grid}>
-        <Player src={videoUrl} className={styles.player} onDuration={setDuration} />
+        <Player
+          // A new video is a new player: its position and mute state start over.
+          key={videoUrl ?? 'none'}
+          src={videoUrl || null}
+          aspect={video && video.height > 0 && video.duration > 0 ? video.width / video.height : null}
+          state={project?.timeline ?? null}
+          tracks={project?.tracks}
+          className={styles.player}
+          handle={player}
+          onTime={(seconds) => videoUrl && setPosition({ url: videoUrl, seconds })}
+          onDuration={(seconds) => videoUrl && setMeasured({ url: videoUrl, seconds })}
+        />
         <div className={styles.side}>
           <UploadPanel
-            project={project}
-            busy={uploading}
-            error={uploadError}
-            onUpload={handleUpload}
+            project={project?.detail.info ?? null}
+            busy={opening}
+            disabled={!canOpen(session)}
+            error={error}
+            recent={recent}
+            analysed={project?.analysed}
+            onUpload={commands.upload}
+            onOpen={commands.open}
+            onAnalyse={commands.analyse}
           />
           <ChatPanel
             className={styles.chat}
-            messages={messages}
+            entries={project?.chat ?? NO_ENTRIES}
             disabled={!project}
-            busy={thinking}
-            onSend={handleSend}
+            busy={project && !canSend(session) ? (activity ?? opening) : null}
+            undone={undone}
+            focusedRequest={focusedRequest}
+            onSend={commands.send}
+            onFocusRequest={setFocusedRequest}
           />
         </div>
-        <TimelineView state={timeline} duration={duration} className={styles.timeline} />
+        <TimelineView
+          state={project?.timeline ?? null}
+          duration={duration ?? null}
+          tracks={project?.tracks}
+          time={project ? time : undefined}
+          focusedRequest={focusedRequest}
+          className={styles.timeline}
+          onSeek={(seconds) => player.current?.seek(seconds)}
+          onFocusRequest={setFocusedRequest}
+        />
       </main>
     </div>
   )

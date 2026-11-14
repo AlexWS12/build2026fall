@@ -8,6 +8,7 @@
   --accent: #5b4bd6;
   --ok: #1f7a4d;
   --danger: #b3261e;
+  --warn: #8a5606;
   --lane-mask: #7c6cf0;
   --lane-cut: #d0453f;
   --lane-mute: #d18b1f;
@@ -30,6 +31,7 @@
     --accent: #7d6ff0;
     --ok: #5cc794;
     --danger: #f2827a;
+    --warn: #f2b866;
   }
 }
 

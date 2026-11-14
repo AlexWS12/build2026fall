@@ -13,6 +13,14 @@
   border-bottom: 1px solid var(--border);
 }
 
+.headerRight {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 12px;
+}
+
 .title {
   margin: 0;
   font-size: 1.1rem;
@@ -49,6 +57,17 @@
 
 .timeline {
   grid-area: timeline;
+}
+
+/* On a wide screen the editor fills the window and the chat scrolls inside its panel. */
+@media (min-width: 861px) {
+  .app {
+    height: 100vh;
+  }
+
+  .grid {
+    min-height: 0;
+  }
 }
 
 @media (max-width: 860px) {
