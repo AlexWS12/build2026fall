@@ -2,10 +2,15 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from vibe.contract import Op, TimelineState, Track
 from vibe.contract.common import Source
+
+if TYPE_CHECKING:
+    # Type checkers only: importing the module loads media code (av, numpy), and planning
+    # shouldn't need that.
+    from vibe.modules.transcribe import Transcript
 
 
 class OpSink(Protocol):
@@ -34,3 +39,5 @@ class ToolContext:
     tracks: Sequence[Track] | None = None
     """Tracks from the analysis cache (stub: given by the caller; real: F-08 / F-10). ``None``
     means the video hasn't been analysed; ``[]`` means it was and nothing was found."""
+    transcript: "Transcript | None" = None
+    """The video's transcript (F-31), for ``find_speech``. ``None``: never transcribed."""

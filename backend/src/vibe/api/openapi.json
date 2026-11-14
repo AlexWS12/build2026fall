@@ -143,6 +143,49 @@
         }
       }
     },
+    "/api/projects/{project_id}/transcript": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Transcribe Project",
+        "description": "The video's transcript with word timestamps (F-31), from the cache or made now.\n\nMaking one runs Whisper and can take a while; the project is busy (409) until it's done.\n503 when the server can't transcribe (stub backend with no cached transcript, or no model).",
+        "operationId": "transcribe_project_api_projects__project_id__transcript_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transcript"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "Health",
@@ -526,6 +569,39 @@
         "title": "Rule",
         "description": "A standing rule, evaluated on every frame against whatever the detectors find.\n\n\"Only I am visible\" is ``category=\"person\", except_identities=[\"id_me\"]``. Fail closed:\na detection whose identity is unknown or unsure is **not** excepted, so it gets masked."
       },
+      "Segment": {
+        "properties": {
+          "start": {
+            "type": "number",
+            "title": "Start"
+          },
+          "end": {
+            "type": "number",
+            "title": "End"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "words": {
+            "items": {
+              "$ref": "#/components/schemas/Word"
+            },
+            "type": "array",
+            "title": "Words"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "start",
+          "end",
+          "text",
+          "words"
+        ],
+        "title": "Segment",
+        "description": "Same field names as F-09's ``SpeechSegment``; ``speaker`` comes with F-32."
+      },
       "TimeRange": {
         "properties": {
           "start": {
@@ -608,6 +684,40 @@
         "type": "object",
         "title": "TimelineState"
       },
+      "Transcript": {
+        "properties": {
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/Segment"
+            },
+            "type": "array",
+            "title": "Segments"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "model",
+          "language",
+          "segments"
+        ],
+        "title": "Transcript"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -674,6 +784,35 @@
           "original_name"
         ],
         "title": "VideoRef"
+      },
+      "Word": {
+        "properties": {
+          "start": {
+            "type": "number",
+            "title": "Start"
+          },
+          "end": {
+            "type": "number",
+            "title": "End"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "probability": {
+            "type": "number",
+            "title": "Probability"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "start",
+          "end",
+          "text",
+          "probability"
+        ],
+        "title": "Word"
       }
     }
   }

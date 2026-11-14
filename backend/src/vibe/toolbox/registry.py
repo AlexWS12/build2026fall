@@ -31,6 +31,15 @@ _TOOLS = (
         run=tools.resolve_time,
     ),
     ToolSpec(
+        name="find_speech",
+        kind="query",
+        description="Find when a word or phrase is said, from the video's transcript (F-31).",
+        args=tools.FindSpeechArgs,
+        result=tools.FindSpeechResult,
+        returns="time_range",
+        run=tools.find_speech,
+    ),
+    ToolSpec(
         name="add_mask",
         kind="edit",
         description="Hide tracks with an effect (blur, pixelate, box) over a time range.",

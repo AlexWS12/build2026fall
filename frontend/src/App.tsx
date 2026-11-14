@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { defaultClient, type ApiClient } from './api'
-import type { ProjectInfo, TimelineState } from './api/types'
+import type { ProjectInfo, TimelineState, Transcript } from './api/types'
 import styles from './App.module.css'
 import { ChatPanel, type ChatMessage } from './components/ChatPanel'
 import { Player } from './components/Player'
 import { StatusBadge } from './components/StatusBadge'
 import { TimelineView } from './components/TimelineView'
+import { TranscriptPanel } from './components/TranscriptPanel'
 import { UploadPanel } from './components/UploadPanel'
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error))
@@ -20,6 +21,9 @@ function App({ api = defaultClient }: { api?: ApiClient }) {
   const [timeline, setTimeline] = useState<TimelineState | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [thinking, setThinking] = useState(false)
+  const [transcript, setTranscript] = useState<Transcript | null>(null)
+  const [transcribing, setTranscribing] = useState(false)
+  const [transcriptError, setTranscriptError] = useState<string | null>(null)
 
   // The player plays the local file; free its object URL when it's replaced.
   useEffect(() => {
@@ -39,6 +43,8 @@ function App({ api = defaultClient }: { api?: ApiClient }) {
       setVideoUrl(URL.createObjectURL(file))
       setDuration(null)
       setMessages([])
+      setTranscript(null)
+      setTranscriptError(null)
       setTimeline(await api.getState(created.project_id))
     } catch (error) {
       setUploadError(`Upload failed: ${errorText(error)}`)
@@ -62,6 +68,19 @@ function App({ api = defaultClient }: { api?: ApiClient }) {
     }
   }
 
+  async function handleTranscribe() {
+    if (!project) return
+    setTranscribing(true)
+    setTranscriptError(null)
+    try {
+      setTranscript(await api.transcribe(project.project_id))
+    } catch (error) {
+      setTranscriptError(`Transcription failed: ${errorText(error)}`)
+    } finally {
+      setTranscribing(false)
+    }
+  }
+
   return (
     <div className={styles.app}>
       <header className={styles.header}>
@@ -74,13 +93,24 @@ function App({ api = defaultClient }: { api?: ApiClient }) {
           <UploadPanel
             project={project}
             busy={uploading}
+            // A new project mid-transcription would get the old video's transcript.
+            disabled={transcribing}
             error={uploadError}
             onUpload={handleUpload}
+          />
+          <TranscriptPanel
+            transcript={transcript}
+            // Started mid-upload, the old video's transcript would land under the new one.
+            disabled={!project || thinking || uploading}
+            busy={transcribing}
+            error={transcriptError}
+            onTranscribe={handleTranscribe}
           />
           <ChatPanel
             className={styles.chat}
             messages={messages}
-            disabled={!project}
+            // The server holds the project's busy lock while Whisper runs (409).
+            disabled={!project || transcribing}
             busy={thinking}
             onSend={handleSend}
           />

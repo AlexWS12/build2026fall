@@ -16,6 +16,7 @@ from pathlib import Path
 from pydantic import TypeAdapter, ValidationError
 
 from vibe.contract import OP_ADAPTER, Op, OpLog, TimelineState, Track, new_id
+from vibe.modules.transcribe import Transcript
 from vibe.storage import Storage, StorageError
 from vibe.toolbox.context import OpSink, ToolContext
 from vibe.toolbox.registry import TOOLS, call_tool
@@ -29,6 +30,7 @@ NEEDS_DURATION = ("resolve_time", "keep_range")
 EXAMPLES = {
     "find_objects": '{"label": "face"}',
     "resolve_time": '{"phrase": "first half"}',
+    "find_speech": '{"text": "hola"}',
     "add_mask": '{"targets": ["trk_1"], "effect": {"type": "blur"}, '
     '"time_range": {"start": 0, "end": 5}}',
     "cut_range": '{"time_range": {"start": 10, "end": 20}}',
@@ -81,6 +83,9 @@ def _parser() -> argparse.ArgumentParser:
         where.add_argument("--project", help="project id in VIBE_DATA_DIR to write to")
         cmd.add_argument(
             "--tracks", type=Path, help="tracks .json to search (find_objects; required)"
+        )
+        cmd.add_argument(
+            "--transcript", type=Path, help="transcript .json to search (find_speech; required)"
         )
         cmd.add_argument(
             "--duration", type=float, help="video length in seconds (resolve_time, keep_range)"
@@ -152,6 +157,13 @@ def _load_tracks(path: Path) -> list[Track]:
         raise CliError(f"can't read tracks {path}: {exc}") from None
 
 
+def _load_transcript(path: Path) -> Transcript:
+    try:
+        return Transcript.model_validate_json(path.read_bytes())
+    except (OSError, ValidationError) as exc:
+        raise CliError(f"can't read transcript {path}: {exc}") from None
+
+
 def _run(args: argparse.Namespace) -> str:
     spec = TOOLS[args.tool]
     if spec.kind == "edit" and args.log is None and args.project is None:
@@ -165,6 +177,7 @@ def _run(args: argparse.Namespace) -> str:
         log=_open_timeline(args) if spec.kind == "edit" else None,  # query tools don't write
         duration=args.duration,
         tracks=_load_tracks(args.tracks) if args.tracks is not None else None,
+        transcript=_load_transcript(args.transcript) if args.transcript is not None else None,
     )
     return call_tool(spec.name, tool_args, ctx).model_dump_json(indent=2)
 

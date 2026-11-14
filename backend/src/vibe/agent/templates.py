@@ -56,6 +56,12 @@ NOISE_WORDS = frozenset({"noise", "noises", "hiss", "hisses", "hum", "hums"})
 _CUT = re.compile(r"(?:cut|remove|delete)(?:\s+out)?\b(.*)")
 _KEEP = re.compile(r"(?:(?:only|just)\s+)?keep(?:\s+(?:only|just))?\b(.*)")
 """Keep only a range: the toolbox cuts everything around it."""
+_SPOKEN = re.compile(
+    r"(?:the\s+(?:part|bit|section)\s+)?(?:where|when)\s+"
+    r"(?:(?:he|she|they|i|you|we|someone|somebody)\s+)?(?:says?|said)\s+(.+)"
+    r"|the\s+words?\s+(.+)"
+)
+"""Where words are said (F-21, words only: "where she talks about X" is a topic, for the LLM)."""
 
 _EFFECTS = {"blur": "blur", "hide": "blur", "pixelate": "pixelate", "box": "box"}
 _LABELS = {
@@ -133,7 +139,38 @@ def _mask(match: re.Match[str], steps: _Steps) -> Matched:
     return _scope(when)
 
 
+_TIME_WORDS = re.compile(
+    r"\b(?:first|last|middle|half|thirds?|whole|entire|end|minutes?|seconds?)\b|\d"
+)
+"""Words that may be a time ("goodbye in the last minute", "hello in the middle third", "until
+the end") rather than speech. ponytail: a word list, not a parse (``parse_time_phrase`` doesn't
+read "the last minute"), so "he says 3" or "says the end" is asked too; quoting the words skips
+it. Add a ``within`` range to ``find_speech`` if it's too strict."""
+
+
+def _spoken(rest: str, steps: _Steps, bare_words: bool = False) -> dict[str, Any] | None:
+    """``{"time_range": $ref}`` to a ``find_speech`` step for "where he says X", else None.
+
+    ``bare_words`` also takes "the word(s) X", only for mute: "remove the words on the screen"
+    isn't speech, and a cut is never guessed. Unquoted words with a time word in them give
+    None (asked): ``find_speech`` has no time-range argument, so the time would be searched
+    for as spoken words.
+    """
+    match = _SPOKEN.fullmatch(rest.strip())
+    if match is None or (match.group(2) and not bare_words):
+        return None
+    said = (match.group(1) or match.group(2)).strip()
+    quoted = len(said) > 1 and said[0] == said[-1] and said[0] in "\"'"
+    words = said.strip("\"' ")
+    if not words or (not quoted and _TIME_WORDS.search(words)):
+        return None
+    return {"time_range": ref(steps.add("find_speech", {"text": words}))}
+
+
 def _mute(match: re.Match[str], steps: _Steps) -> Matched:
+    if (spoken := _spoken(match.group(1), steps, bare_words=True)) is not None:
+        steps.add("mute", spoken)
+        return "timed"
     when = _time(match.group(1))
     if when is None:
         return None
@@ -161,6 +198,9 @@ def _denoise(match: re.Match[str], steps: _Steps) -> Matched:
 
 
 def _cut(match: re.Match[str], steps: _Steps) -> Matched:
+    if (spoken := _spoken(match.group(1), steps)) is not None:
+        steps.add("cut_range", spoken)
+        return "timed"
     when = _time(match.group(1))
     if when is None or when is _NO_TIME or when == WHOLE_CLIP:  # never guess what to cut
         return None
