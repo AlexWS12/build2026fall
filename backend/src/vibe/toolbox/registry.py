@@ -22,6 +22,16 @@ _TOOLS = (
         run=tools.find_objects,
     ),
     ToolSpec(
+        name="find_by_description",
+        kind="query",
+        description="Among the tracks with a label, find the ones matching a description "
+        "('in red'), or all but those. Unsure tracks are included, so they get masked.",
+        args=tools.FindByDescriptionArgs,
+        result=tools.FindByDescriptionResult,
+        returns="track_ids",
+        run=tools.find_by_description,
+    ),
+    ToolSpec(
         name="resolve_time",
         kind="query",
         description="Turn a phrase like 'first half' into a time range, using the duration.",

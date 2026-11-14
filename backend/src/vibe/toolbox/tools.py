@@ -26,7 +26,7 @@ from vibe.contract import (
 )
 from vibe.contract.common import Effect, Model
 from vibe.contract.state import MuteSpan
-from vibe.toolbox.context import ToolContext
+from vibe.toolbox.context import DescriberError, ToolContext
 from vibe.toolbox.spec import ToolError
 from vibe.toolbox.time_range import TimeRangeError, check_range, resolve_range
 
@@ -55,6 +55,65 @@ def find_objects(args: FindObjectsArgs, ctx: ToolContext) -> FindObjectsResult:
         )
     ids = [t.track_id for t in ctx.tracks if t.label == args.label]
     return FindObjectsResult(track_ids=ids, count=len(ids))
+
+
+# --- find_by_description ------------------------------------------------------------------
+
+
+class FindByDescriptionArgs(Model):
+    label: str = Field(min_length=1, description='Detector label to choose among, e.g. "person".')
+    description: str = Field(
+        min_length=1,
+        description='What tells the targets apart, as the user said it: "in red", '
+        '"wearing a hat". Not a name or "me": identity is a different question.',
+    )
+    exclude: bool = Field(
+        default=False,
+        description='False: the tracks that match ("the person in red"). True: every track '
+        'with the label except the ones that match ("everyone except the person in red").',
+    )
+
+
+class FindByDescriptionResult(Model):
+    track_ids: list[str]
+    count: int
+    unsure: list[str] = Field(
+        description="The ids in track_ids that are there because the answer was unsure, so "
+        "the agent can say so and the review queue can show them."
+    )
+
+
+def find_by_description(args: FindByDescriptionArgs, ctx: ToolContext) -> FindByDescriptionResult:
+    """The tracks with ``label`` that match a description, or with ``exclude`` all but those.
+
+    Unsure tracks are returned either way (privacy fails closed): "blur the person in red"
+    masks anyone who might be them, and "blur everyone except the person in red" leaves out
+    only the tracks that surely are. A track the describer says nothing about is unsure.
+    """
+    name = "find_by_description"
+    if ctx.tracks is None:
+        raise ToolError(
+            f"{name}: no analysis for this video, so I can't tell where any {args.label!r} is"
+        )
+    if ctx.describer is None:
+        raise ToolError(f"{name}: nothing here can look at the video to check {args.description!r}")
+    candidates = [t for t in ctx.tracks if t.label == args.label]
+    if not candidates:
+        return FindByDescriptionResult(track_ids=[], count=0, unsure=[])
+    try:
+        verdicts = ctx.describer.ask(candidates, args.description)
+    except DescriberError as exc:
+        raise ToolError(f"{name}: couldn't check {args.description!r}: {exc}") from None
+    leave_out = "yes" if args.exclude else "no"
+    ids, unsure = [], []
+    for track in candidates:
+        verdict = verdicts.get(track.track_id, "unsure")
+        if verdict == leave_out:
+            continue
+        ids.append(track.track_id)
+        if verdict not in ("yes", "no"):
+            unsure.append(track.track_id)
+    return FindByDescriptionResult(track_ids=ids, count=len(ids), unsure=unsure)
 
 
 # --- resolve_time -------------------------------------------------------------------------

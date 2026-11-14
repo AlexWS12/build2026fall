@@ -7,6 +7,7 @@
 - ``detectors``: the models, by name (``DETECTORS``, ``make_detector``), with their licenses.
 - ``tracking``: trackers that link detections into tracks (``iou`` built in, ``bytetrack``).
 - ``analyze``: the pipeline over a video, and ``retrack`` from cached detections.
+- ``describe``: which tracks match a description ("in red"): yes / no / unsure (F-13).
 - ``cache``: reading and writing ``cache/<sha256>/{detections,tracks}/<key>.json``, the video's
   default tracks, and ``project_tracks`` for the toolbox's ``ToolContext.tracks``.
 
@@ -28,6 +29,7 @@ from vibe.modules.vision.cache import (
     save_tracks,
     set_default_tracks,
 )
+from vibe.modules.vision.describe import VideoDescriber, project_describer
 from vibe.modules.vision.detection import Detection, Detector, NotInstalled
 from vibe.modules.vision.detectors import DETECTORS, make_detector
 from vibe.modules.vision.tracking import TRACKERS, IouTracker, TrackerSettings
@@ -43,10 +45,12 @@ __all__ = [
     "IouTracker",
     "NotInstalled",
     "TrackerSettings",
+    "VideoDescriber",
     "analyze_frames",
     "analyze_video",
     "load_tracks",
     "make_detector",
+    "project_describer",
     "project_tracks",
     "retrack",
     "save_detections",

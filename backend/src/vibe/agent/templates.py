@@ -134,12 +134,57 @@ def _scope(when: object) -> Matched:
     return "untimed" if when is _NO_TIME else "timed"
 
 
+_DESCRIBED = re.compile(
+    r"(?:(except(?:\s+for)?|but(?:\s+not)?|other\s+than|apart\s+from)\s+"
+    r"(?:the\s+|any\s+)?(?:person|people|one|ones)\s+)?"
+    r"((?:in|wearing|with|dressed\s+in)\s+.+)"
+)
+"""What may follow a person noun (F-13): "in red", "wearing a hat", "except the one in red".
+Only people: "faces except the person in red" needs faces linked to people, which isn't built.
+
+No "except me" / "except mine": that's identity (F-52), not something a description can check."""
+
+_DANGLING = frozenset({"in", "with", "wearing", "dressed", "a", "an", "the"})
+# TODO(F-13), known gaps (handoff "Improvements"): a negated time ("except … from 0:10") reads as
+# the opposite range, the first of two time ranges is dropped, compound requests fold into one
+# description, and non-description phrases ("in the video", "with a strong blur", "in 0:10")
+# become whole-clip descriptions. The planner should decline these instead of guessing.
+
+
+def _described(rest: str, steps: _Steps) -> tuple[str, object] | None:
+    """Split "in red from 0:10 to 0:20" into a ``find_by_description`` step and its time.
+
+    The time is the longest ending that reads as a time phrase; the description is what's
+    before it, kept in the user's words for whatever checks it."""
+    match = _DESCRIBED.fullmatch(rest.strip())
+    if match is None:
+        return None
+    exclude, text = match.groups()
+    words = text.split()
+    when: object = _NO_TIME
+    for i in range(1, len(words)):
+        found = parse_time_phrase(" ".join(words[i:]))
+        if found is not None:
+            words, when = words[:i], found
+            break
+    if len(words) < 2 or words[-1] in _DANGLING:
+        return None  # "with the" before a time, or "in" alone: nothing to look for
+    args: dict[str, Any] = {"label": "person", "description": " ".join(words)}
+    if exclude:
+        args["exclude"] = True
+    return steps.add("find_by_description", args), when
+
+
 def _mask(match: re.Match[str], steps: _Steps) -> Matched:
     verb, noun, rest = match.groups()
     when = _time(rest)
     if when is None:
-        return None
-    targets = steps.add("find_objects", {"label": _LABELS[noun]})
+        described = _described(rest, steps) if _LABELS[noun] == "person" else None
+        if described is None:
+            return None
+        targets, when = described
+    else:
+        targets = steps.add("find_objects", {"label": _LABELS[noun]})
     effect = {"type": _EFFECTS[verb.replace("black", "").strip()]}
     steps.add("add_mask", {"targets": ref(targets), "effect": effect, **_time_args(when, steps)})
     return _scope(when)
