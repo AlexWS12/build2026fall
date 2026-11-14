@@ -4,7 +4,7 @@ date: 2026-11-10
 branch: luis/f13-targeting-by-description
 features: [F-13]
 base: origin/main @ 1642a7d
-head: see the PR (one commit on top of the base)
+head: see the PR
 status: in progress (first cut committed; review fixes, combined criteria and the VLM judge still open)
 ---
 
