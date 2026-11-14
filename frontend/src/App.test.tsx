@@ -13,10 +13,17 @@ function upload(name = 'street.mp4') {
 }
 
 describe('App shell', () => {
-  test('renders the four panels', () => {
+  test('starts on the landing page, with a place to drop a video', () => {
     render(<App api={mock()} />)
-    for (const name of ['Upload', 'Player', 'Chat', 'Timeline']) {
-      expect(screen.getByRole('region', { name })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Say the edit.')
+    expect(screen.getByLabelText('Video file')).toBeEnabled()
+  })
+
+  test('renders the three panels once a video is uploaded', async () => {
+    render(<App api={mock()} />)
+    upload()
+    for (const name of ['Player', 'Chat', 'Timeline']) {
+      expect(await screen.findByRole('region', { name })).toBeInTheDocument()
     }
   })
 
@@ -40,9 +47,18 @@ describe('App shell', () => {
     expect(await screen.findByText('Backend: unreachable')).toBeInTheDocument()
   })
 
-  test('chat is disabled until a video is uploaded', () => {
+  test('there is no chat until a video is uploaded', () => {
     render(<App api={mock()} />)
-    expect(screen.getByLabelText('Request')).toBeDisabled()
+    expect(screen.queryByLabelText('Request')).not.toBeInTheDocument()
+  })
+
+  test('the logo leads back to the landing page', async () => {
+    render(<App api={mock()} />)
+    upload()
+    await screen.findByText('street')
+    fireEvent.click(screen.getByRole('button', { name: 'Back to the start screen' }))
+    expect(await screen.findByLabelText('Video file')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Request')).not.toBeInTheDocument()
   })
 
   test('uploading creates a project and draws its timeline', async () => {

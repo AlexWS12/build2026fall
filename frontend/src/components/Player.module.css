@@ -5,14 +5,24 @@
   height: 100%;
 }
 
-/* The picture's own shape, so the overlay's percentages land on the video. */
+.well {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+  border-radius: 10px;
+  background: #0d0b11;
+  container-type: size;
+}
+
+/* As large as fits the well at the picture's own shape, so the overlay's percentages land on
+   the video and never on letterboxing. */
 .stage {
   position: relative;
-  align-self: center;
-  width: 100%;
-  max-height: 62vh;
+  width: min(100cqw, calc(100cqh * var(--ratio)));
+  aspect-ratio: var(--ratio);
   overflow: hidden;
-  border-radius: 6px;
+  border-radius: 10px;
   background: #000;
 }
 
@@ -30,11 +40,12 @@
 
 .mask {
   position: absolute;
-  border-radius: 4px;
+  border: 1px solid rgb(167 155 250 / 0.7);
+  border-radius: 8px;
 }
 
 .blur {
-  background: rgb(255 255 255 / 0.08);
+  background: rgb(255 255 255 / 0.1);
   backdrop-filter: blur(14px);
 }
 
@@ -46,42 +57,56 @@
 }
 
 .box {
+  border-color: transparent;
   background: #000;
 }
 
 .bar {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
+  align-items: baseline;
+  gap: 6px 16px;
+}
+
+.clock {
+  font-family: var(--font-mono);
+  font-size: 0.87rem;
+  color: var(--text);
+}
+
+.clock span {
+  color: var(--faint);
+}
+
+.note {
+  font-size: 0.83rem;
+  color: var(--faint);
+}
+
+.note:last-child {
+  margin-left: auto;
 }
 
 .modes {
   display: inline-flex;
   padding: 2px;
   border-radius: 8px;
-  background: var(--sunken);
+  background: var(--well);
 }
 
 .modes button {
-  padding: 4px 12px;
+  padding: 3px 12px;
   border: 0;
   border-radius: 6px;
   background: none;
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: 0.83rem;
   cursor: pointer;
 }
 
 .modes button[aria-pressed='true'] {
-  background: var(--surface);
+  background: var(--border);
   color: var(--text);
-  box-shadow: 0 0 0 1px var(--border);
-}
-
-.note {
-  font-size: 0.8rem;
-  color: var(--muted);
 }
 
 .empty {
@@ -90,7 +115,7 @@
   height: 100%;
   min-height: 160px;
   margin: 0;
-  border-radius: 6px;
+  border-radius: 10px;
   background: var(--sunken);
   color: var(--muted);
 }

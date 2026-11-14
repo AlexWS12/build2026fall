@@ -21,6 +21,8 @@ export interface SessionCommands {
   redo(): Promise<void>
   analyse(): Promise<void>
   exportVideo(): Promise<void>
+  /** Leave the open project and go back to the start screen. */
+  close(): void
 }
 
 /**
@@ -127,6 +129,9 @@ export function useSession(api: ApiClient): { session: Session; commands: Sessio
           type: 'export_settled',
           result: await api.exportVideo(id),
         })),
+      close() {
+        if (dispatch({ type: 'closed' })) window.history.replaceState(null, '', ' ')
+      },
     }
   }, [api, dispatch])
 

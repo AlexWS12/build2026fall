@@ -25,13 +25,38 @@ export function Toolbar({
   return (
     <div className={styles.toolbar} role="toolbar" aria-label="Project actions">
       <ExportResult exported={exported} />
-      <button type="button" disabled={!canUndo} onClick={onUndo}>
-        Undo
+      <button
+        type="button"
+        className={styles.icon}
+        aria-label="Undo"
+        title="Undo the last request"
+        disabled={!canUndo}
+        onClick={onUndo}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M9 14 4 9l5-5" />
+          <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+        </svg>
       </button>
-      <button type="button" disabled={!canRedo} onClick={onRedo}>
-        Redo
+      <button
+        type="button"
+        className={styles.icon}
+        aria-label="Redo"
+        title="Redo"
+        disabled={!canRedo}
+        onClick={onRedo}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m15 14 5-5-5-5" />
+          <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
+        </svg>
       </button>
       <button type="button" className={styles.primary} disabled={!canExport} onClick={onExport}>
+        <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" x2="12" y1="15" y2="3" />
+        </svg>
         {exporting ? 'Rendering…' : 'Export'}
       </button>
     </div>

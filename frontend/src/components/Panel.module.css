@@ -3,20 +3,30 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 14px;
   background: var(--surface);
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  min-height: 38px;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border);
 }
 
 .title {
   margin: 0;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.8rem;
+  font-size: 0.73rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--faint);
 }
 
 .body {

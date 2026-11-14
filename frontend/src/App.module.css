@@ -6,11 +6,40 @@
 
 .header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
+  gap: 8px 14px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--sunken);
+}
+
+.home {
+  display: inline-flex;
+  padding: 2px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+}
+
+.home:disabled {
+  cursor: default;
+}
+
+.rule {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+}
+
+.name {
+  font-weight: 600;
+}
+
+.meta {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--faint);
 }
 
 .headerRight {
@@ -18,23 +47,47 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px 12px;
+  gap: 8px;
+  margin-left: auto;
 }
 
-.title {
-  margin: 0;
-  font-size: 1.1rem;
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  font-size: 0.83rem;
+  color: var(--muted);
+  white-space: nowrap;
 }
 
-/* Player and timeline on the left, upload and chat on the right. */
+button.pill {
+  border-color: rgb(242 184 102 / 0.45);
+  color: var(--warn);
+  cursor: pointer;
+}
+
+button.pill:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.error {
+  font-size: 0.87rem;
+  color: var(--danger);
+}
+
+/* Player and timeline on the left, chat down the right. */
 .grid {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
   grid-template-rows: minmax(0, 1fr) auto;
   grid-template-areas:
-    'player side'
-    'timeline side';
+    'player chat'
+    'timeline chat';
   gap: 12px;
   padding: 12px 16px 16px;
 }
@@ -43,16 +96,8 @@
   grid-area: player;
 }
 
-.side {
-  grid-area: side;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 0;
-}
-
 .chat {
-  flex: 1;
+  grid-area: chat;
 }
 
 .timeline {
@@ -76,7 +121,11 @@
     grid-template-rows: auto;
     grid-template-areas:
       'player'
-      'side'
-      'timeline';
+      'timeline'
+      'chat';
+  }
+
+  .chat {
+    min-height: 420px;
   }
 }

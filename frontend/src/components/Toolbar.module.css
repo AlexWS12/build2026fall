@@ -6,25 +6,43 @@
   gap: 8px;
 }
 
-.toolbar button {
-  padding: 4px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--text);
+.toolbar svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon,
+.primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 34px;
+  border-radius: 9px;
   cursor: pointer;
 }
 
-.toolbar button:disabled {
-  color: var(--muted);
-  cursor: default;
-  opacity: 0.6;
+.icon {
+  width: 34px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
 }
 
-.toolbar .primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #fff;
+.primary {
+  padding: 0 14px;
+  border: 0;
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.toolbar button:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .result {
@@ -33,30 +51,26 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  font-size: 0.85rem;
-}
-
-.result a {
-  color: var(--accent);
+  font-size: 0.87rem;
 }
 
 .result details ul {
   position: absolute;
   top: 100%;
   right: 0;
-  z-index: 1;
+  z-index: 2;
   width: min(420px, 80vw);
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   padding: 10px 12px 10px 28px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--sunken);
+  color: var(--text);
 }
 
 .stale,
 .result summary {
   color: var(--warn);
-  cursor: default;
 }
 
 .result summary {
@@ -64,6 +78,6 @@
 }
 
 .failed {
-  font-size: 0.85rem;
+  font-size: 0.87rem;
   color: var(--danger);
 }

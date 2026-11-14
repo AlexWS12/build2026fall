@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { StepReport } from '../api/types'
 import type { ChatEntry } from '../state/session'
 import { Panel } from './Panel'
@@ -6,10 +6,43 @@ import styles from './ChatPanel.module.css'
 
 const SUGGESTIONS = ['blur faces', 'cut the first 5 seconds', 'mute the first 5 seconds']
 
-const STATUS_NOTE: Record<Extract<ChatEntry, { kind: 'agent' }>['status'], string | null> = {
+type AgentStatus = Extract<ChatEntry, { kind: 'agent' }>['status']
+
+const STATUS_NOTE: Record<AgentStatus, string | null> = {
   applied: null,
   clarify: 'A question. Nothing was changed.',
   not_applied: 'Nothing was changed.',
+}
+
+const icon = (children: ReactNode) => (
+  <svg className={styles.icon} width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
+    {children}
+  </svg>
+)
+
+const STATUS_ICON: Record<AgentStatus | 'error', ReactNode> = {
+  applied: icon(<path d="M20 6 9 17l-5-5" />),
+  clarify: icon(
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7" />
+      <path d="M12 17h.01" />
+    </>,
+  ),
+  not_applied: icon(
+    <>
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
+      <path d="M10.3 3.9 2.4 17.5a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+    </>,
+  ),
+  error: icon(
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m15 9-6 6" />
+      <path d="m9 9 6 6" />
+    </>,
+  ),
 }
 
 export function ChatPanel({
@@ -42,6 +75,19 @@ export function ChatPanel({
     end.current?.scrollIntoView?.({ block: 'nearest' })
   }, [entries.length, busy])
 
+  // "/" jumps to the request box from anywhere that isn't already a text field.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null
+      if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return
+      event.preventDefault()
+      input.current?.focus()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
   return (
     <Panel title="Chat" className={className}>
       <div className={styles.chat}>
@@ -58,7 +104,7 @@ export function ChatPanel({
           {busy && <li className={`${styles.agent} ${styles.pending}`}>{busy}</li>}
           <li ref={end} aria-hidden="true" />
         </ol>
-        {!disabled && entries.length === 0 && (
+        {!disabled && (
           <div className={styles.suggestions} aria-label="Examples">
             {SUGGESTIONS.map((text) => (
               <button
@@ -87,15 +133,19 @@ export function ChatPanel({
           <input
             ref={input}
             aria-label="Request"
-            placeholder={disabled ? 'Upload a video first' : 'e.g. blur faces for the first half'}
+            placeholder={disabled ? 'Upload a video first' : 'Tell the editor what to change'}
             value={draft}
             disabled={disabled}
             onChange={(event) => setDraft(event.target.value)}
           />
-          <button type="submit" disabled={disabled || !!busy || !draft.trim()}>
-            Send
+          <button type="submit" aria-label="Send" disabled={disabled || !!busy || !draft.trim()}>
+            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 19V5" />
+              <path d="m5 12 7-7 7 7" />
+            </svg>
           </button>
         </form>
+        <p className={styles.hint}>Enter sends. Press / to jump here.</p>
       </div>
     </Panel>
   )
@@ -117,7 +167,10 @@ function Message({
   if (entry.kind === 'error') {
     return (
       <li className={`${styles.agent} ${styles.error}`} role="alert">
-        {entry.text} Nothing was changed.
+        <div className={styles.line}>
+          {STATUS_ICON.error}
+          <span>{entry.text} Nothing was changed.</span>
+        </div>
       </li>
     )
   }
@@ -132,7 +185,10 @@ function Message({
       onMouseEnter={() => entry.status === 'applied' && onFocusRequest?.(entry.requestId)}
       onMouseLeave={() => entry.status === 'applied' && onFocusRequest?.(null)}
     >
-      <span>{entry.text}</span>
+      <div className={styles.line}>
+        {STATUS_ICON[entry.status]}
+        <span className={styles.text}>{entry.text}</span>
+      </div>
       {note && <span className={styles.status}>{note}</span>}
       {entry.steps.length > 0 && (
         <details className={styles.steps}>
