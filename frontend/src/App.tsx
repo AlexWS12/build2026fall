@@ -1,121 +1,185 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { defaultClient, type ApiClient } from './api'
-import type { ProjectInfo, TimelineState, Transcript } from './api/types'
+import type { ProjectInfo } from './api/types'
 import styles from './App.module.css'
-import { ChatPanel, type ChatMessage } from './components/ChatPanel'
-import { Player } from './components/Player'
+import { ChatPanel } from './components/ChatPanel'
+import { Landing } from './components/Landing'
+import { Logo } from './components/Logo'
+import { Player, type PlayerHandle } from './components/Player'
 import { StatusBadge } from './components/StatusBadge'
+import { formatTime } from './components/timeline'
 import { TimelineView } from './components/TimelineView'
+import { Toolbar } from './components/Toolbar'
 import { TranscriptPanel } from './components/TranscriptPanel'
-import { UploadPanel } from './components/UploadPanel'
+import {
+  busyLabel,
+  canExport,
+  canOpen,
+  canRedo,
+  canSend,
+  canUndo,
+  openProject,
+  requestStatuses,
+} from './state/session'
+import { useSession } from './state/useSession'
 
-const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error))
-
-/** The F-07 shell: upload, player, chat and timeline, wired to an ApiClient (mock by default). */
+/** The start screen until a project is open, then the editor, around one session (state/session.ts). */
 function App({ api = defaultClient }: { api?: ApiClient }) {
-  const [project, setProject] = useState<ProjectInfo | null>(null)
-  const [uploading, setUploading] = useState(false)
-  const [uploadError, setUploadError] = useState<string | null>(null)
-  const [videoUrl, setVideoUrl] = useState<string | null>(null)
-  const [duration, setDuration] = useState<number | null>(null)
-  const [timeline, setTimeline] = useState<TimelineState | null>(null)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [thinking, setThinking] = useState(false)
-  const [transcript, setTranscript] = useState<Transcript | null>(null)
-  const [transcribing, setTranscribing] = useState(false)
-  const [transcriptError, setTranscriptError] = useState<string | null>(null)
+  const { session, commands } = useSession(api)
+  const project = openProject(session)
+  const player = useRef<PlayerHandle>(null)
 
-  // The player plays the local file; free its object URL when it's replaced.
+  // Both belong to one video: readings taken from a previous one are ignored.
+  const [measured, setMeasured] = useState<{ url: string; seconds: number } | null>(null)
+  const [position, setPosition] = useState<{ url: string; seconds: number } | null>(null)
+  const [focusedRequest, setFocusedRequest] = useState<string | null>(null)
+  const [recent, setRecent] = useState<ProjectInfo[]>([])
+
+  // Refreshed whenever the start screen comes back, so a project just made is listed.
+  const onStartScreen = project === null
   useEffect(() => {
-    if (!videoUrl) return
-    return () => URL.revokeObjectURL(videoUrl)
-  }, [videoUrl])
-
-  const say = (from: ChatMessage['from'], text: string) =>
-    setMessages((previous) => [...previous, { id: `${previous.length}`, from, text }])
-
-  async function handleUpload(file: File) {
-    setUploading(true)
-    setUploadError(null)
-    try {
-      const created = await api.createProject(file)
-      setProject(created)
-      setVideoUrl(URL.createObjectURL(file))
-      setDuration(null)
-      setMessages([])
-      setTranscript(null)
-      setTranscriptError(null)
-      setTimeline(await api.getState(created.project_id))
-    } catch (error) {
-      setUploadError(`Upload failed: ${errorText(error)}`)
-    } finally {
-      setUploading(false)
+    if (!onStartScreen) return
+    let active = true
+    api.listProjects().then(
+      (projects) => active && setRecent(projects),
+      () => {}, // The status badge already says when the backend is down.
+    )
+    return () => {
+      active = false
     }
+  }, [api, onStartScreen])
+
+  const undone = useMemo(() => {
+    const ids = new Set<string>()
+    if (project) {
+      for (const [id, status] of requestStatuses(project.history)) {
+        if (status === 'undone') ids.add(id)
+      }
+    }
+    return ids
+  }, [project])
+
+  const opening = session.status === 'opening' ? session.label : null
+  const error = session.status === 'opening' ? null : session.error
+
+  if (!project) {
+    return (
+      <Landing
+        status={<StatusBadge api={api} />}
+        busy={opening}
+        error={error}
+        recent={recent}
+        onUpload={commands.upload}
+        onOpen={commands.open}
+      />
+    )
   }
 
-  async function handleSend(text: string) {
-    if (!project) return
-    say('user', text)
-    setThinking(true)
-    try {
-      const { reply } = await api.sendRequest(project.project_id, text)
-      say('agent', reply)
-      setTimeline(await api.getState(project.project_id))
-    } catch (error) {
-      say('agent', `Request failed: ${errorText(error)}`)
-    } finally {
-      setThinking(false)
-    }
-  }
-
-  async function handleTranscribe() {
-    if (!project) return
-    setTranscribing(true)
-    setTranscriptError(null)
-    try {
-      setTranscript(await api.transcribe(project.project_id))
-    } catch (error) {
-      setTranscriptError(`Transcription failed: ${errorText(error)}`)
-    } finally {
-      setTranscribing(false)
-    }
-  }
+  const { videoUrl } = project
+  const measuredDuration = measured && measured.url === videoUrl ? measured.seconds : null
+  const time = position && position.url === videoUrl ? position.seconds : 0
+  const { video, info } = project.detail
+  const duration = video.duration || measuredDuration
+  const activity = session.status === 'open' ? busyLabel(session) : null
+  const targets = project.tracks.length
 
   return (
     <div className={styles.app}>
       <header className={styles.header}>
-        <h1 className={styles.title}>Vibe Editing Agent</h1>
-        <StatusBadge api={api} />
-      </header>
-      <main className={styles.grid}>
-        <Player src={videoUrl} className={styles.player} onDuration={setDuration} />
-        <div className={styles.side}>
-          <UploadPanel
-            project={project}
-            busy={uploading}
-            // A new project mid-transcription would get the old video's transcript.
-            disabled={transcribing}
-            error={uploadError}
-            onUpload={handleUpload}
-          />
-          <TranscriptPanel
-            transcript={transcript}
-            // Started mid-upload, the old video's transcript would land under the new one.
-            disabled={!project || thinking || uploading}
-            busy={transcribing}
-            error={transcriptError}
-            onTranscribe={handleTranscribe}
-          />
-          <ChatPanel
-            className={styles.chat}
-            messages={messages}
-            // The server holds the project's busy lock while Whisper runs (409).
-            disabled={!project || transcribing}
-            busy={thinking}
-            onSend={handleSend}
+        <button
+          type="button"
+          className={styles.home}
+          aria-label="Back to the start screen"
+          disabled={!canOpen(session)}
+          onClick={commands.close}
+        >
+          <Logo size={26} />
+        </button>
+        <span className={styles.rule} aria-hidden="true" />
+        <strong className={styles.name}>{info.name}</strong>
+        {video.duration > 0 && (
+          <span className={styles.meta}>
+            {formatTime(video.duration)} · {video.width}×{video.height}
+          </span>
+        )}
+        <div className={styles.headerRight}>
+          {error && (
+            <span className={styles.error} role="alert">
+              {error}
+            </span>
+          )}
+          <StatusBadge api={api} />
+          {project.analysed ? (
+            <span className={styles.pill}>
+              Analysed · {targets} {targets === 1 ? 'target' : 'targets'}
+            </span>
+          ) : (
+            <button
+              type="button"
+              className={styles.pill}
+              title="Find people, faces and plates, so they can be blurred"
+              disabled={!canSend(session)}
+              onClick={commands.analyse}
+            >
+              Not analysed · Analyse video
+            </button>
+          )}
+          <Toolbar
+            canUndo={canUndo(session)}
+            canRedo={canRedo(session)}
+            canExport={canExport(session)}
+            exporting={project.activity.kind === 'exporting'}
+            exported={project.export}
+            onUndo={commands.undo}
+            onRedo={commands.redo}
+            onExport={commands.exportVideo}
           />
         </div>
-        <TimelineView state={timeline} duration={duration} className={styles.timeline} />
+      </header>
+      <main className={styles.grid}>
+        <Player
+          // A new video is a new player: its position and mute state start over.
+          key={videoUrl || 'none'}
+          src={videoUrl || null}
+          aspect={video.height > 0 && video.duration > 0 ? video.width / video.height : null}
+          duration={duration}
+          state={project.timeline}
+          tracks={project.tracks}
+          className={styles.player}
+          handle={player}
+          onTime={(seconds) => setPosition({ url: videoUrl, seconds })}
+          onDuration={(seconds) => setMeasured({ url: videoUrl, seconds })}
+        />
+        <div className={styles.side}>
+          <ChatPanel
+            className={styles.chat}
+            entries={project.chat}
+            disabled={false}
+            busy={canSend(session) ? null : (activity ?? opening)}
+            undone={undone}
+            focusedRequest={focusedRequest}
+            onSend={commands.send}
+            onFocusRequest={setFocusedRequest}
+          />
+          <TranscriptPanel
+            transcript={project.transcript}
+            // The server holds the project busy while Whisper runs, like any other activity.
+            disabled={!canSend(session)}
+            busy={project.activity.kind === 'transcribing'}
+            error={null}
+            onTranscribe={commands.transcribe}
+          />
+        </div>
+        <TimelineView
+          state={project.timeline}
+          duration={duration ?? null}
+          tracks={project.tracks}
+          time={time}
+          focusedRequest={focusedRequest}
+          className={styles.timeline}
+          onSeek={(seconds) => player.current?.seek(seconds)}
+          onFocusRequest={setFocusedRequest}
+        />
       </main>
     </div>
   )

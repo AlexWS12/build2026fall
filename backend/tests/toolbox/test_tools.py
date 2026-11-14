@@ -10,7 +10,18 @@ from pydantic import TypeAdapter
 
 from vibe.agent import Plan, plan_request
 from vibe.agent.plan import as_ref
-from vibe.contract import AddAudioFilter, AddMask, Cut, Mute, OpLog, TimeRange, Track, Unmute
+from vibe.contract import (
+    AddAudioFilter,
+    AddMask,
+    Cut,
+    Mute,
+    OpLog,
+    Redo,
+    TimeRange,
+    Track,
+    Undo,
+    Unmute,
+)
 from vibe.storage import Storage
 from vibe.toolbox import TOOLS, ToolContext, ToolError, call_tool
 from vibe.toolbox.tools import FindObjectsResult
@@ -727,3 +738,121 @@ def test_a_tool_returning_the_wrong_type_is_a_bug() -> None:
 
     with pytest.raises(TypeError, match="returned FindObjectsResult"):
         call_tool("mute", {}, ctx(OpLog()), registry=broken)
+
+
+# --- undo / redo ------------------------------------------------------------------------------
+
+
+def _as(request_id: str, log: object, source: str = "agent") -> ToolContext:
+    return dataclasses.replace(ctx(log), request_id=request_id, source=source)
+
+
+def test_undo_writes_an_undo_op_for_the_latest_request_in_effect() -> None:
+    log = OpLog()
+    call_tool("mute", {}, _as("req_1", log))
+    call_tool("cut_range", {"time_range": {"start": 1, "end": 2}}, _as("req_2", log))
+
+    result = call_tool("undo", {}, _as("req_3", log, source="user"))
+
+    op = log.ops[-1]
+    assert isinstance(op, Undo)
+    assert (op.request_id, op.source, op.undo_request_id) == ("req_3", "user", "req_2")
+    assert (result.op_ids, result.undone_request_id) == ([op.op_id], "req_2")
+    assert log.state().cuts == [] and len(log.state().mutes) == 1  # req_1 is still in effect
+
+
+def test_undo_takes_back_every_op_of_a_request_together() -> None:
+    log = OpLog()
+    _keep(log, 10, 20)  # two cuts, one request
+
+    call_tool("undo", {}, _as("req_2", log))
+
+    assert log.state().cuts == []
+
+
+def test_undo_twice_walks_back_through_the_requests() -> None:
+    log = OpLog()
+    call_tool("mute", {}, _as("req_1", log))
+    call_tool("cut_range", {"time_range": {"start": 1, "end": 2}}, _as("req_2", log))
+
+    first = call_tool("undo", {}, _as("req_3", log))
+    second = call_tool("undo", {}, _as("req_4", log))
+
+    assert (first.undone_request_id, second.undone_request_id) == ("req_2", "req_1")
+    assert log.state() == OpLog().state()
+
+
+def test_redo_brings_back_the_most_recently_undone_request() -> None:
+    log = OpLog()
+    call_tool("mute", {"time_range": {"start": 0, "end": 5}}, _as("req_1", log))
+    muted = log.state()
+    call_tool("undo", {}, _as("req_2", log))
+
+    result = call_tool("redo", {}, _as("req_3", log, source="user"))
+
+    op = log.ops[-1]
+    assert isinstance(op, Redo)
+    assert (op.request_id, op.source, op.redo_request_id) == ("req_3", "user", "req_1")
+    assert (result.op_ids, result.redone_request_id) == ([op.op_id], "req_1")
+    assert log.state() == muted
+
+
+@pytest.mark.parametrize("tool", ["undo", "redo"])
+def test_undo_and_redo_refuse_an_empty_timeline(tool: str) -> None:
+    log = OpLog()
+
+    with pytest.raises(ToolError, match=f"{tool}: nothing to {tool}"):
+        call_tool(tool, {}, _as("req_1", log))
+
+    assert len(log) == 0
+
+
+def test_undo_refuses_when_everything_is_already_undone() -> None:
+    log = OpLog()
+    call_tool("mute", {}, _as("req_1", log))
+    call_tool("undo", {}, _as("req_2", log))
+
+    with pytest.raises(ToolError, match="nothing to undo"):
+        call_tool("undo", {}, _as("req_3", log))
+
+    assert len(log) == 2
+
+
+def test_redo_refuses_after_a_new_edit_cleared_it() -> None:
+    log = OpLog()
+    call_tool("mute", {}, _as("req_1", log))
+    call_tool("undo", {}, _as("req_2", log))
+    call_tool("cut_range", {"time_range": {"start": 1, "end": 2}}, _as("req_3", log))
+
+    with pytest.raises(ToolError, match="nothing to redo"):
+        call_tool("redo", {}, _as("req_4", log))
+
+    assert len(log) == 3
+
+
+@pytest.mark.parametrize("tool", ["undo", "redo"])
+def test_undo_and_redo_take_no_arguments_and_need_a_timeline(tool: str) -> None:
+    with pytest.raises(ToolError, match="bad arguments"):
+        call_tool(tool, {"request_id": "req_1"}, ctx(OpLog()))
+    with pytest.raises(ToolError, match="timeline"):
+        call_tool(tool, {}, ctx(log=None))
+
+
+def test_undo_and_redo_work_on_a_project_on_disk(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    call_tool("mute", {}, _as("req_1", project))
+
+    call_tool("undo", {}, _as("req_2", project))
+    assert project.state().mutes == []
+    call_tool("redo", {}, _as("req_3", project))
+
+    assert len(project.state().mutes) == 1
+    assert [op.kind for op in project.log()] == ["mute", "undo", "redo"]
+
+
+def test_undo_on_an_unreadable_project_timeline_is_a_tool_error(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    project.timeline_path.unlink()
+
+    with pytest.raises(ToolError, match="undo: can't read or write the timeline"):
+        call_tool("undo", {}, _as("req_1", project))

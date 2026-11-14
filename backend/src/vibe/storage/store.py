@@ -8,11 +8,12 @@ Layout (docs/ARCHITECTURE.md, "Storage"; decision D-014)::
       projects/<project_id>/
         project.json                          ProjectInfo
         timeline.jsonl                        the op log (contract file format)
+        chat.jsonl                            the chat: one ChatRecord per line (made on first use)
         tracks.user.json                      tracks drawn or corrected by hand
         exports/                              rendered files
 
-Writes are atomic (temp file + rename), and an op is appended as one line, so a crash never
-leaves a half-written file: at worst it loses an incomplete last line of the log.
+Writes are atomic (temp file + rename), and an op or a chat record is appended as one line, so
+a crash never leaves a half-written file: at worst it loses an incomplete last line.
 """
 
 import hashlib
@@ -24,11 +25,12 @@ import tempfile
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, Literal
 
-from pydantic import Field, TypeAdapter
+from pydantic import Field, TypeAdapter, ValidationError
 
 from vibe import config
-from vibe.contract import OP_ADAPTER, Op, OpLog, TimelineState, Track, new_id
+from vibe.contract import OP_ADAPTER, History, Op, OpLog, TimelineState, Track, new_id
 from vibe.contract.common import Model
 
 log = logging.getLogger(__name__)
@@ -60,6 +62,20 @@ class ProjectInfo(Model):
     name: str
     created_at: datetime
     video: VideoRef
+
+
+class ChatRecord(Model):
+    """One chat request and the reply it got. The chat is for people: the op log, not this
+    file, says what the timeline is."""
+
+    request_id: str = Field(description="The ops this request wrote, if any, carry this id.")
+    text: str = Field(description="What the user asked.")
+    status: Literal["applied", "clarify", "not_applied"]
+    reply: str
+    steps: list[dict[str, Any]] = Field(
+        default_factory=list, description="The tool calls that ran, as the plan executor reports."
+    )
+    at: datetime
 
 
 def _safe(name: str, what: str) -> str:
@@ -107,6 +123,10 @@ class Project:
         return self.dir / "timeline.jsonl"
 
     @property
+    def chat_path(self) -> Path:
+        return self.dir / "chat.jsonl"
+
+    @property
     def user_tracks_path(self) -> Path:
         return self.dir / "tracks.user.json"
 
@@ -152,6 +172,41 @@ class Project:
 
     def state(self) -> TimelineState:
         return self.log().state()
+
+    def history(self) -> History:
+        """Which requests are in effect, and what undo or redo would act on next."""
+        return self.log().history()
+
+    # --- The chat (append-only, like the op log; a project made before it has no file) -----
+
+    def chat(self) -> list[ChatRecord]:
+        """Every recorded request, oldest first. A line that can't be read (a crash mid-append)
+        is skipped with a warning: losing one chat message must not hide the rest."""
+        if not self.chat_path.exists():
+            return []
+        records = []
+        for number, line in enumerate(self.chat_path.read_bytes().splitlines(), start=1):
+            if not line.strip():
+                continue
+            try:
+                records.append(ChatRecord.model_validate_json(line))
+            except ValidationError as e:
+                log.warning("%s: skipped unreadable line %d: %s", self.chat_path, number, e)
+        return records
+
+    def append_chat(self, record: ChatRecord) -> ChatRecord:
+        """Append ``record`` as one line and sync it."""
+        line = record.model_dump_json() + "\n"
+        with self.chat_path.open("a+b") as f:
+            f.seek(0, os.SEEK_END)
+            if f.tell():
+                f.seek(-1, os.SEEK_END)
+                if f.read(1) != b"\n":  # an incomplete last line: keep it apart from this one
+                    line = "\n" + line
+            f.write(line.encode("utf-8"))
+            f.flush()
+            os.fsync(f.fileno())
+        return record
 
     # --- Tracks drawn or corrected by hand (edits, so they live with the project) ---------
 

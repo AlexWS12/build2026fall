@@ -9,7 +9,7 @@ import re
 from collections.abc import Callable
 from typing import Any, Literal
 
-from vibe.agent.plan import Plan, ToolCall, ref, too_many_keeps
+from vibe.agent.plan import Plan, ToolCall, mixes_history, ref, too_many_keeps
 from vibe.agent.timeparse import TimeParseError, parse_time_phrase
 from vibe.contract import WHOLE_CLIP, TimeRange
 
@@ -56,6 +56,11 @@ NOISE_WORDS = frozenset({"noise", "noises", "hiss", "hisses", "hum", "hums"})
 _CUT = re.compile(r"(?:cut|remove|delete)(?:\s+out)?\b(.*)")
 _KEEP = re.compile(r"(?:(?:only|just)\s+)?keep(?:\s+(?:only|just))?\b(.*)")
 """Keep only a range: the toolbox cuts everything around it."""
+_HISTORY = re.compile(
+    r"(undo|redo)(?:\s+(?:that|it|this|(?:the|my)\s+last\s+(?:edit|change|one|thing)))?"
+)
+"""Undo is linear: it only ever acts on the latest request, so "undo the blur" (which may not
+be the latest) isn't matched and gets asked about."""
 _SPOKEN = re.compile(
     r"(?:the\s+(?:part|bit|section)\s+)?(?:where|when)\s+"
     r"(?:(?:he|she|they|i|you|we|someone|somebody)\s+)?(?:says?|said)\s+(.+)"
@@ -105,11 +110,12 @@ class MixedTimeError(TimeParseError):
 _NO_TIME = object()
 """The clause has no time words: the edit applies to the whole clip."""
 
-Matched = Literal["timed", "untimed", "keep"] | None
+Matched = Literal["timed", "untimed", "keep", "history"] | None
 """Whether a clause said when (a range, or "for the whole video") or didn't; None: no match.
 
 A request mixing both ("blur faces and mute 0:10 to 0:20") is asked about, because the time
-may have been meant for every part. "keep" edits the whole timeline, so it never takes part."""
+may have been meant for every part. "keep" edits the whole timeline, so it never takes part;
+neither does "history" (undo, redo), which has to be the whole request."""
 
 
 def _time(rest: str) -> TimeRange | str | object | None:
@@ -216,6 +222,11 @@ def _keep(match: re.Match[str], steps: _Steps) -> Matched:
     return "keep"
 
 
+def _history(match: re.Match[str], steps: _Steps) -> Matched:
+    steps.add(match.group(1), {})
+    return "history"
+
+
 _TEMPLATES: tuple[tuple[re.Pattern[str], Callable[[re.Match[str], _Steps], Matched]], ...] = (
     (_MASK, _mask),
     (_MUTE, _mute),
@@ -223,6 +234,7 @@ _TEMPLATES: tuple[tuple[re.Pattern[str], Callable[[re.Match[str], _Steps], Match
     (_DENOISE, _denoise),
     (_CUT, _cut),
     (_KEEP, _keep),
+    (_HISTORY, _history),
 )
 
 
@@ -255,6 +267,8 @@ def parse(text: str) -> Plan | None:
         scopes.add(scope)
     if too_many_keeps(steps.calls):
         return None  # asked about; validate_plan would refuse it too
+    if mixes_history(steps.calls):
+        return None  # "undo and blur faces": two requests, so asked about
     if {"untimed", "timed"} <= scopes:
         raise MixedTimeError(
             "Only part of that request has a time. Should the rest cover the whole video, or "

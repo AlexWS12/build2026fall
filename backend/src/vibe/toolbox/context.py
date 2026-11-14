@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
-from vibe.contract import Op, TimelineState, Track
+from vibe.contract import History, Op, TimelineState, Track
 from vibe.contract.common import Source
 
 if TYPE_CHECKING:
@@ -18,13 +18,16 @@ class OpSink(Protocol):
     both fit: ``append`` validates the op against the whole log and raises before writing.
     ``append_many`` does the same for several ops as one unit, so a request that writes more
     than one op (``keep_range``) lands whole or not at all. ``state`` is the folded timeline,
-    for tools that check what's there first (``unmute``, ``keep_range``)."""
+    for tools that check what's there first (``unmute``, ``keep_range``). ``history`` says which
+    requests are in effect, for ``undo`` and ``redo``."""
 
     def append(self, op: Op) -> Op: ...
 
     def append_many(self, ops: Sequence[Op]) -> list[Op]: ...
 
     def state(self) -> TimelineState: ...
+
+    def history(self) -> History: ...
 
 
 @dataclass(frozen=True)

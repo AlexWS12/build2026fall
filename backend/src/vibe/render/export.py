@@ -23,7 +23,7 @@ from av.video.reformatter import ColorRange, Colorspace
 
 from vibe.contract import TimelineState, Track
 from vibe.render.audio import apply_audio_edits, check_audio
-from vibe.render.errors import RenderError
+from vibe.render.errors import NothingToRender, RenderError
 from vibe.render.frame import FrameRenderer, RenderIssue
 from vibe.render.mask_report import MaskAudit, audit_masks
 from vibe.video import AudioInfo, FrameIndex, VideoInfo, VideoReader, iter_audio_chunks, probe
@@ -70,9 +70,9 @@ def export(
     """Render ``source`` with ``state`` and ``tracks`` into an MP4 at ``out_path``.
 
     Raises ``UnsupportedEdit`` before anything is written if the timeline has an edit this
-    renderer can't apply yet, ``RenderError`` if the output can't be made (e.g. the cuts remove
-    everything, or ``out_path`` is the source), and the video layer's errors for a source it
-    can't read.
+    renderer can't apply yet, ``RenderError`` if the output can't be made (``NothingToRender``
+    when the cuts remove everything; also when ``out_path`` is the source), and the video
+    layer's errors for a source it can't read.
     """
     source, out_path = Path(source), Path(out_path)
     if out_path.suffix.lower() != ".mp4":
@@ -143,7 +143,7 @@ def _write(
                 if sound is not None:
                     sound.write_until(output_time)
             if frames == 0:
-                raise RenderError("the cuts remove the whole clip: nothing to render")
+                raise NothingToRender("the cuts remove the whole clip: nothing to render")
             out.mux(video.encode())
             if sound is not None:
                 sound.finish()
