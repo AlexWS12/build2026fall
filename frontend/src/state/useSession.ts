@@ -21,6 +21,7 @@ export interface SessionCommands {
   redo(): Promise<void>
   analyse(): Promise<void>
   exportVideo(): Promise<void>
+  transcribe(): Promise<void>
   /** Leave the open project and go back to the start screen. */
   close(): void
 }
@@ -128,6 +129,11 @@ export function useSession(api: ApiClient): { session: Session; commands: Sessio
         run({ type: 'export_started' }, async (id) => ({
           type: 'export_settled',
           result: await api.exportVideo(id),
+        })),
+      transcribe: () =>
+        run({ type: 'transcript_started' }, async (id) => ({
+          type: 'transcript_settled',
+          transcript: await api.transcribe(id),
         })),
       close() {
         if (dispatch({ type: 'closed' })) window.history.replaceState(null, '', ' ')

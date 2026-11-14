@@ -1,0 +1,48 @@
+{
+  "about": "Worked out by hand from mask_audit.tracks.json and mask_audit.jsonl, not copied from the code. Keyframes are 0.5 s apart unless a track says otherwise. A box is lost more than hold_seconds from the nearest keyframe: past a track's ends, and in the middle of a gap longer than max_gap_seconds. A shared id is lost only when all its tracks are. The cut at 7-8 s splits every stretch that crosses it. If the renderer's constants change, rework these by hand.",
+  "duration": 10,
+  "hold_seconds": 0.5,
+  "max_gap_seconds": 1.0,
+  "spans": [
+    {"track_id": "trk_bounded", "op_id": "op_2", "request_id": "r_2", "effect": "pixelate", "stretches": [
+      ["covered", 2, 5]
+    ]},
+    {"track_id": "trk_edge", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["covered", 0, 7], ["covered", 8, 10]
+    ]},
+    {"track_id": "trk_ends_early", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["covered", 0, 4], ["held", 4, 4.5], ["lost", 4.5, 7], ["lost", 8, 10]
+    ]},
+    {"track_id": "trk_frag_a", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["covered", 0, 3], ["held", 3, 3.5], ["lost", 3.5, 7], ["lost", 8, 10]
+    ]},
+    {"track_id": "trk_frag_b", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["lost", 0, 5.5], ["held", 5.5, 6], ["covered", 6, 7], ["covered", 8, 10]
+    ]},
+    {"track_id": "trk_gap", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["covered", 0, 3], ["gap", 3, 3.5], ["lost", 3.5, 5.5], ["gap", 5.5, 6], ["covered", 6, 7], ["covered", 8, 10]
+    ]},
+    {"track_id": "trk_missing", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["no_track", 0, 7], ["no_track", 8, 10]
+    ]},
+    {"track_id": "trk_open", "op_id": "op_3", "request_id": "r_3", "effect": "box", "stretches": [
+      ["covered", 6, 7], ["covered", 8, 10]
+    ]},
+    {"track_id": "trk_shared", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["covered", 0, 4], ["held", 4, 4.5], ["lost", 4.5, 5.5], ["held", 5.5, 6], ["covered", 6, 7], ["covered", 8, 10]
+    ]},
+    {"track_id": "trk_starts_late", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["lost", 0, 5.5], ["held", 5.5, 6], ["covered", 6, 7], ["covered", 8, 10]
+    ]},
+    {"track_id": "trk_steady", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["covered", 0, 7], ["covered", 8, 10]
+    ]},
+    {"track_id": "trk_uncertain", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["covered", 0, 2.5], ["uncertain", 2.5, 3.5], ["covered", 3.5, 7], ["covered", 8, 10]
+    ]},
+    {"track_id": "trk_user_single", "op_id": "op_1", "request_id": "r_1", "effect": "blur", "stretches": [
+      ["lost", 0, 4.5], ["held", 4.5, 5.5], ["lost", 5.5, 7], ["lost", 8, 10]
+    ]}
+  ],
+  "totals": {"covered": 58, "held": 4, "gap": 1, "uncertain": 1, "lost": 32, "no_track": 9}
+}

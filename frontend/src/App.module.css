@@ -86,8 +86,8 @@ button.pill:disabled {
   grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
   grid-template-rows: minmax(0, 1fr) auto;
   grid-template-areas:
-    'player chat'
-    'timeline chat';
+    'player side'
+    'timeline side';
   gap: 12px;
   padding: 12px 16px 16px;
 }
@@ -96,8 +96,16 @@ button.pill:disabled {
   grid-area: player;
 }
 
+.side {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
 .chat {
-  grid-area: chat;
+  flex: 1;
 }
 
 .timeline {
@@ -122,7 +130,7 @@ button.pill:disabled {
     grid-template-areas:
       'player'
       'timeline'
-      'chat';
+      'side';
   }
 
   .chat {

@@ -11,7 +11,7 @@ No HTTP here: the API calls ``execute_request``, tests call ``execute_plan`` wit
 
 import logging
 from collections.abc import Mapping, Sequence
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from pydantic import Field, ValidationError
 
@@ -20,10 +20,14 @@ from vibe.agent.planner import PlanError
 from vibe.agent.validate import validate_plan
 from vibe.contract import Op, OpLog, Track
 from vibe.contract.common import Model, Source
-from vibe.modules.vision import CacheError, project_tracks
 from vibe.storage import Project, Storage
 from vibe.toolbox import TOOLS, Returns, ToolContext, ToolError, ToolSpec, call_tool
-from vibe.video import probe
+
+if TYPE_CHECKING:
+    # Type checkers only: planning and running a plan need no media or model code (a toolbox
+    # test checks that importing vibe.agent loads none). ``execute_request`` imports what it
+    # needs to read a stored video when it's called.
+    from vibe.modules.transcribe import Transcript
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +96,7 @@ def execute_plan(
     source: Source = "agent",
     duration: float | None = None,
     tracks: Sequence[Track] | None = None,
+    transcript: "Transcript | None" = None,
     registry: Mapping[str, ToolSpec] = TOOLS,
 ) -> Execution:
     """Run ``plan`` and write its ops to ``timeline``, all of them or none.
@@ -110,7 +115,12 @@ def execute_plan(
     scratch = _scratch(timeline)
     before = len(scratch)
     ctx = ToolContext(
-        request_id=request_id, source=source, log=scratch, duration=duration, tracks=tracks
+        request_id=request_id,
+        source=source,
+        log=scratch,
+        duration=duration,
+        tracks=tracks,
+        transcript=transcript,
     )
     steps: list[StepReport] = []
     values: dict[str, Any] = {}
@@ -160,9 +170,15 @@ def execute_request(
 
     The duration comes from probing the stored video. The tracks are the video's cached
     analysis plus the project's hand-drawn ones, or ``None`` if it was never analysed, so
-    masking fails closed. An analysis that's there but can't be used counts as none, and a step
-    that needed it says so.
+    masking fails closed. The transcript is the cached one (F-31), or ``None`` if the video was
+    never transcribed, so ``find_speech`` says to transcribe first. An analysis that's there but
+    can't be used counts as none, and a step that needed it says so.
     """
+    from vibe.modules import ModuleError
+    from vibe.modules.transcribe import cached_transcript
+    from vibe.modules.vision import CacheError, project_tracks
+    from vibe.video import probe
+
     duration = probe(storage.video_path(project.info.video)).duration
     unusable = False
     try:
@@ -171,8 +187,20 @@ def execute_request(
         logger.warning("tracks for project %s can't be used: %s", project.id, exc)
         tracks, unusable = None, True
 
+    try:
+        transcript = cached_transcript(storage, project.info.video)
+    except ModuleError as exc:  # a corrupt cache file: the log names it, the tool asks to redo
+        logger.warning("transcript for project %s can't be used: %s", project.id, exc)
+        transcript = None
+
     done = execute_plan(
-        plan, project, request_id=request_id, source=source, duration=duration, tracks=tracks
+        plan,
+        project,
+        request_id=request_id,
+        source=source,
+        duration=duration,
+        tracks=tracks,
+        transcript=transcript,
     )
     if not done.ok and unusable and TOOLS[done.steps[-1].tool].returns == "track_ids":
         return done.model_copy(update={"error": UNREADABLE_ANALYSIS})

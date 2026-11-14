@@ -9,6 +9,7 @@ import type {
   ProjectInfo,
   TimelineState,
   TracksReply,
+  Transcript,
 } from './types'
 
 /**
@@ -37,6 +38,8 @@ export interface ApiClient {
   analyse(projectId: string): Promise<AnalysisReply>
   /** Render the timeline to a new file. */
   exportVideo(projectId: string): Promise<ExportReply>
+  /** The video's transcript, made on the server if it isn't cached yet (slow the first time). */
+  transcribe(projectId: string): Promise<Transcript>
 }
 
 export class ApiError extends Error {
@@ -104,4 +107,5 @@ export const httpClient: ApiClient = {
   redo: (projectId) => post(project(projectId, '/redo')),
   analyse: (projectId) => post(project(projectId, '/analysis')),
   exportVideo: (projectId) => post(project(projectId, '/exports')),
+  transcribe: (projectId) => post(project(projectId, '/transcript')),
 }

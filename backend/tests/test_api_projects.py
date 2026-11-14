@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 from vibe.api import projects
 from vibe.api.app import app
 from vibe.contract import Track, Undo
+from vibe.modules.transcribe import Segment, Transcript, TranscriptAnalysis, Word
 from vibe.modules.vision import save_tracks
 from vibe.storage import Storage
 from vibe.toolbox import ToolContext, call_tool
@@ -1049,3 +1050,149 @@ def test_the_export_handler_itself_refuses_names_it_didnt_make(
         projects.get_export(project_id, name, storage)
 
     assert (refused.value.status_code, refused.value.detail) == (404, "no such export")
+
+
+# --- POST /api/projects/{id}/transcript (F-31) ----------------------------------------------
+
+HOLA = Transcript(
+    model="test",
+    language="es",
+    segments=[
+        Segment(
+            start=0.2,
+            end=0.6,
+            text="Hola",
+            words=[Word(start=0.2, end=0.6, text="Hola", probability=0.9)],
+        )
+    ],
+)
+
+
+def cache_transcript(storage: Storage, project_id: str, transcript: Transcript = HOLA) -> None:
+    """Put a transcript in the analysis cache, as if the project's video had been transcribed."""
+    video = storage.open_project(project_id).info.video
+    path = storage.cache_path(video.sha256, "transcript", TranscriptAnalysis().key)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(transcript.model_dump_json(), encoding="utf-8")
+
+
+def test_transcript_comes_from_the_cache(client: TestClient, storage: Storage, clip: Path) -> None:
+    project_id = upload(client, clip)["project_id"]
+    cache_transcript(storage, project_id)
+
+    response = client.post(f"/api/projects/{project_id}/transcript")
+
+    assert response.status_code == 200
+    assert Transcript.model_validate(response.json()) == HOLA
+
+
+def test_stub_without_a_cached_transcript_is_503(
+    client: TestClient, clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VIBE_BACKEND", "stub")
+    project_id = upload(client, clip)["project_id"]
+
+    response = client.post(f"/api/projects/{project_id}/transcript")
+
+    assert response.status_code == 503
+    assert projects._busy == set()
+
+
+def test_a_video_without_audio_is_400(
+    client: TestClient, clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VIBE_BACKEND", "local")  # the test clip has no audio track
+    project_id = upload(client, clip)["project_id"]
+
+    response = client.post(f"/api/projects/{project_id}/transcript")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "this video has no audio"
+    assert projects._busy == set()
+
+
+def test_transcribing_a_busy_project_is_409(
+    client: TestClient, storage: Storage, clip: Path
+) -> None:
+    project_id = upload(client, clip)["project_id"]
+    cache_transcript(storage, project_id)
+    with projects._one_request_at_a_time(project_id):  # a chat request is in flight
+        response = client.post(f"/api/projects/{project_id}/transcript")
+    assert response.status_code == 409
+    # Free again once that request is done.
+    assert client.post(f"/api/projects/{project_id}/transcript").status_code == 200
+    assert projects._busy == set()
+
+
+@pytest.mark.parametrize("content", ["{not json", '{"old": "format"}'])
+def test_an_unreadable_cached_transcript_is_503_and_the_log_names_it(
+    client: TestClient,
+    storage: Storage,
+    clip: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    content: str,
+) -> None:
+    monkeypatch.setenv("VIBE_BACKEND", "local")  # still not replaced: F-08 never does that
+    project_id = upload(client, clip)["project_id"]
+    video = storage.open_project(project_id).info.video
+    path = storage.cache_path(video.sha256, "transcript", TranscriptAnalysis().key)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+
+    response = client.post(f"/api/projects/{project_id}/transcript")
+
+    assert response.status_code == 503
+    assert path.name in caplog.text and "delete it" in caplog.text
+    assert path.read_text() == content
+    assert projects._busy == set()
+
+
+def test_unreadable_audio_is_a_logged_500(
+    client: TestClient, clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_frames(*_: object) -> None:
+        raise ValueError("need at least one array to concatenate")
+
+    monkeypatch.setattr(projects, "transcribe_video", no_frames)
+    project_id = upload(client, clip)["project_id"]
+
+    response = client.post(f"/api/projects/{project_id}/transcript")
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "couldn't read the video's audio"
+    assert projects._busy == set()
+
+
+def test_transcript_of_an_unknown_project_is_404(client: TestClient) -> None:
+    assert client.post("/api/projects/prj_nope/transcript").status_code == 404
+
+
+# --- Requests that use the transcript (F-21 through the executor) -----------------------------
+
+
+def test_a_request_by_what_is_said_uses_the_cached_transcript(
+    client: TestClient, storage: Storage, long_clip: Path
+) -> None:
+    project_id = upload(client, long_clip)["project_id"]
+    cache_transcript(storage, project_id)
+
+    reply = ask(client, project_id, "mute where he says hola")
+
+    assert reply["status"] == "applied"
+    assert [s["tool"] for s in reply["steps"]] == ["find_speech", "mute"]
+    [mute] = get(client, project_id, "state")["mutes"]
+    assert mute["start"] <= 0.2 and mute["end"] >= 0.6  # the word, padded
+
+
+def test_a_request_by_what_is_said_needs_a_transcript(
+    client: TestClient, storage: Storage, long_clip: Path
+) -> None:
+    project_id = upload(client, long_clip)["project_id"]
+    before = log_bytes(storage, project_id)
+
+    reply = ask(client, project_id, "mute where he says hola")
+
+    assert reply["status"] == "not_applied"
+    assert "no transcript yet" in reply["reply"]
+    assert log_bytes(storage, project_id) == before

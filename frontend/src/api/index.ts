@@ -30,6 +30,7 @@ export function createAutoClient(
     redo: (id) => pick().then((c) => c.redo(id)),
     analyse: (id) => pick().then((c) => c.analyse(id)),
     exportVideo: (id) => pick().then((c) => c.exportVideo(id)),
+    transcribe: (id) => pick().then((c) => c.transcribe(id)),
   }
 }
 

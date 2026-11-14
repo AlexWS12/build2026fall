@@ -155,6 +155,7 @@ describe('one thing at a time', () => {
   const busyWith: SessionEvent[] = [
     { type: 'request_started', text: 'mute the first 5 seconds' },
     { type: 'analysis_started' },
+    { type: 'transcript_started' },
     { type: 'export_started' },
   ]
   const starts: SessionEvent[] = [

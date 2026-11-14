@@ -54,10 +54,12 @@ from vibe.agent import (
 from vibe.agent.describe import clock, describe, explain_failure
 from vibe.contract import Redo, TimelineState, Track, Undo, new_id
 from vibe.contract.common import Model, Source
+from vibe.modules import ModuleError
+from vibe.modules.transcribe import Transcript, transcribe_video
 from vibe.modules.vision import CacheError, load_tracks
 from vibe.render import NothingToRender, RenderError, UnsupportedEdit, export
 from vibe.storage import ChatRecord, Project, ProjectInfo, Storage, StorageError
-from vibe.video import VideoError, VideoInfo, probe
+from vibe.video import NoAudioStream, VideoError, VideoInfo, probe
 
 logger = logging.getLogger(__name__)
 
@@ -369,6 +371,31 @@ def get_messages(project_id: str, storage: StorageDep) -> list[ChatMessage]:
 def get_state(project_id: str, storage: StorageDep) -> TimelineState:
     """The project's timeline state, folded from its op log."""
     return _open(storage, project_id).state()
+
+
+@router.post("/{project_id}/transcript")
+def transcribe_project(project_id: str, storage: StorageDep) -> Transcript:
+    """The video's transcript with word timestamps (F-31), from the cache or made now.
+
+    Making one runs Whisper and can take a while; the project is busy (409) until it's done.
+    503 when the server can't transcribe (stub backend with no cached transcript, or no model).
+    """
+    project = _open(storage, project_id)
+    with _one_request_at_a_time(project.id):
+        try:
+            return transcribe_video(storage, project.info.video)
+        # F-08's errors: also the model server failing, or a corrupt cached transcript (the
+        # log names the file to delete). TranscribeError is one of them.
+        except ModuleError as e:
+            logger.warning("transcribing %s failed: %s", project.id, e)
+            raise HTTPException(
+                status_code=503, detail="transcription isn't available on this server"
+            ) from e
+        except NoAudioStream as e:
+            raise HTTPException(status_code=400, detail="this video has no audio") from e
+        except (VideoError, ValueError) as e:  # ValueError: e.g. an audio stream with no frames
+            logger.exception("reading the audio of %s failed", project.id)
+            raise HTTPException(status_code=500, detail="couldn't read the video's audio") from e
 
 
 @router.get("/{project_id}/history")

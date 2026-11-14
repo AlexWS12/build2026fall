@@ -23,6 +23,8 @@ export type HistoryEntry = Schemas['HistoryEntry']
 export type HistoryReply = Schemas['HistoryReply']
 export type AnalysisReply = Schemas['AnalysisReply']
 export type ExportReply = Required<Schemas['ExportReply']>
+/** The video's transcript with word timestamps (`POST /api/projects/{id}/transcript`, F-31). */
+export type Transcript = Schemas['Transcript']
 
 /** Normalized `[x1, y1, x2, y2]`, each 0..1. */
 export type Box = [number, number, number, number]

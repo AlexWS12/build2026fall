@@ -7,6 +7,7 @@ import type {
   StepReport,
   TimelineState,
   Track,
+  Transcript,
 } from '../api/types'
 
 /**
@@ -22,7 +23,7 @@ import type {
  *   empty ──open_started──► opening ──open_succeeded──► open(idle)
  *     ▲                        │                          │  ▲
  *     └──────open_failed───────┘        *_started ────────┘  └──── *_settled / activity_failed
- *                                       (requesting | undoing | redoing | analysing | exporting)
+ *                         (requesting | undoing | redoing | analysing | transcribing | exporting)
  */
 
 export type ChatEntry =
@@ -47,6 +48,7 @@ export type Activity =
   | { kind: 'undoing' }
   | { kind: 'redoing' }
   | { kind: 'analysing' }
+  | { kind: 'transcribing' }
   | { kind: 'exporting' }
 
 export type ExportState =
@@ -73,6 +75,8 @@ export interface OpenProject {
   history: HistoryReply
   tracks: Track[]
   analysed: boolean
+  /** The video's transcript (F-31), once it has been asked for in this session. */
+  transcript: Transcript | null
   chat: ChatEntry[]
   activity: Activity
   export: ExportState
@@ -102,6 +106,8 @@ export type SessionEvent =
   | { type: 'history_settled'; sync: Sync }
   | { type: 'analysis_started' }
   | { type: 'analysis_settled'; analysed: boolean; tracks: Track[] }
+  | { type: 'transcript_started' }
+  | { type: 'transcript_settled'; transcript: Transcript }
   | { type: 'export_started' }
   | { type: 'export_settled'; result: ExportReply }
   /** The activity in flight failed. `sync`, when the server could still be read, is the truth. */
@@ -213,6 +219,12 @@ function projectTransition(project: OpenProject, event: ProjectEvent): OpenProje
         chat: [...project.chat, { kind: 'note', id: nextId(project), text }],
       }
     }
+    case 'transcript_started':
+      if (!idle) return project
+      return { ...project, activity: { kind: 'transcribing' } }
+    case 'transcript_settled':
+      if (activity.kind !== 'transcribing') return project
+      return { ...project, activity: IDLE, transcript: event.transcript }
     case 'export_started':
       if (!idle) return project
       return { ...project, activity: { kind: 'exporting' } }
@@ -260,6 +272,7 @@ function fromSnapshot(snapshot: Snapshot): OpenProject {
     history: snapshot.history,
     tracks: snapshot.tracks,
     analysed: snapshot.analysed,
+    transcript: null,
     chat,
     activity: IDLE,
     export: { kind: 'none' },
@@ -295,6 +308,7 @@ function failureText(activity: Activity, message: string): string {
     undoing: 'Undo failed',
     redoing: 'Redo failed',
     analysing: 'Analysis failed',
+    transcribing: 'Transcription failed',
   }
   const label = activity.kind === 'idle' || activity.kind === 'exporting' ? '' : what[activity.kind]
   return `${label}: ${message}`
@@ -325,6 +339,7 @@ const ACTIVITY_LABEL: Record<Activity['kind'], string | null> = {
   undoing: 'Undoing…',
   redoing: 'Redoing…',
   analysing: 'Analysing the video…',
+  transcribing: 'Waiting for the transcript…',
   exporting: 'Rendering the export…',
 }
 

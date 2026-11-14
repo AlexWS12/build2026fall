@@ -10,6 +10,7 @@ import { StatusBadge } from './components/StatusBadge'
 import { formatTime } from './components/timeline'
 import { TimelineView } from './components/TimelineView'
 import { Toolbar } from './components/Toolbar'
+import { TranscriptPanel } from './components/TranscriptPanel'
 import {
   busyLabel,
   canExport,
@@ -149,16 +150,26 @@ function App({ api = defaultClient }: { api?: ApiClient }) {
           onTime={(seconds) => setPosition({ url: videoUrl, seconds })}
           onDuration={(seconds) => setMeasured({ url: videoUrl, seconds })}
         />
-        <ChatPanel
-          className={styles.chat}
-          entries={project.chat}
-          disabled={false}
-          busy={canSend(session) ? null : (activity ?? opening)}
-          undone={undone}
-          focusedRequest={focusedRequest}
-          onSend={commands.send}
-          onFocusRequest={setFocusedRequest}
-        />
+        <div className={styles.side}>
+          <ChatPanel
+            className={styles.chat}
+            entries={project.chat}
+            disabled={false}
+            busy={canSend(session) ? null : (activity ?? opening)}
+            undone={undone}
+            focusedRequest={focusedRequest}
+            onSend={commands.send}
+            onFocusRequest={setFocusedRequest}
+          />
+          <TranscriptPanel
+            transcript={project.transcript}
+            // The server holds the project busy while Whisper runs, like any other activity.
+            disabled={!canSend(session)}
+            busy={project.activity.kind === 'transcribing'}
+            error={null}
+            onTranscribe={commands.transcribe}
+          />
+        </div>
         <TimelineView
           state={project.timeline}
           duration={duration ?? null}

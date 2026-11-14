@@ -11,6 +11,7 @@ def test_the_registry_has_the_planners_tools() -> None:
     assert set(TOOLS) == {
         "find_objects",
         "resolve_time",
+        "find_speech",
         "add_mask",
         "cut_range",
         "keep_range",
