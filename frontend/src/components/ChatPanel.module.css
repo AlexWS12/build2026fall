@@ -9,38 +9,207 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
   min-height: 120px;
   margin: 0;
-  padding: 0;
+  padding: 2px;
   overflow-y: auto;
   list-style: none;
 }
 
-.user,
-.agent {
-  max-width: 85%;
-  padding: 6px 10px;
-  border-radius: 8px;
-}
-
 .user {
   align-self: flex-end;
-  background: var(--accent);
-  color: #fff;
+  max-width: 86%;
+  padding: 8px 13px;
+  border-radius: 14px 14px 4px 14px;
+  background: var(--accent-fill);
+  color: var(--on-accent);
 }
 
 .agent {
-  align-self: flex-start;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
   background: var(--sunken);
+}
+
+.line {
+  display: flex;
+  gap: 10px;
+}
+
+.icon {
+  flex: none;
+  margin-top: 2px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.applied .icon {
+  color: var(--ok);
+}
+
+.clarify .icon {
+  color: var(--accent-text);
+}
+
+.not_applied {
+  border-color: rgb(242 184 102 / 0.4);
+  background: rgb(242 184 102 / 0.08);
+}
+
+.not_applied .icon {
+  color: var(--warn);
+}
+
+.error {
+  border-color: rgb(240 118 110 / 0.5);
+  background: rgb(240 118 110 / 0.08);
+}
+
+.error .icon {
+  color: var(--danger);
+}
+
+.focused {
+  border-color: var(--text);
+}
+
+.undone .text {
+  text-decoration: line-through;
+  color: var(--faint);
+}
+
+.pending {
+  color: var(--muted);
+}
+
+.status {
+  font-size: 0.83rem;
+  color: var(--muted);
+}
+
+.note {
+  align-self: center;
+  font-size: 0.83rem;
+  color: var(--faint);
+}
+
+.steps {
+  font-size: 0.83rem;
+  color: var(--muted);
+}
+
+.steps summary {
+  cursor: pointer;
+}
+
+.steps ol {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.steps code {
+  display: block;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.failedStep code {
+  color: var(--danger);
+}
+
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.suggestions button {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font-size: 0.83rem;
+  cursor: pointer;
+}
+
+.suggestions button:hover {
+  border-color: var(--accent);
+  color: var(--text);
 }
 
 .form {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 5px 5px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--well);
+}
+
+.form:focus-within {
+  border-color: var(--accent);
 }
 
 .form input {
   flex: 1;
   min-width: 0;
+  height: 34px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  outline: none;
+}
+
+.form input::placeholder {
+  color: var(--faint);
+}
+
+.form button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--text);
+  color: var(--bg);
+  cursor: pointer;
+}
+
+.form button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.form svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.77rem;
+  color: var(--faint);
 }

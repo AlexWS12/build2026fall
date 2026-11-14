@@ -14,6 +14,7 @@ export function TranscriptPanel({
   disabled,
   busy,
   error,
+  className,
   onTranscribe,
 }: {
   transcript: Transcript | null
@@ -21,16 +22,30 @@ export function TranscriptPanel({
   disabled: boolean
   busy: boolean
   error: string | null
+  className?: string
   onTranscribe: () => void
 }) {
   return (
-    <Panel title="Transcript">
-      <button type="button" disabled={disabled || busy} onClick={onTranscribe}>
-        Transcribe
-      </button>
-      {busy && <p>Transcribing…</p>}
+    <Panel
+      title="Transcript"
+      className={className}
+      actions={
+        <button
+          type="button"
+          className={styles.button}
+          disabled={disabled || busy}
+          onClick={onTranscribe}
+        >
+          Transcribe
+        </button>
+      }
+    >
+      {!transcript && !busy && !error && (
+        <p className={styles.hint}>Lets you cut or mute by what's said: "cut where he says hello".</p>
+      )}
+      {busy && <p className={styles.hint}>Transcribing…</p>}
       {error && <p role="alert">{error}</p>}
-      {transcript && transcript.segments.length === 0 && <p>No speech found.</p>}
+      {transcript && transcript.segments.length === 0 && <p className={styles.hint}>No speech found.</p>}
       {transcript && transcript.segments.length > 0 && (
         <ol className={styles.segments} aria-label="Transcript segments">
           {transcript.segments.map((segment, i) => (

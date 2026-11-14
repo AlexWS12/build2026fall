@@ -70,6 +70,9 @@ def test_request_set_covers_both_outcomes() -> None:
         # A "but" or "not" later in the request isn't about what to keep.
         ("keep 0:10 to 0:20 but not the faces", "Which part should I keep"),
         ("keep the good part, not sure where it starts", "Which part should I keep"),
+        ("undo the blur", "say 'undo'"),
+        ("undo and blur faces", "say 'undo'"),
+        ("redo everything", "say 'redo'"),
     ],
 )
 def test_clarify_question_tells_the_user_what_to_say(text: str, hint: str) -> None:

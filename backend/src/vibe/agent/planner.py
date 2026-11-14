@@ -156,6 +156,11 @@ def _question_for(text: str) -> str:
             "When should the sound come back? Give a time range like 0:10 to 0:20, or say "
             "'unmute the audio' for the whole video."
         )
+    if verb in ("undo", "redo"):
+        return (
+            "I can only undo the latest edit, as a request of its own: say 'undo'. To bring it "
+            "back, say 'redo'."
+        )
     if verb in ("blur", "pixelate", "hide"):
         return (
             "Who or what should I hide? Right now I can do faces, people or license plates, "

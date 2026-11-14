@@ -7,12 +7,19 @@
   color: var(--muted);
 }
 
+.summary {
+  margin: 0 0 8px;
+  font-size: 0.83rem;
+  color: var(--faint);
+}
+
 .axis {
   position: relative;
   height: 18px;
   margin-left: var(--name-width);
-  font-size: 0.75rem;
-  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.73rem;
+  color: var(--faint);
 }
 
 .axis span {
@@ -28,10 +35,35 @@
   transform: translateX(-100%);
 }
 
+.body {
+  position: relative;
+}
+
+/* Spans the track area only, so the playhead's percentage matches the spans'. */
+.playheadRail {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  left: var(--name-width);
+  right: 0;
+  pointer-events: none;
+}
+
+.playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--text);
+  box-shadow: 0 0 8px rgb(243 240 248 / 0.6);
+}
+
 .lanes {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -45,7 +77,8 @@
 .laneName {
   flex: 0 0 var(--name-width);
   overflow: hidden;
-  font-size: 0.85rem;
+  font-size: 0.83rem;
+  color: var(--muted);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -55,24 +88,31 @@
   flex: 1;
   height: 20px;
   overflow: hidden;
-  border-radius: 4px;
+  border-radius: 5px;
   background: var(--sunken);
+  cursor: pointer;
 }
 
 .span {
   position: absolute;
   top: 2px;
   bottom: 2px;
-  border-radius: 3px;
+  border-radius: 4px;
   box-shadow: inset -1px 0 0 var(--surface);
+  transition: opacity 120ms;
+}
+
+.dimmed {
+  opacity: 0.25;
 }
 
 .mask {
   background: var(--lane-mask);
 }
 
+/* Hatched: this stretch is gone from the output. */
 .cut {
-  background: var(--lane-cut);
+  background: repeating-linear-gradient(135deg, var(--lane-cut) 0 5px, #b9504a 5px 10px);
 }
 
 .mute {
@@ -87,4 +127,10 @@
   margin: 8px 0 0;
   font-size: 0.85rem;
   color: var(--muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .span {
+    transition: none;
+  }
 }
