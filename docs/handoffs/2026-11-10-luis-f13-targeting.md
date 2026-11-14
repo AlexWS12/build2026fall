@@ -3,8 +3,8 @@ author: luis
 date: 2026-11-10
 branch: luis/f13-targeting-by-description
 features: [F-13]
-base: v0.1.0 @ 751159b
-head: b97f2a0 (nothing of F-13 is committed yet)
+base: origin/main @ 1642a7d
+head: see the PR (one commit on top of the base)
 status: in progress (first cut committed; review fixes, combined criteria and the VLM judge still open)
 ---
 
@@ -34,7 +34,7 @@ uv run ruff check && uv run ruff format --check
 # on a clip you already analysed (several track sets need --key):
 uv run python -m vibe.modules.vision describe CLIP.mp4 "in red" --key <tracks key>
 ```
-Checked on Windows 11, Python 3.12, no GPU used. Full suite (2026-11-10): **864 passed, 1 skipped, 1 failed**; ruff check and format clean. The failure is `test_writing_keeps_the_timeline_permissions` (POSIX `chmod`, Windows only, same as in the F-10 handoff); not F-13.
+Checked on Windows 11, Python 3.12, no GPU used. Full suite (rebased on origin/main 1642a7d): **1382 passed, 2 skipped, 1 failed**; ruff check and format clean. The failure is `test_writing_keeps_the_timeline_permissions` (POSIX `chmod`, Windows only, same as in the F-10 handoff); not F-13.
 
 **Run by hand on a real clip** (the street clip from F-10, `rfdetr-s` + ByteTrack, 549 person tracks, CPU only): "in red" gave 6 yes, 29 unsure, 514 no. I looked at crops of one track of each: the yes was a person in a magenta top, the unsure a maroon top next to a red barrier, the no a white shirt. **That is an eyeball check on three tracks, not a measurement.** Through the planner, "blur the person in red" masked 35 of 549 tracks (29 only because unsure), and "blur everyone except the person in red" masked 543 (the same 29 unsure). "Blur everyone except me" still asks the user.
 
