@@ -7,6 +7,8 @@ back (or removes it again) for free.
 
 The queue lists ``lost``, ``no_track``, ``uncertain`` and ``gap`` stretches. ``covered`` ones are
 fine and ``held`` ones are short and expected, so those are only counted (``held_seconds``).
+A long gap between keyframes shows as one ``lost`` item including its ``gap`` edges; a standalone
+``gap`` item appears only when another track with the same id covers the middle.
 
 Known limitation: confirmations live in the op log, while the geometry lives in the tracks. A later
 hand correction of a track (F-14/F-42), or a re-analysis that reuses track ids, doesn't take a
@@ -18,6 +20,8 @@ Pure: no files, no video and no network. Times are source seconds.
 import hashlib
 from collections.abc import Iterable, Sequence
 from typing import Literal
+
+from pydantic import Field
 
 from vibe.contract import Effect, TimelineState, Track
 from vibe.contract.common import Model
@@ -32,33 +36,39 @@ _JOIN = 1e-9
 """Stretches or reviewed spans whose ends differ by less than this are touching."""
 
 _MIN_SECONDS = 1e-6
-"""Remainders shorter than this are dropped."""
+"""Items shorter than this are dropped."""
 
 _Interval = tuple[float, float]
 
 
 class ReviewItem(Model):
-    item_id: str
-    """Stable for the same track, kind and range, so a client can keep its place."""
+    item_id: str = Field(
+        description="Stable for the same track, kind and range, so a client can keep its place."
+    )
     kind: ReviewKind
     track_id: str
-    label: str | None
-    """The track's label (``face``, ...), or null if no track has this id."""
+    label: str | None = Field(
+        description="The track's label (``face``, ...), or null if no track has this id."
+    )
     start: float
     end: float
     effect: Effect
-    op_id: str
-    """The mask op whose span this stretch is in."""
+    op_id: str = Field(description="The mask op whose span this stretch is in.")
     request_id: str
 
 
 class ReviewQueue(Model):
-    items: list[ReviewItem]
-    """Most serious first (lost, no_track, uncertain, gap), then by start, then by track id."""
-    held_seconds: float
-    """Time in held stretches (a box kept just past either end of a track) not yet reviewed."""
-    rules_not_audited: list[str]
-    """Standing rules, which can't be audited ahead of a render."""
+    items: list[ReviewItem] = Field(
+        description="Most serious first (lost, no_track, uncertain, gap), then by start, then by "
+        "track id."
+    )
+    held_seconds: float = Field(
+        description="Time in held stretches (a box kept just past either end of a track) not yet "
+        "reviewed."
+    )
+    rules_not_audited: list[str] = Field(
+        description="Standing rules, which can't be audited ahead of a render."
+    )
 
 
 def review_queue(
@@ -84,8 +94,8 @@ def review_queue(
         reviewed = _cover(state, span.track_id)
         for start, end in ((s.start, s.end) for s in span.stretches if s.kind == "held"):
             held_seconds += sum(b - a for a, b in _subtract(start, end, reviewed))
-        for kind, start, end in _merge_flagged(span):
-            for a, b in _subtract(start, end, reviewed):
+        for kind, a, b in _merge_flagged(span, reviewed):
+            if b - a >= _MIN_SECONDS:
                 items.append(_item(span, kind, a, b, labels.get(span.track_id)))
 
     items.sort(key=lambda i: (_SEVERITY[i.kind], i.start, i.track_id))
@@ -111,10 +121,14 @@ def _item(
     )
 
 
-def _merge_flagged(span: SpanAudit) -> list[tuple[ReviewKind, float, float]]:
-    """The flagged stretches of one mask span, touching ones joined under the most serious kind.
+def _merge_flagged(
+    span: SpanAudit, reviewed: list[_Interval]
+) -> list[tuple[ReviewKind, float, float]]:
+    """The unreviewed flagged time of one mask span, touching pieces joined under the worst kind.
 
-    A ``held`` or ``covered`` stretch between two flagged ones keeps them apart."""
+    The reviewed cover comes off each flagged stretch first, so a stretch keeps its own kind
+    around a confirmation. A ``held`` or ``covered`` stretch between two flagged ones keeps them
+    apart. Pieces shorter than ``_MIN_SECONDS`` are for the caller to drop."""
     merged: list[tuple[ReviewKind, float, float]] = []
     previous: Stretch | None = None
     for stretch in span.stretches:
@@ -122,11 +136,14 @@ def _merge_flagged(span: SpanAudit) -> list[tuple[ReviewKind, float, float]]:
             previous = None
             continue
         kind: ReviewKind = stretch.kind  # type: ignore[assignment]
-        if previous is not None and abs(previous.end - stretch.start) < _JOIN:
-            old_kind, start, _ = merged[-1]
-            merged[-1] = (min(old_kind, kind, key=_SEVERITY.__getitem__), start, stretch.end)
-        else:
-            merged.append((kind, stretch.start, stretch.end))
+        touching = previous is not None and abs(previous.end - stretch.start) < _JOIN
+        for a, b in _subtract(stretch.start, stretch.end, reviewed):
+            if touching and merged and abs(merged[-1][2] - a) < _JOIN:
+                old_kind, start, _ = merged[-1]
+                merged[-1] = (min(old_kind, kind, key=_SEVERITY.__getitem__), start, b)
+            else:
+                merged.append((kind, a, b))
+            touching = False
         previous = stretch
     return merged
 
@@ -150,7 +167,7 @@ def _cover(state: TimelineState, track_id: str) -> list[_Interval]:
 
 
 def _subtract(start: float, end: float, cover: list[_Interval]) -> list[_Interval]:
-    """``[start, end)`` without ``cover``, dropping remainders that are too short."""
+    """``[start, end)`` without ``cover``."""
     pieces: list[_Interval] = []
     cursor = start
     for a, b in cover:
@@ -163,4 +180,4 @@ def _subtract(start: float, end: float, cover: list[_Interval]) -> list[_Interva
         cursor = max(cursor, b)
     if cursor < end:
         pieces.append((cursor, end))
-    return [(a, b) for a, b in pieces if b - a >= _MIN_SECONDS]
+    return pieces

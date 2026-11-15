@@ -110,10 +110,16 @@ def test_a_full_confirm_removes_the_item() -> None:
     assert review_queue(state, [track("trk_1", 0, 3)], duration=3).items == []
 
 
-def test_a_confirm_keeps_the_merged_kind_of_what_is_left() -> None:
+def test_a_confirm_of_the_lost_middle_leaves_the_gap_edges_as_gaps() -> None:
     state = state_of(add_mask(), confirm(0.5, 0.7, "r_2"))
     queue = review_queue(state, [track("trk_1", 0, 1.2)], duration=1.2)
-    assert spans(queue) == [("lost", 0, 0.5), ("lost", 0.7, 1.2)]
+    assert spans(queue) == [("gap", 0, 0.5), ("gap", 0.7, 1.2)]
+
+
+def test_a_confirm_of_a_long_gaps_lost_middle_leaves_two_gap_items() -> None:
+    state = state_of(add_mask(), confirm(0.5, 2.5, "r_2"))
+    queue = review_queue(state, [track("trk_1", 0, 3)], duration=3)
+    assert spans(queue) == [("gap", 0, 0.5), ("gap", 2.5, 3)]
 
 
 def test_a_partial_confirm_splits_the_item() -> None:
