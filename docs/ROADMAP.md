@@ -58,7 +58,7 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
 | F-40 | Agent reports what it did in plain words + raw tool calls | Must | F-05 | in progress | alex, `alex/demo-wiring-redesign` |
-| F-41 | Review queue for low-confidence results | Must | F-02, F-07 | in progress | Knight Hacks "Check" |
+| F-41 | Review queue for low-confidence results | Must | F-02, F-07 | in progress | paulallain, `paulallain/f41-review-queue`; Knight Hacks "Check" |
 | F-42 | Hand fixes: select, change effect, remove, drag/correct box | Must | F-07, F-11 | idea | Through the same toolbox |
 | F-43 | Undo per request + version history | Must | F-02 | in progress | alex, `alex/demo-wiring-redesign`: undo/redo done, history list in the UI still open |
 | F-44 | Preview-before-apply for heavy edits (inpainting, cuts) | Should | F-04 | idea | |
