@@ -122,7 +122,7 @@ export type SessionEvent =
   | { type: 'export_started' }
   | { type: 'export_settled'; result: ExportReply }
   | { type: 'review_started' }
-  | { type: 'review_settled'; sync: Sync }
+  | { type: 'review_settled'; sync: Sync; gone: boolean }
   /** The activity in flight failed. `sync`, when the server could still be read, is the truth. */
   | { type: 'activity_failed'; message: string; sync?: Sync }
 
@@ -255,7 +255,23 @@ function projectTransition(project: OpenProject, event: ProjectEvent): OpenProje
       return { ...project, activity: { kind: 'reviewing' } }
     case 'review_settled':
       if (activity.kind !== 'reviewing') return project
-      return synced({ ...project, activity: IDLE }, event.sync)
+      return synced(
+        {
+          ...project,
+          activity: IDLE,
+          chat: event.gone
+            ? [
+                ...project.chat,
+                {
+                  kind: 'note',
+                  id: nextId(project),
+                  text: 'That stretch was already handled. The review queue was refreshed.',
+                },
+              ]
+            : project.chat,
+        },
+        event.sync,
+      )
     case 'activity_failed': {
       if (idle) return project
       const failed: OpenProject =

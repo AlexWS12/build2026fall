@@ -160,12 +160,19 @@ export function useSession(api: ApiClient): { session: Session; commands: Sessio
       review: (itemId, action) =>
         run({ type: 'review_started' }, async (id) => {
           try {
-            await api.reviewItem(id, itemId, action)
+            // The reply is the fresh queue: only the timeline and the history are left to read.
+            const review = await api.reviewItem(id, itemId, action)
+            const [timeline, history] = await Promise.all([api.getState(id), api.getHistory(id)])
+            return {
+              type: 'review_settled',
+              sync: { timeline, history, review, reviewError: null },
+              gone: false,
+            }
           } catch (error) {
-            // The item is gone (the queue moved on): the fresh queue below is the answer.
+            // The item is gone (the queue moved on): a full resync brings the fresh queue.
             if (!(error instanceof ApiError && error.status === 404)) throw error
+            return { type: 'review_settled', sync: await sync(id), gone: true }
           }
-          return { type: 'review_settled', sync: await sync(id) }
         }),
       close() {
         if (dispatch({ type: 'closed' })) window.history.replaceState(null, '', ' ')

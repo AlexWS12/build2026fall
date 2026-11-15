@@ -192,7 +192,7 @@ describe('one thing at a time', () => {
       { type: 'request_settled', reply: applied, sync: afterMute },
       { type: 'history_settled', sync: afterMute },
       { type: 'analysis_settled', analysed: true, tracks: [], ...noReview },
-      { type: 'review_settled', sync: afterMute },
+      { type: 'review_settled', sync: afterMute, gone: false },
       { type: 'export_settled', result: { name: 'a.mp4', url: '/a.mp4', duration: 1, issues: [] } },
       { type: 'activity_failed', message: 'late' },
       { type: 'open_succeeded', snapshot: snapshot() },
@@ -322,12 +322,31 @@ describe('the review queue', () => {
   test('confirming or cutting is one activity that ends with the fresh timeline and queue', () => {
     const started = play([{ type: 'review_started' }], opened())
     expect(busyLabel(started)).toBe('Applying review…')
-    const settled = play([{ type: 'review_settled', sync: afterReview }], started)
+    const settled = play([{ type: 'review_settled', sync: afterReview, gone: false }], started)
     expect(project(settled)).toMatchObject({
       activity: { kind: 'idle' },
       timeline: muted,
       review: queue,
+      chat: [],
     })
+  })
+
+  test('a spot that was already handled leaves a note with the refreshed queue', () => {
+    const settled = play(
+      [
+        { type: 'review_started' },
+        { type: 'review_settled', sync: afterReview, gone: true },
+      ],
+      opened(),
+    )
+    expect(project(settled).review).toEqual(queue)
+    expect(project(settled).chat).toEqual([
+      {
+        kind: 'note',
+        id: 'e0',
+        text: 'That stretch was already handled. The review queue was refreshed.',
+      },
+    ])
   })
 
   test('a failed review says so, frees the project and keeps what the server answered', () => {
