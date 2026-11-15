@@ -31,7 +31,20 @@ npm --prefix frontend run typecheck
 npm --prefix frontend run build
 npm --prefix frontend run gen:api && git diff --exit-code frontend/src/api/generated
 ```
-Manual UI check (**not done**; I only ran the commands above): `npm run dev`, upload a clip, analyse it, ask for a mask ("blur the faces"), look at the Review panel, click Confirm on a spot, and check that Undo brings it back.
+Manual UI check, done on 2026-11-15 at `f8a02d4` against the real backend (stub mode, a separate data folder). Steps:
+- Uploaded an 8 s generated clip through the API.
+- Seeded the cache with one face track with keyframes at 0, 1, 2, 5, 6 and 7 s (like the tests' `analysed()` helper), then Analyse.
+- Asked "blur faces" in the chat.
+
+What happened:
+- The Review panel listed two "Target lost, face 1" items: 0:02–0:05 and 0:07–0:08.
+- Clicking a row moved the player to 0:02.
+- Confirm removed that item.
+- Undo brought it back, with the chat note "Undid: a review confirmation".
+- Cut on the second item wrote a cut over 7.5–8.0 s and removed the item.
+- There were no console errors.
+
+The panel shows ranges in whole seconds (`formatTime`), so a stretch that starts at 7.5 s reads "0:07".
 
 **Results** (Windows 11, run on 2026-11-14 at `866e899`):
 - Backend: 1377 passed, 2 skipped, 1 failed. The failure is `tests/toolbox/test_toolbox_cli.py::test_writing_keeps_the_timeline_permissions`, a Windows-only failure (file permissions) that was already there.
