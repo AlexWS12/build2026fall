@@ -340,12 +340,15 @@ function synced(project: OpenProject, sync: Sync): OpenProject {
 
 const nextId = (project: OpenProject) => `e${project.chat.length}`
 
+const KIND_LABEL: Record<string, string> = { confirm_mask: 'a review confirmation', cut: 'a cut' }
+const named = (kinds: string[]) => [...new Set(kinds.map((k) => KIND_LABEL[k] ?? k))].join(', ')
+
 /** What the request whose status flipped between two histories was, in the user's words. */
 function changedRequest(before: HistoryReply, after: HistoryReply): string | null {
   const was = new Map(before.requests.map((r) => [r.request_id, r.status]))
   const changed = after.requests.find((r) => was.get(r.request_id) !== r.status)
   if (!changed) return null
-  return changed.text ? `"${changed.text}"` : (changed.reply ?? changed.kinds.join(', '))
+  return changed.text ? `"${changed.text}"` : (changed.reply ?? named(changed.kinds))
 }
 
 function failureText(activity: Activity, message: string): string {

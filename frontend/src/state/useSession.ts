@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ApiClient } from '../api'
 import { ApiError } from '../api/client'
+import type { ReviewReply } from '../api/types'
 import {
   initialSession,
   transition,
@@ -159,19 +160,20 @@ export function useSession(api: ApiClient): { session: Session; commands: Sessio
         })),
       review: (itemId, action) =>
         run({ type: 'review_started' }, async (id) => {
+          // The reply is the fresh queue: only the timeline and the history are left to read.
+          let review: ReviewReply
           try {
-            // The reply is the fresh queue: only the timeline and the history are left to read.
-            const review = await api.reviewItem(id, itemId, action)
-            const [timeline, history] = await Promise.all([api.getState(id), api.getHistory(id)])
-            return {
-              type: 'review_settled',
-              sync: { timeline, history, review, reviewError: null },
-              gone: false,
-            }
+            review = await api.reviewItem(id, itemId, action)
           } catch (error) {
             // The item is gone (the queue moved on): a full resync brings the fresh queue.
             if (!(error instanceof ApiError && error.status === 404)) throw error
             return { type: 'review_settled', sync: await sync(id), gone: true }
+          }
+          const [timeline, history] = await Promise.all([api.getState(id), api.getHistory(id)])
+          return {
+            type: 'review_settled',
+            sync: { timeline, history, review, reviewError: null },
+            gone: false,
           }
         }),
       close() {

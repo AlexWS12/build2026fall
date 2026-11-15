@@ -258,6 +258,23 @@ describe('requests', () => {
     expect(canRedo(undone)).toBe(true)
     expect(canUndo(undone)).toBe(false)
   })
+
+  test('undo of a bare review confirmation says so in plain words', () => {
+    const bare = (status: 'applied' | 'undone'): HistoryReply => ({
+      requests: [{ request_id: 'r_2', source: 'user', status, kinds: ['confirm_mask'], text: null, reply: null }],
+      can_undo: status === 'applied',
+      can_redo: status === 'undone',
+    })
+    const undone = play(
+      [
+        { type: 'undo_started' },
+        { type: 'history_settled', sync: { timeline: emptyTimeline, history: bare('undone'), ...noReview } },
+      ],
+      opened({ history: bare('applied') }),
+    )
+    const { chat } = project(undone)
+    expect(chat[chat.length - 1]).toMatchObject({ kind: 'note', text: 'Undid: a review confirmation' })
+  })
 })
 
 describe('exports', () => {
