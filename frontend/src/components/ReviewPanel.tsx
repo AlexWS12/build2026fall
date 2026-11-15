@@ -45,6 +45,8 @@ export function ReviewPanel({
         <ol className={styles.items} aria-label="Review items">
           {review.items.map((item) => {
             const range = `${formatTime(item.start)}–${formatTime(item.end)}`
+            const who = names.get(item.track_id) ?? item.label ?? item.track_id
+            const what = `${KIND_LABEL[item.kind]}, ${who}, ${range}`
             const goTo = `Go to ${formatTime(item.start)}`
             return (
               <li key={item.item_id} className={styles.item}>
@@ -52,20 +54,18 @@ export function ReviewPanel({
                   type="button"
                   className={styles.row}
                   title={goTo}
-                  aria-label={`${goTo}: ${KIND_LABEL[item.kind]}, ${range}`}
+                  aria-label={`${goTo}: ${what}`}
                   onClick={() => onSeek(item.start)}
                 >
                   <span className={styles.kind}>{KIND_LABEL[item.kind]}</span>
-                  <span className={styles.track}>
-                    {names.get(item.track_id) ?? item.label ?? item.track_id}
-                  </span>
+                  <span className={styles.track}>{who}</span>
                   <span className={styles.range}>{range}</span>
                 </button>
                 <button
                   type="button"
                   className={styles.button}
                   disabled={busy}
-                  aria-label={`Confirm ${range}`}
+                  aria-label={`Confirm ${what}`}
                   onClick={() => onReview(item.item_id, 'confirm')}
                 >
                   Confirm
@@ -74,7 +74,8 @@ export function ReviewPanel({
                   type="button"
                   className={styles.button}
                   disabled={busy}
-                  aria-label={`Cut ${range}`}
+                  title="Cut this stretch out of the video. Undo brings it back."
+                  aria-label={`Cut ${what}`}
                   onClick={() => onReview(item.item_id, 'cut')}
                 >
                   Cut

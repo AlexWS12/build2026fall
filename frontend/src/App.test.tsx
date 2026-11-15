@@ -387,7 +387,7 @@ describe('App wired to a backend', () => {
     test('confirming sends the action, and the stretch leaves the queue', async () => {
       const { api, reviewItem } = reviewing()
       const panel = within(await open(api))
-      fireEvent.click(await panel.findByRole('button', { name: 'Confirm 0:02–0:05' }))
+      fireEvent.click(await panel.findByRole('button', { name: 'Confirm Target lost, face, 0:02–0:05' }))
       await waitFor(() => expect(reviewItem).toHaveBeenCalledWith('prj_mock', 'rv_1', 'confirm'))
       expect(await panel.findByText('Nothing to check.')).toBeInTheDocument()
       expect(panel.queryByRole('list', { name: 'Review items' })).not.toBeInTheDocument()
@@ -396,14 +396,14 @@ describe('App wired to a backend', () => {
     test('the buttons wait while the project is busy', async () => {
       const { api } = reviewing({ sendRequest: () => new Promise(() => {}) })
       const panel = within(await open(api))
-      const confirm = await panel.findByRole('button', { name: 'Confirm 0:02–0:05' })
+      const confirm = await panel.findByRole('button', { name: 'Confirm Target lost, face, 0:02–0:05' })
       expect(confirm).toBeEnabled()
 
       fireEvent.change(screen.getByLabelText('Request'), { target: { value: 'blur faces' } })
       fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
       await waitFor(() => expect(confirm).toBeDisabled())
-      expect(panel.getByRole('button', { name: 'Cut 0:02–0:05' })).toBeDisabled()
+      expect(panel.getByRole('button', { name: 'Cut Target lost, face, 0:02–0:05' })).toBeDisabled()
     })
 
     test('an empty queue says so, and mentions held boxes and standing rules', async () => {
