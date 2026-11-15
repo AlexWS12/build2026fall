@@ -234,6 +234,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Review
+         * @description The stretches of the masks a person should check (F-41), most serious first.
+         */
+        get: operations["get_review_api_projects__project_id__review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/review/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Act On Review Item
+         * @description Confirm one review item or cut it out, as a hand edit, and return the new queue.
+         *
+         *     404 if the item is no longer in the queue (someone else's edit changed it); 400 if the
+         *     toolbox refuses.
+         */
+        post: operations["act_on_review_item_api_projects__project_id__review__item_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/analysis": {
         parameters: {
             query?: never;
@@ -594,6 +637,70 @@ export interface components {
             created_at: string;
             video: components["schemas"]["VideoRef"];
         };
+        /** ReviewAction */
+        ReviewAction: {
+            /**
+             * Action
+             * @description confirm: mark the stretch as checked. cut: cut the stretch out of the video.
+             * @enum {string}
+             */
+            action: "confirm" | "cut";
+        };
+        /** ReviewItem */
+        ReviewItem: {
+            /**
+             * Item Id
+             * @description Stable for the same track, kind and range, so a client can keep its place.
+             */
+            item_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "lost" | "no_track" | "uncertain" | "gap";
+            /** Track Id */
+            track_id: string;
+            /**
+             * Label
+             * @description The track's label (``face``, ...), or null if no track has this id.
+             */
+            label: string | null;
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            effect: components["schemas"]["Effect"];
+            /**
+             * Op Id
+             * @description The mask op whose span this stretch is in.
+             */
+            op_id: string;
+            /** Request Id */
+            request_id: string;
+        };
+        /** ReviewReply */
+        ReviewReply: {
+            /**
+             * Analysed
+             * @description Whether the video has an analysis. Without one, there is nothing to audit.
+             */
+            analysed: boolean;
+            /**
+             * Items
+             * @description The stretches of the masks to check, most serious first.
+             */
+            items: components["schemas"]["ReviewItem"][];
+            /**
+             * Held Seconds
+             * @description Time in held stretches (a box kept just past a track's end) not yet reviewed.
+             */
+            held_seconds: number;
+            /**
+             * Rules Not Audited
+             * @description Standing rules, which can't be audited ahead of a render.
+             */
+            rules_not_audited: string[];
+        };
         /**
          * Rule
          * @description A standing rule, evaluated on every frame against whatever the detectors find.
@@ -630,6 +737,20 @@ export interface components {
             text: string;
             /** Words */
             words: components["schemas"]["Word"][];
+        };
+        /** Span */
+        Span: {
+            /** Start */
+            start: number;
+            /**
+             * End
+             * @description Null means until the end of the video.
+             */
+            end?: number | null;
+            /** Op Id */
+            op_id: string;
+            /** Request Id */
+            request_id: string;
         };
         /**
          * StepReport
@@ -689,6 +810,13 @@ export interface components {
              */
             masks?: {
                 [key: string]: components["schemas"]["MaskSpan"][];
+            };
+            /**
+             * Reviewed
+             * @description Per track id: the source-time spans a person confirmed (F-41 review queue). May cover time with no mask, so consumers intersect it with `masks`.
+             */
+            reviewed?: {
+                [key: string]: components["schemas"]["Span"][];
             };
             /**
              * Cuts
@@ -1164,6 +1292,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TracksReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_review_api_projects__project_id__review_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    act_on_review_item_api_projects__project_id__review__item_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewAction"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewReply"];
                 };
             };
             /** @description Validation Error */

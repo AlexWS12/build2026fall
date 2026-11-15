@@ -10,6 +10,8 @@
     GET  /api/projects/{id}/history         the requests in the log; what undo and redo would do
     POST /api/projects/{id}/undo, /redo     through the toolbox, like any other edit
     GET  /api/projects/{id}/tracks          where the targets are, for the preview's overlay
+    GET  /api/projects/{id}/review          the mask stretches to check (F-41)
+    POST /api/projects/{id}/review/{item}   confirm one of them, or cut it out
     POST /api/projects/{id}/analysis        make sure the video has a vision analysis
     POST /api/projects/{id}/exports         render the timeline into a new MP4
     GET  /api/projects/{id}/exports/{name}  that MP4
@@ -57,9 +59,17 @@ from vibe.contract.common import Model, Source
 from vibe.modules import ModuleError
 from vibe.modules.transcribe import Transcript, transcribe_video
 from vibe.modules.vision import CacheError, load_tracks
-from vibe.render import NothingToRender, RenderError, UnsupportedEdit, export
+from vibe.render import (
+    NothingToRender,
+    RenderError,
+    ReviewItem,
+    UnsupportedEdit,
+    export,
+    review_queue,
+)
 from vibe.storage import ChatRecord, Project, ProjectInfo, Storage, StorageError
-from vibe.video import NoAudioStream, VideoError, VideoInfo, probe
+from vibe.toolbox import UI_TOOLS
+from vibe.video import FrameIndex, NoAudioStream, VideoError, VideoInfo, probe
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +188,27 @@ class TracksReply(Model):
     analysed: bool
     tracks: list[Track] = Field(
         description="The cached analysis's tracks, then the project's hand-drawn ones."
+    )
+
+
+class ReviewReply(Model):
+    analysed: bool = Field(
+        description="Whether the video has an analysis. Without one, there is nothing to audit."
+    )
+    items: list[ReviewItem] = Field(
+        description="The stretches of the masks to check, most serious first."
+    )
+    held_seconds: float = Field(
+        description="Time in held stretches (a box kept just past a track's end) not yet reviewed."
+    )
+    rules_not_audited: list[str] = Field(
+        description="Standing rules, which can't be audited ahead of a render."
+    )
+
+
+class ReviewAction(Model):
+    action: Literal["confirm", "cut"] = Field(
+        description="confirm: mark the stretch as checked. cut: cut the stretch out of the video."
     )
 
 
@@ -423,6 +454,64 @@ def get_tracks(project_id: str, storage: StorageDep) -> TracksReply:
     return TracksReply(analysed=analysed, tracks=tracks)
 
 
+@router.get("/{project_id}/review")
+def get_review(project_id: str, storage: StorageDep) -> ReviewReply:
+    """The stretches of the masks a person should check (F-41), most serious first."""
+    project = _open(storage, project_id)
+    analysed, tracks = _tracks(storage, project)
+    return _review(project, analysed, tracks, _frame_index(storage, project))
+
+
+@router.post("/{project_id}/review/{item_id}")
+def act_on_review_item(
+    project_id: str, item_id: str, body: ReviewAction, storage: StorageDep
+) -> ReviewReply:
+    """Confirm one review item or cut it out, as a hand edit, and return the new queue.
+
+    404 if the item is no longer in the queue (someone else's edit changed it); 400 if the
+    toolbox refuses.
+    """
+    project = _open(storage, project_id)
+    with _one_request_at_a_time(project.id):
+        analysed, tracks = _tracks(storage, project)
+        index = _frame_index(storage, project)
+        queue = _review(project, analysed, tracks, index)
+        item = next((i for i in queue.items if i.item_id == item_id), None)
+        if item is None:
+            raise HTTPException(
+                status_code=404, detail="this spot is no longer in the review queue"
+            )
+        time_range = {"start": item.start, "end": item.end}
+        if body.action == "confirm":
+            call = ToolCall(
+                step_id="s1",
+                tool="confirm_mask",
+                args={"targets": [item.track_id], "time_range": time_range},
+            )
+        else:
+            call = ToolCall(step_id="s1", tool="cut_range", args={"time_range": time_range})
+        try:
+            done = execute_plan(
+                Plan(calls=(call,)),
+                project,
+                request_id=new_id("r"),
+                source="user",
+                duration=index.end,
+                tracks=tracks,
+                registry=UI_TOOLS,
+            )
+        except (OSError, ValueError) as e:  # an unreadable timeline, or a write that failed
+            logger.exception("%s on a review item of project %s failed", body.action, project.id)
+            raise HTTPException(
+                status_code=500,
+                detail="couldn't apply this: the project's files can't be read or written.",
+            ) from e
+        if not done.ok:
+            reason = (done.error or "the edit was refused").removeprefix(f"{call.tool}: ")
+            raise HTTPException(status_code=400, detail=reason)
+        return _review(project, analysed, tracks, index)
+
+
 @router.post("/{project_id}/analysis")
 def analyse(project_id: str, storage: StorageDep) -> AnalysisReply:
     """Make sure the video has a vision analysis (F-10). 503 when this server can't provide one.
@@ -509,6 +598,28 @@ def _tracks(storage: Storage, project: Project) -> tuple[bool, list[Track]]:
         logger.warning("tracks for project %s can't be used: %s", project.id, e)
         raise HTTPException(status_code=503, detail=_BAD_ANALYSIS) from e
     return cached is not None, [*(cached or []), *drawn]
+
+
+def _frame_index(storage: Storage, project: Project) -> FrameIndex:
+    try:
+        return FrameIndex.build(storage.video_path(project.info.video))
+    except (VideoError, OSError, ValueError) as e:
+        logger.exception("reading the frames of project %s failed", project.id)
+        raise HTTPException(status_code=500, detail="couldn't read this project's video") from e
+
+
+def _review(
+    project: Project, analysed: bool, tracks: list[Track], index: FrameIndex
+) -> ReviewReply:
+    queue = review_queue(
+        project.state(), tracks, duration=index.end, frame_times=index.times.tolist()
+    )
+    return ReviewReply(
+        analysed=analysed,
+        items=queue.items,
+        held_seconds=queue.held_seconds,
+        rules_not_audited=queue.rules_not_audited,
+    )
 
 
 def _run(storage: Storage, project: Project, plan: Plan, request_id: str) -> ChatReply:

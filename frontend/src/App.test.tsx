@@ -177,6 +177,7 @@ describe('App wired to a backend', () => {
   const muted: TimelineState = {
     schema_version: 1,
     masks: {},
+    reviewed: {},
     cuts: [],
     mutes: [{ start: 0, end: 5, op_id: 'op_1', request_id: 'r_1', speaker: null }],
     audio_filters: [],

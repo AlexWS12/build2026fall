@@ -19,6 +19,7 @@ import {
 const emptyTimeline: TimelineState = {
   schema_version: 1,
   masks: {},
+  reviewed: {},
   cuts: [],
   mutes: [],
   audio_filters: [],
