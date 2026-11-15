@@ -225,7 +225,7 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 | F-10b Detector bake-off → decision row, then harden the winner (stitching, face↔person, fit under `run_analysis`) | _open_ | | Report table with hardware stated → decision row | planned |
 | F-13 Targeting by description ("the person in red", "everyone except me") | _open_ | | A request picks the right tracks on a labeled clip; unsure = masked | planned |
 | F-40 Agent reports what it did in plain words + raw tool calls | alex | alex/demo-wiring-redesign | The chat shows a plain summary and the tool calls for each applied request | in review |
-| F-41 Review queue for low-confidence results (uses `RenderResult.issues` and the mask audit) | paulallain | paulallain/f41-review-queue | Low-confidence stretches show in a queue; confirming or fixing one writes an op | in progress |
+| F-41 Review queue for low-confidence results (uses `RenderResult.issues` and the mask audit) | paulallain | paulallain/f41-review-queue | Low-confidence stretches show in a queue; confirming or fixing one writes an op | in review |
 | F-42 Hand fixes: select, change effect, remove, correct a box (through the toolbox) | _open_ | | A hand fix from the UI is an op in the timeline and can be undone | planned |
 | F-43 Undo per request + version history in the UI | alex | alex/demo-wiring-redesign | Undo removes one whole request; history lists the requests | in progress (undo and redo work; the history route exists, no history list in the UI yet) |
 
