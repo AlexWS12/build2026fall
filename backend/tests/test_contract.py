@@ -11,6 +11,7 @@ from vibe.contract import (
     AddAudioFilter,
     AddMask,
     AddRule,
+    ConfirmMask,
     ContractError,
     Cut,
     Effect,
@@ -148,6 +149,147 @@ def test_spans_remember_which_op_made_them() -> None:
     second = mask("r_2", ["t"], PIXELATE, tr(10, 20))
     middle = fold([first, second]).masks["t"][1]
     assert (middle.op_id, middle.request_id) == (second.op_id, "r_2")
+
+
+# --- Review queue: confirm_mask and the reviewed state (F-41) ----------------------------
+
+
+def confirm(rid: str, targets: list[str], r: TimeRange) -> ConfirmMask:
+    return ConfirmMask(request_id=rid, source="user", targets=targets, time_range=r)
+
+
+def reviewed(state: TimelineState, track: str) -> list[tuple[float, float | None]]:
+    return [(s.start, s.end) for s in state.reviewed.get(track, [])]
+
+
+def test_confirm_mask_paints_reviewed_and_changes_nothing_else() -> None:
+    first = mask("r_1", ["t"], BLUR, tr(0, 30))
+    base = fold([first])
+    state = fold([first, confirm("r_2", ["t"], tr(5, 10))])
+    assert reviewed(state, "t") == [(5, 10)]
+    assert state.model_copy(update={"reviewed": {}}) == base
+
+
+def test_confirm_mask_remembers_which_op_made_it() -> None:
+    op = confirm("r_2", ["a", "b"], tr(0, 4))
+    state = fold([mask("r_1", ["a", "b"]), op])
+    assert {(s.op_id, s.request_id) for spans_ in state.reviewed.values() for s in spans_} == {
+        (op.op_id, "r_2")
+    }
+    assert set(state.reviewed) == {"a", "b"}
+
+
+def test_partial_and_adjacent_confirms_merge_per_track() -> None:
+    ops = [
+        mask("r_1", ["t"]),
+        confirm("r_2", ["t"], tr(0, 5)),
+        confirm("r_3", ["t"], tr(10, 15)),
+        confirm("r_4", ["t"], tr(5, 10)),
+    ]
+    spans_ = fold(ops).reviewed["t"]
+    assert [(s.start, s.end) for s in spans_] == [(0, 5), (5, 10), (10, 15)]
+    # Different requests stay separate spans, so each one can be undone on its own.
+    assert [s.request_id for s in spans_] == ["r_2", "r_4", "r_3"]
+
+
+def test_later_confirm_wins_over_its_range() -> None:
+    ops = [mask("r_1", ["t"]), confirm("r_2", ["t"], tr(0, 10)), confirm("r_3", ["t"], tr(4, 6))]
+    spans_ = fold(ops).reviewed["t"]
+    assert [(s.start, s.end, s.request_id) for s in spans_] == [
+        (0, 4, "r_2"),
+        (4, 6, "r_3"),
+        (6, 10, "r_2"),
+    ]
+
+
+def test_add_mask_erases_reviewed_over_its_own_range_only() -> None:
+    ops = [
+        mask("r_1", ["t", "u"], BLUR, tr(0, 30)),
+        confirm("r_2", ["t", "u"], tr(0, 20)),
+        mask("r_3", ["t"], PIXELATE, tr(10, 15)),
+    ]
+    state = fold(ops)
+    assert reviewed(state, "t") == [(0, 10), (15, 20)]
+    assert reviewed(state, "u") == [(0, 20)]
+
+
+def test_remove_mask_erases_reviewed_over_its_range() -> None:
+    ops = [
+        mask("r_1", ["t"], BLUR, tr(0, 30)),
+        confirm("r_2", ["t"], tr(0, 20)),
+        RemoveMask(request_id="r_3", source="user", targets=["t"], time_range=tr(5, 8)),
+    ]
+    assert reviewed(fold(ops), "t") == [(0, 5), (8, 20)]
+
+
+def test_remove_mask_everywhere_drops_reviewed() -> None:
+    ops = [
+        mask("r_1", ["t"]),
+        confirm("r_2", ["t"], tr(0, 20)),
+        RemoveMask(request_id="r_3", source="user", targets=["t"]),
+    ]
+    assert fold(ops).reviewed == {}
+
+
+def test_set_effect_keeps_reviewed() -> None:
+    ops = [
+        mask("r_1", ["t"], BLUR, tr(0, 30)),
+        confirm("r_2", ["t"], tr(0, 20)),
+        SetEffect(request_id="r_3", source="user", targets=["t"], effect=PIXELATE),
+    ]
+    assert reviewed(fold(ops), "t") == [(0, 20)]
+
+
+def test_undo_removes_a_confirmation_and_redo_restores_it() -> None:
+    log = OpLog([mask("r_1", ["t"]), confirm("r_2", ["t"], tr(0, 10))])
+    before = log.state()
+    assert reviewed(before, "t") == [(0, 10)]
+    log.undo("r_3")
+    assert log.state().reviewed == {}
+    assert spans(log.state(), "t") == [(0, None, "blur")]
+    log.redo("r_4")
+    assert log.state() == before
+
+
+def test_undoing_a_mask_change_brings_the_review_back() -> None:
+    # The erase happens in the fold, so undoing the add_mask request restores the review.
+    log = OpLog(
+        [
+            mask("r_1", ["t"], BLUR, tr(0, 30)),
+            confirm("r_2", ["t"], tr(0, 20)),
+            mask("r_3", ["t"], PIXELATE, tr(0, 20)),
+        ]
+    )
+    assert log.state().reviewed == {}
+    log.undo("r_4")
+    assert reviewed(log.state(), "t") == [(0, 20)]
+
+
+def test_confirm_mask_round_trips_through_jsonl() -> None:
+    log = OpLog([mask("r_1", ["t"]), confirm("r_2", ["t"], tr(2, 7))])
+    again = OpLog.from_jsonl(log.to_jsonl())
+    assert again.ops == log.ops and again.state() == log.state()
+    assert reviewed(again.state(), "t") == [(2, 7)]
+
+
+def test_state_with_reviewed_round_trips_through_json() -> None:
+    state = fold([mask("r_1", ["t"]), confirm("r_2", ["t"], tr(2, 7))])
+    assert TimelineState.model_validate_json(state.model_dump_json()) == state
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"targets": ["t"], "time_range": {"start": 0, "end": 1}, "colour": "red"},  # unknown field
+        {"targets": [], "time_range": {"start": 0, "end": 1}},  # no targets
+        {"targets": ["t"]},  # a confirmation needs a range
+        {"targets": ["t"], "time_range": {"start": 3, "end": 3}},  # empty range
+    ],
+)
+def test_malformed_confirm_mask_is_rejected(bad: dict) -> None:
+    op = {"kind": "confirm_mask", "request_id": "r", "source": "user", **bad}
+    with pytest.raises(ValidationError):
+        OP_ADAPTER.validate_python(op)
 
 
 def test_masks_at_answers_per_frame() -> None:

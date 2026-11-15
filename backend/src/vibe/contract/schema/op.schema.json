@@ -206,6 +206,69 @@
       "title": "AddRule",
       "type": "object"
     },
+    "ConfirmMask": {
+      "additionalProperties": false,
+      "description": "A person checked that these targets are hidden correctly over this range (F-41).\n\nTakes a stretch off the review queue. It changes nothing in the render. A later ``add_mask``\nor ``remove_mask`` on the same targets and range takes the confirmation back: a changed\nmask needs a new review.",
+      "properties": {
+        "op_id": {
+          "description": "Unique in the log.",
+          "title": "Op Id",
+          "type": "string"
+        },
+        "request_id": {
+          "description": "The chat message or UI action that caused this op. Undo works per request.",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "agent",
+            "user"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "kind": {
+          "const": "confirm_mask",
+          "default": "confirm_mask",
+          "title": "Kind",
+          "type": "string"
+        },
+        "targets": {
+          "description": "Track ids from the analysis cache.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Targets",
+          "type": "array"
+        },
+        "time_range": {
+          "$ref": "#/$defs/TimeRange"
+        }
+      },
+      "required": [
+        "request_id",
+        "source",
+        "targets",
+        "time_range"
+      ],
+      "title": "ConfirmMask",
+      "type": "object"
+    },
     "Cut": {
       "additionalProperties": false,
       "description": "Remove a time range from the output. Overlapping cuts merge.",
@@ -947,6 +1010,7 @@
       "add_audio_filter": "#/$defs/AddAudioFilter",
       "add_mask": "#/$defs/AddMask",
       "add_rule": "#/$defs/AddRule",
+      "confirm_mask": "#/$defs/ConfirmMask",
       "cut": "#/$defs/Cut",
       "mute": "#/$defs/Mute",
       "redo": "#/$defs/Redo",
@@ -969,6 +1033,9 @@
     },
     {
       "$ref": "#/$defs/SetEffect"
+    },
+    {
+      "$ref": "#/$defs/ConfirmMask"
     },
     {
       "$ref": "#/$defs/Cut"
