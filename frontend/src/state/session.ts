@@ -4,6 +4,7 @@ import type {
   ExportReply,
   HistoryReply,
   ProjectDetail,
+  ReviewReply,
   StepReport,
   TimelineState,
   Track,
@@ -23,7 +24,7 @@ import type {
  *   empty ──open_started──► opening ──open_succeeded──► open(idle)
  *     ▲                        │                          │  ▲
  *     └──────open_failed───────┘        *_started ────────┘  └──── *_settled / activity_failed
- *                         (requesting | undoing | redoing | analysing | transcribing | exporting)
+ *                         (requesting | undoing | redoing | analysing | transcribing | exporting | reviewing)
  */
 
 export type ChatEntry =
@@ -50,6 +51,7 @@ export type Activity =
   | { kind: 'analysing' }
   | { kind: 'transcribing' }
   | { kind: 'exporting' }
+  | { kind: 'reviewing' }
 
 export type ExportState =
   | { kind: 'none' }
@@ -57,8 +59,17 @@ export type ExportState =
   | { kind: 'ready'; result: ExportReply; stale: boolean }
   | { kind: 'failed'; message: string }
 
+/**
+ * The review queue (F-41) is extra reading: when it can't be read, `review` is null and
+ * `reviewError` says why, and the rest of the project still loads.
+ */
+export interface ReviewData {
+  review: ReviewReply | null
+  reviewError: string | null
+}
+
 /** What the server knows about a project, fetched together when it opens. */
-export interface Snapshot {
+export interface Snapshot extends ReviewData {
   detail: ProjectDetail
   videoUrl: string
   timeline: TimelineState
@@ -68,7 +79,7 @@ export interface Snapshot {
   messages: ChatRecord[]
 }
 
-export interface OpenProject {
+export interface OpenProject extends ReviewData {
   detail: ProjectDetail
   videoUrl: string
   timeline: TimelineState
@@ -88,8 +99,8 @@ export type Session =
   | { status: 'opening'; label: string; fallback: OpenProject | null }
   | { status: 'open'; project: OpenProject; error: string | null }
 
-/** The timeline and its history always travel together, so they can't drift apart. */
-export interface Sync {
+/** The timeline, its history and the review queue travel together, so they can't drift apart. */
+export interface Sync extends ReviewData {
   timeline: TimelineState
   history: HistoryReply
 }
@@ -105,11 +116,13 @@ export type SessionEvent =
   | { type: 'redo_started' }
   | { type: 'history_settled'; sync: Sync }
   | { type: 'analysis_started' }
-  | { type: 'analysis_settled'; analysed: boolean; tracks: Track[] }
+  | ({ type: 'analysis_settled'; analysed: boolean; tracks: Track[] } & ReviewData)
   | { type: 'transcript_started' }
   | { type: 'transcript_settled'; transcript: Transcript }
   | { type: 'export_started' }
   | { type: 'export_settled'; result: ExportReply }
+  | { type: 'review_started' }
+  | { type: 'review_settled'; sync: Sync }
   /** The activity in flight failed. `sync`, when the server could still be read, is the truth. */
   | { type: 'activity_failed'; message: string; sync?: Sync }
 
@@ -216,6 +229,8 @@ function projectTransition(project: OpenProject, event: ProjectEvent): OpenProje
         activity: IDLE,
         analysed: event.analysed,
         tracks: event.tracks,
+        review: event.review,
+        reviewError: event.reviewError,
         chat: [...project.chat, { kind: 'note', id: nextId(project), text }],
       }
     }
@@ -235,6 +250,12 @@ function projectTransition(project: OpenProject, event: ProjectEvent): OpenProje
         activity: IDLE,
         export: { kind: 'ready', result: event.result, stale: false },
       }
+    case 'review_started':
+      if (!idle) return project
+      return { ...project, activity: { kind: 'reviewing' } }
+    case 'review_settled':
+      if (activity.kind !== 'reviewing') return project
+      return synced({ ...project, activity: IDLE }, event.sync)
     case 'activity_failed': {
       if (idle) return project
       const failed: OpenProject =
@@ -272,6 +293,8 @@ function fromSnapshot(snapshot: Snapshot): OpenProject {
     history: snapshot.history,
     tracks: snapshot.tracks,
     analysed: snapshot.analysed,
+    review: snapshot.review,
+    reviewError: snapshot.reviewError,
     transcript: null,
     chat,
     activity: IDLE,
@@ -289,7 +312,14 @@ function synced(project: OpenProject, sync: Sync): OpenProject {
   const moved = JSON.stringify(sync.timeline) !== JSON.stringify(project.timeline)
   const exported =
     moved && project.export.kind === 'ready' ? { ...project.export, stale: true } : project.export
-  return { ...project, timeline: sync.timeline, history: sync.history, export: exported }
+  return {
+    ...project,
+    timeline: sync.timeline,
+    history: sync.history,
+    review: sync.review,
+    reviewError: sync.reviewError,
+    export: exported,
+  }
 }
 
 const nextId = (project: OpenProject) => `e${project.chat.length}`
@@ -309,6 +339,7 @@ function failureText(activity: Activity, message: string): string {
     redoing: 'Redo failed',
     analysing: 'Analysis failed',
     transcribing: 'Transcription failed',
+    reviewing: 'Review failed',
   }
   const label = activity.kind === 'idle' || activity.kind === 'exporting' ? '' : what[activity.kind]
   return `${label}: ${message}`
@@ -341,6 +372,7 @@ const ACTIVITY_LABEL: Record<Activity['kind'], string | null> = {
   analysing: 'Analysing the video…',
   transcribing: 'Waiting for the transcript…',
   exporting: 'Rendering the export…',
+  reviewing: 'Applying review…',
 }
 
 /** One line saying what's in flight, or null when idle. */

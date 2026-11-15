@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ApiClient } from '../api'
+import { ApiError } from '../api/client'
 import {
   initialSession,
   transition,
+  type ReviewData,
   type Session,
   type SessionEvent,
   type Snapshot,
@@ -22,6 +24,8 @@ export interface SessionCommands {
   analyse(): Promise<void>
   exportVideo(): Promise<void>
   transcribe(): Promise<void>
+  /** Confirm a stretch of the review queue as it is, or cut it out. */
+  review(itemId: string, action: 'confirm' | 'cut'): Promise<void>
   /** Leave the open project and go back to the start screen. */
   close(): void
 }
@@ -47,18 +51,30 @@ export function useSession(api: ApiClient): { session: Session; commands: Sessio
     const projectId = () =>
       current.current.status === 'open' ? current.current.project.detail.info.project_id : null
 
+    /** The review queue; when it can't be read the reason is kept, and nothing else fails. */
+    const reviewOf = (id: string): Promise<ReviewData> =>
+      api.getReview(id).then(
+        (review) => ({ review, reviewError: null }),
+        (error: unknown) => ({ review: null, reviewError: errorText(error) }),
+      )
+
     const sync = async (id: string): Promise<Sync> => {
-      const [timeline, history] = await Promise.all([api.getState(id), api.getHistory(id)])
-      return { timeline, history }
+      const [timeline, history, review] = await Promise.all([
+        api.getState(id),
+        api.getHistory(id),
+        reviewOf(id),
+      ])
+      return { timeline, history, ...review }
     }
 
     const snapshot = async (id: string, videoUrl: () => string): Promise<Snapshot> => {
-      const [detail, timeline, history, messages, tracks] = await Promise.all([
+      const [detail, timeline, history, messages, tracks, review] = await Promise.all([
         api.getProject(id),
         api.getState(id),
         api.getHistory(id),
         api.getMessages(id),
         api.getTracks(id),
+        reviewOf(id),
       ])
       return {
         detail,
@@ -67,6 +83,7 @@ export function useSession(api: ApiClient): { session: Session; commands: Sessio
         messages,
         tracks: tracks.tracks,
         analysed: tracks.analysed,
+        ...review,
         videoUrl: videoUrl(),
       }
     }
@@ -112,18 +129,23 @@ export function useSession(api: ApiClient): { session: Session; commands: Sessio
       undo: () =>
         run({ type: 'undo_started' }, async (id) => {
           const history = await api.undo(id)
-          return { type: 'history_settled', sync: { history, timeline: await api.getState(id) } }
+          const [timeline, review] = await Promise.all([api.getState(id), reviewOf(id)])
+          return { type: 'history_settled', sync: { history, timeline, ...review } }
         }),
       redo: () =>
         run({ type: 'redo_started' }, async (id) => {
           const history = await api.redo(id)
-          return { type: 'history_settled', sync: { history, timeline: await api.getState(id) } }
+          const [timeline, review] = await Promise.all([api.getState(id), reviewOf(id)])
+          return { type: 'history_settled', sync: { history, timeline, ...review } }
         }),
       analyse: () =>
         run({ type: 'analysis_started' }, async (id) => {
           await api.analyse(id)
-          const { analysed, tracks } = await api.getTracks(id)
-          return { type: 'analysis_settled', analysed, tracks }
+          const [{ analysed, tracks }, review] = await Promise.all([
+            api.getTracks(id),
+            reviewOf(id),
+          ])
+          return { type: 'analysis_settled', analysed, tracks, ...review }
         }),
       exportVideo: () =>
         run({ type: 'export_started' }, async (id) => ({
@@ -135,6 +157,16 @@ export function useSession(api: ApiClient): { session: Session; commands: Sessio
           type: 'transcript_settled',
           transcript: await api.transcribe(id),
         })),
+      review: (itemId, action) =>
+        run({ type: 'review_started' }, async (id) => {
+          try {
+            await api.reviewItem(id, itemId, action)
+          } catch (error) {
+            // The item is gone (the queue moved on): the fresh queue below is the answer.
+            if (!(error instanceof ApiError && error.status === 404)) throw error
+          }
+          return { type: 'review_settled', sync: await sync(id) }
+        }),
       close() {
         if (dispatch({ type: 'closed' })) window.history.replaceState(null, '', ' ')
       },
