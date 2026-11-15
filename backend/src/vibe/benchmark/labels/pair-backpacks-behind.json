@@ -1,0 +1,860 @@
+{
+  "labels_version": 1,
+  "clip_id": "pair-backpacks-behind",
+  "sha256": "806f8788c03dc26756a44edc9353f23ac9552345a334edc96c987d6cb0aa6659",
+  "tracks": [
+    {
+      "track_id": "m1",
+      "label": "person",
+      "source": "user",
+      "identity": null,
+      "keyframes": [
+        {
+          "t": 0.0,
+          "box": [
+            0.352,
+            0.194,
+            0.706,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 1.0,
+          "box": [
+            0.325,
+            0.115,
+            0.692,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 2.0,
+          "box": [
+            0.323,
+            0.185,
+            0.66,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 3.0,
+          "box": [
+            0.356,
+            0.191,
+            0.675,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 4.0,
+          "box": [
+            0.35,
+            0.226,
+            0.664,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 5.0,
+          "box": [
+            0.35,
+            0.287,
+            0.65,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 6.0,
+          "box": [
+            0.308,
+            0.252,
+            0.604,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 7.0,
+          "box": [
+            0.302,
+            0.306,
+            0.591,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 7.458,
+          "box": [
+            0.302,
+            0.274,
+            0.609,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        }
+      ]
+    },
+    {
+      "track_id": "m2",
+      "label": "person",
+      "source": "user",
+      "identity": null,
+      "keyframes": [
+        {
+          "t": 0.0,
+          "box": [
+            0.667,
+            0.256,
+            0.956,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 1.0,
+          "box": [
+            0.663,
+            0.222,
+            0.934,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 2.0,
+          "box": [
+            0.622,
+            0.25,
+            0.873,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 3.0,
+          "box": [
+            0.667,
+            0.287,
+            0.898,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 4.0,
+          "box": [
+            0.659,
+            0.296,
+            0.908,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 5.0,
+          "box": [
+            0.635,
+            0.333,
+            0.863,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 6.0,
+          "box": [
+            0.602,
+            0.339,
+            0.852,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 7.0,
+          "box": [
+            0.607,
+            0.352,
+            0.856,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 7.458,
+          "box": [
+            0.607,
+            0.348,
+            0.856,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        }
+      ]
+    },
+    {
+      "track_id": "w1",
+      "label": "person",
+      "source": "user",
+      "identity": null,
+      "keyframes": [
+        {
+          "t": 2.0,
+          "box": [
+            0.359,
+            0.343,
+            0.45,
+            0.556
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 3.0,
+          "box": [
+            0.352,
+            0.361,
+            0.448,
+            0.556
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 4.0,
+          "box": [
+            0.318,
+            0.383,
+            0.417,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 5.0,
+          "box": [
+            0.263,
+            0.38,
+            0.394,
+            0.972
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 6.0,
+          "box": [
+            0.219,
+            0.38,
+            0.359,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 7.0,
+          "box": [
+            0.165,
+            0.411,
+            0.307,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 7.458,
+          "box": [
+            0.151,
+            0.404,
+            0.292,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        }
+      ]
+    },
+    {
+      "track_id": "d1",
+      "label": "person",
+      "source": "user",
+      "identity": null,
+      "keyframes": [
+        {
+          "t": 3.0,
+          "box": [
+            0.318,
+            0.435,
+            0.391,
+            0.722
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 4.0,
+          "box": [
+            0.3,
+            0.422,
+            0.359,
+            0.759
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 5.0,
+          "box": [
+            0.273,
+            0.444,
+            0.313,
+            0.796
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 7.0,
+          "box": [
+            0.3,
+            0.426,
+            0.359,
+            0.889
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 7.458,
+          "box": [
+            0.255,
+            0.472,
+            0.302,
+            0.861
+          ],
+          "conf": 1.0,
+          "state": "user"
+        }
+      ]
+    },
+    {
+      "track_id": "L",
+      "label": "person",
+      "source": "user",
+      "identity": null,
+      "keyframes": [
+        {
+          "t": 7.0,
+          "box": [
+            0.313,
+            0.426,
+            0.383,
+            0.843
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 7.458,
+          "box": [
+            0.307,
+            0.417,
+            0.375,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        }
+      ]
+    },
+    {
+      "track_id": "N",
+      "label": "person",
+      "source": "user",
+      "identity": null,
+      "keyframes": [
+        {
+          "t": 7.0,
+          "box": [
+            0.56,
+            0.472,
+            0.615,
+            0.926
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 7.458,
+          "box": [
+            0.599,
+            0.472,
+            0.641,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        }
+      ]
+    },
+    {
+      "track_id": "A",
+      "label": "person",
+      "source": "user",
+      "identity": null,
+      "keyframes": [
+        {
+          "t": 0.0,
+          "box": [
+            0.023,
+            0.463,
+            0.079,
+            0.726
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 1.0,
+          "box": [
+            0.0,
+            0.417,
+            0.036,
+            0.694
+          ],
+          "conf": 1.0,
+          "state": "user"
+        }
+      ]
+    },
+    {
+      "track_id": "B",
+      "label": "person",
+      "source": "user",
+      "identity": null,
+      "keyframes": [
+        {
+          "t": 0.0,
+          "box": [
+            0.156,
+            0.444,
+            0.206,
+            0.63
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 1.0,
+          "box": [
+            0.096,
+            0.398,
+            0.135,
+            0.602
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 2.0,
+          "box": [
+            0.04,
+            0.398,
+            0.099,
+            0.602
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 3.0,
+          "box": [
+            0.0,
+            0.37,
+            0.04,
+            0.6
+          ],
+          "conf": 1.0,
+          "state": "user"
+        }
+      ]
+    },
+    {
+      "track_id": "C",
+      "label": "person",
+      "source": "user",
+      "identity": null,
+      "keyframes": [
+        {
+          "t": 0.0,
+          "box": [
+            0.313,
+            0.454,
+            0.359,
+            0.676
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 1.0,
+          "box": [
+            0.305,
+            0.441,
+            0.344,
+            0.648
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 2.0,
+          "box": [
+            0.31,
+            0.444,
+            0.352,
+            0.62
+          ],
+          "conf": 1.0,
+          "state": "user"
+        }
+      ]
+    },
+    {
+      "track_id": "D",
+      "label": "person",
+      "source": "user",
+      "identity": null,
+      "keyframes": [
+        {
+          "t": 0.0,
+          "box": [
+            0.357,
+            0.463,
+            0.388,
+            0.667
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 1.0,
+          "box": [
+            0.342,
+            0.454,
+            0.375,
+            0.639
+          ],
+          "conf": 1.0,
+          "state": "user"
+        }
+      ]
+    },
+    {
+      "track_id": "E",
+      "label": "person",
+      "source": "user",
+      "identity": null,
+      "keyframes": [
+        {
+          "t": 0.0,
+          "box": [
+            0.964,
+            0.422,
+            1.0,
+            0.639
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 1.0,
+          "box": [
+            0.967,
+            0.435,
+            1.0,
+            0.657
+          ],
+          "conf": 1.0,
+          "state": "user"
+        }
+      ]
+    },
+    {
+      "track_id": "P",
+      "label": "person",
+      "source": "user",
+      "identity": null,
+      "keyframes": [
+        {
+          "t": 0.0,
+          "box": [
+            0.656,
+            0.37,
+            0.7,
+            0.52
+          ],
+          "conf": 1.0,
+          "state": "user"
+        }
+      ]
+    },
+    {
+      "track_id": "F",
+      "label": "person",
+      "source": "user",
+      "identity": null,
+      "keyframes": [
+        {
+          "t": 2.0,
+          "box": [
+            0.792,
+            0.426,
+            0.818,
+            0.574
+          ],
+          "conf": 1.0,
+          "state": "user"
+        }
+      ]
+    },
+    {
+      "track_id": "G",
+      "label": "person",
+      "source": "user",
+      "identity": null,
+      "keyframes": [
+        {
+          "t": 3.0,
+          "box": [
+            0.081,
+            0.417,
+            0.104,
+            0.546
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 4.0,
+          "box": [
+            0.063,
+            0.435,
+            0.102,
+            0.583
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 5.0,
+          "box": [
+            0.06,
+            0.463,
+            0.102,
+            0.596
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 6.0,
+          "box": [
+            0.081,
+            0.454,
+            0.13,
+            0.626
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 7.0,
+          "box": [
+            0.109,
+            0.472,
+            0.175,
+            0.663
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 7.458,
+          "box": [
+            0.13,
+            0.481,
+            0.177,
+            0.611
+          ],
+          "conf": 1.0,
+          "state": "user"
+        }
+      ]
+    },
+    {
+      "track_id": "H",
+      "label": "person",
+      "source": "user",
+      "identity": null,
+      "keyframes": [
+        {
+          "t": 5.0,
+          "box": [
+            0.0,
+            0.426,
+            0.029,
+            0.676
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 6.0,
+          "box": [
+            0.0,
+            0.417,
+            0.04,
+            0.676
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 7.0,
+          "box": [
+            0.0,
+            0.441,
+            0.065,
+            0.7
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 7.458,
+          "box": [
+            0.023,
+            0.444,
+            0.071,
+            0.713
+          ],
+          "conf": 1.0,
+          "state": "user"
+        }
+      ]
+    },
+    {
+      "track_id": "J",
+      "label": "person",
+      "source": "user",
+      "identity": null,
+      "keyframes": [
+        {
+          "t": 5.0,
+          "box": [
+            0.745,
+            0.435,
+            0.786,
+            0.556
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 6.0,
+          "box": [
+            0.734,
+            0.444,
+            0.783,
+            0.578
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 7.0,
+          "box": [
+            0.729,
+            0.444,
+            0.776,
+            0.574
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 7.458,
+          "box": [
+            0.729,
+            0.454,
+            0.776,
+            0.556
+          ],
+          "conf": 1.0,
+          "state": "user"
+        }
+      ]
+    },
+    {
+      "track_id": "K",
+      "label": "person",
+      "source": "user",
+      "identity": null,
+      "keyframes": [
+        {
+          "t": 6.0,
+          "box": [
+            0.583,
+            0.444,
+            0.625,
+            0.889
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 7.0,
+          "box": [
+            0.609,
+            0.481,
+            0.667,
+            0.963
+          ],
+          "conf": 1.0,
+          "state": "user"
+        }
+      ]
+    }
+  ],
+  "speech": [],
+  "notes": "Person boxes drafted by Claude from one frame per second plus the last frame; reviewed by eduardo on 2026-11-15 against an overlay of every keyframe. Shot from behind on a busy street; 720p. Everyone at least about 10% of the frame height is boxed; smaller, far-off figures are not (a detector that finds them is scored as a false positive). Partly hidden people are boxed by their visible part. Foreground boxes (m1, m2) are tight; passer-by boxes are rougher, and passer-by ids across seconds are best guesses (scores match boxes per moment, so a wrong id doesn't change them). m1: maroon hoodie, large black backpack. m2: grey top, glasses, black leather backpack. w1: striped top, auburn hair, small backpack. d1: dark coat, white hair. L: bald, teal shirt, red backpack. N: blonde, behind m2. A, B, C, D, E, G (cyclist), H, J, K: passers-by."
+}
