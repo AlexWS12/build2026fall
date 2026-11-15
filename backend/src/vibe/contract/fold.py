@@ -2,7 +2,8 @@
 
 Rules (docs/ARCHITECTURE.md, "The contract"):
 - **Later ops win.** Each op paints its time range over what came before, per target (masks),
-  per speaker (mutes) or per filter. Cuts add up into one merged list.
+  per speaker (mutes) or per filter. Cuts add up into one merged list. Review confirmations
+  (``reviewed``, per target) follow the same rule: a later mask change erases them over its range.
 - **Undo is linear and works per request.** ``undo`` must name the latest request still in
   effect, and ``redo`` the most recently undone one. A new edit after an undo clears redo.
 - **A request's ops are contiguous** in the log: the server applies one request at a time.
@@ -201,6 +202,7 @@ def fold(ops: Iterable[Op]) -> TimelineState:
                 value = (op.effect, *prov)
                 for t in op.targets:
                     masks[t] = _update(masks.get(t, []), op.time_range, lambda _, v=value: v)
+                    reviewed[t] = _paint(reviewed.get(t, []), op.time_range, None)
             case Cut():
                 cuts = _paint(cuts, op.time_range, True)
             case Uncut():

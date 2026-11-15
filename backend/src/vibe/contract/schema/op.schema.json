@@ -208,7 +208,7 @@
     },
     "ConfirmMask": {
       "additionalProperties": false,
-      "description": "A person checked that these targets are hidden correctly over this range (F-41).\n\nTakes a stretch off the review queue. It changes nothing in the render. A later ``add_mask``\nor ``remove_mask`` on the same targets and range takes the confirmation back: a changed\nmask needs a new review.",
+      "description": "A person checked that these targets are hidden correctly over this range (F-41).\n\nTakes a stretch off the review queue. It changes nothing in the render. A later ``add_mask``,\n``remove_mask`` or ``set_effect`` on the same targets and range takes the confirmation\nback: a changed mask needs a new review. A combined fix in one request must write ``set_effect``\nbefore ``confirm_mask``.",
       "properties": {
         "op_id": {
           "description": "Unique in the log.",
@@ -248,7 +248,7 @@
           "type": "string"
         },
         "targets": {
-          "description": "Track ids from the analysis cache.",
+          "description": "Track ids (detector or user tracks).",
           "items": {
             "type": "string"
           },

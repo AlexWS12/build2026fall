@@ -231,13 +231,55 @@ def test_remove_mask_everywhere_drops_reviewed() -> None:
     assert fold(ops).reviewed == {}
 
 
-def test_set_effect_keeps_reviewed() -> None:
+def test_set_effect_erases_reviewed() -> None:
     ops = [
         mask("r_1", ["t"], BLUR, tr(0, 30)),
         confirm("r_2", ["t"], tr(0, 20)),
         SetEffect(request_id="r_3", source="user", targets=["t"], effect=PIXELATE),
     ]
+    assert fold(ops).reviewed == {}
+
+
+def test_set_effect_erases_reviewed_over_its_range_only() -> None:
+    ops = [
+        mask("r_1", ["t"], BLUR, tr(0, 30)),
+        confirm("r_2", ["t"], tr(0, 20)),
+        SetEffect(
+            request_id="r_3", source="user", targets=["t"], effect=PIXELATE, time_range=tr(5, 8)
+        ),
+    ]
+    assert reviewed(fold(ops), "t") == [(0, 5), (8, 20)]
+
+
+def test_undoing_a_set_effect_brings_the_review_back() -> None:
+    log = OpLog(
+        [
+            mask("r_1", ["t"], BLUR, tr(0, 30)),
+            confirm("r_2", ["t"], tr(0, 20)),
+            SetEffect(request_id="r_3", source="user", targets=["t"], effect=PIXELATE),
+        ]
+    )
+    assert log.state().reviewed == {}
+    log.undo("r_4")
+    assert reviewed(log.state(), "t") == [(0, 20)]
+
+
+def test_set_effect_then_confirm_in_one_request_stays_reviewed() -> None:
+    ops = [
+        mask("r_1", ["t"], BLUR, tr(0, 30)),
+        SetEffect(request_id="r_2", source="user", targets=["t"], effect=PIXELATE),
+        confirm("r_2", ["t"], tr(0, 20)),
+    ]
     assert reviewed(fold(ops), "t") == [(0, 20)]
+
+
+def test_confirm_then_set_effect_in_one_request_is_not_reviewed() -> None:
+    ops = [
+        mask("r_1", ["t"], BLUR, tr(0, 30)),
+        confirm("r_2", ["t"], tr(0, 20)),
+        SetEffect(request_id="r_2", source="user", targets=["t"], effect=PIXELATE),
+    ]
+    assert fold(ops).reviewed == {}
 
 
 def test_undo_removes_a_confirmation_and_redo_restores_it() -> None:

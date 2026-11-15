@@ -47,7 +47,10 @@ class TimelineState(Model):
     )
     reviewed: dict[str, list[Span]] = Field(
         default_factory=dict,
-        description="Per track id: the source-time spans a person confirmed (F-41 review queue).",
+        description=(
+            "Per track id: the source-time spans a person confirmed (F-41 review queue). "
+            "May cover time with no mask, so consumers intersect it with `masks`."
+        ),
     )
     cuts: list[TimeRange] = Field(
         default_factory=list, description="Source time ranges removed from the output, merged."
