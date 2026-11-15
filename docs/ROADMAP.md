@@ -221,7 +221,7 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 | Plan executor: run the plan through `call_tool`, resolve `$ref`s, dry-run on an `OpLog` copy, reply `applied`. **Priority: first** | alex | alex/demo-wiring-redesign | In the UI (`VITE_API_MODE=http`), "mute the first 5 seconds" is applied and shows in the timeline | in review |
 | Export route + source-video route + Export button in the UI. Shared file (API routes) | alex | alex/demo-wiring-redesign | Upload → request → Export → the MP4 has the edit; route test in stub mode | in review |
 | F-33b Renderer applies `audio_filters` (denoise) + pick the local/remote model | _open_ | | A test exports a clip with a denoise span, no GPU | planned |
-| F-09b Consented clips + labels in `clips.json` / `labels/` | _open_ | | `benchmark report` scores an F-10 run against real labels | planned |
+| F-09b Consented clips + labels in `clips.json` / `labels/` | eduardo | eduardo/f09b-pexels-clips | `benchmark report` scores an F-10 run against real labels | in progress |
 | F-10b Detector bake-off → decision row, then harden the winner (stitching, face↔person, fit under `run_analysis`) | _open_ | | Report table with hardware stated → decision row | planned |
 | F-13 Targeting by description ("the person in red", "everyone except me") | _open_ | | A request picks the right tracks on a labeled clip; unsure = masked | planned |
 | F-40 Agent reports what it did in plain words + raw tool calls | alex | alex/demo-wiring-redesign | The chat shows a plain summary and the tool calls for each applied request | in review |

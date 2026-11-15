@@ -1,5 +1,221 @@
 {
   "manifest_version": 1,
   "about": "Clips the benchmark measures on (F-09). Videos are never committed: get them from the team drive and run `uv run python -m vibe.benchmark add-clip FILE`, which checks the hash and stores the video in the data dir. Every clip is our own footage with the people in it agreeing, or properly licensed. consent_cloud says whether that consent covers third-party cloud processing (R-4).",
-  "clips": []
+  "clips": [
+    {
+      "clip_id": "trio-street-outfits",
+      "video": {
+        "sha256": "8e7aad9d2001ff642c932896b3975155cf46e0739604434e37f718a068c59e29",
+        "ext": ".mp4",
+        "original_name": "pexels-8126705.mp4"
+      },
+      "size_bytes": 6983447,
+      "duration": 11.333,
+      "width": 1920,
+      "height": 1080,
+      "fps": "30",
+      "has_audio": false,
+      "source": "Pexels 8126705, RDNE Stock project: https://www.pexels.com/video/fashionable-friends-walking-in-the-street-8126705/",
+      "consent": "Licensed stock footage (Pexels License); no consent recorded from the individuals. Internal benchmark use only; do not redistribute.",
+      "consent_cloud": false,
+      "license": "Pexels License (https://www.pexels.com/license/)",
+      "tags": [
+        "clothing",
+        "people"
+      ],
+      "notes": ""
+    },
+    {
+      "clip_id": "trio-skatepark-pastels",
+      "video": {
+        "sha256": "f547126cbee6b05603e5c202a8c790013de3c8d499befe155cc1af7993550232",
+        "ext": ".mp4",
+        "original_name": "pexels-8402294.mp4"
+      },
+      "size_bytes": 5538205,
+      "duration": 12.04,
+      "width": 1920,
+      "height": 1080,
+      "fps": "25",
+      "has_audio": false,
+      "source": "Pexels 8402294, SHVETS production: https://www.pexels.com/video/people-walking-toward-the-camera-8402294/",
+      "consent": "Licensed stock footage (Pexels License); no consent recorded from the individuals. Internal benchmark use only; do not redistribute.",
+      "consent_cloud": false,
+      "license": "Pexels License (https://www.pexels.com/license/)",
+      "tags": [
+        "clothing",
+        "pastels",
+        "people"
+      ],
+      "notes": ""
+    },
+    {
+      "clip_id": "trio-sidewalk-totes",
+      "video": {
+        "sha256": "ed47ab77ba8bba5f4b99a41b755789a14d12c1028007c539e84a825853328721",
+        "ext": ".mp4",
+        "original_name": "pexels-12879703.mp4"
+      },
+      "size_bytes": 7500006,
+      "duration": 10.01,
+      "width": 1080,
+      "height": 1920,
+      "fps": "24000/1001",
+      "has_audio": false,
+      "source": "Pexels 12879703, Mizuno K: https://www.pexels.com/video/group-of-teenagers-walking-on-a-street-and-talking-12879703/",
+      "consent": "Licensed stock footage (Pexels License); no consent recorded from the individuals. Internal benchmark use only; do not redistribute.",
+      "consent_cloud": false,
+      "license": "Pexels License (https://www.pexels.com/license/)",
+      "tags": [
+        "bags",
+        "clothing",
+        "people",
+        "portrait"
+      ],
+      "notes": ""
+    },
+    {
+      "clip_id": "pair-backpacks-behind",
+      "video": {
+        "sha256": "806f8788c03dc26756a44edc9353f23ac9552345a334edc96c987d6cb0aa6659",
+        "ext": ".mp4",
+        "original_name": "pexels-19329370.mp4"
+      },
+      "size_bytes": 2270103,
+      "duration": 7.5,
+      "width": 1280,
+      "height": 720,
+      "fps": "24",
+      "has_audio": true,
+      "source": "Pexels 19329370, Ali Alcántara: https://www.pexels.com/video/two-men-walking-down-a-city-street-with-a-backpack-19329370/",
+      "consent": "Licensed stock footage (Pexels License); no consent recorded from the individuals. Internal benchmark use only; do not redistribute.",
+      "consent_cloud": false,
+      "license": "Pexels License (https://www.pexels.com/license/)",
+      "tags": [
+        "bags",
+        "crowd",
+        "people"
+      ],
+      "notes": ""
+    },
+    {
+      "clip_id": "hikers-backpacks",
+      "video": {
+        "sha256": "e32dca29e7b4b6ab35e6b331aed3a17e76fb8131fe780f7d19674915da17d8ce",
+        "ext": ".mp4",
+        "original_name": "pexels-27907400.mp4"
+      },
+      "size_bytes": 16551802,
+      "duration": 8.64,
+      "width": 1920,
+      "height": 1080,
+      "fps": "25",
+      "has_audio": false,
+      "source": "Pexels 27907400, SHEMÁ: https://www.pexels.com/video/a-group-of-people-walking-down-a-road-with-backpacks-27907400/",
+      "consent": "Licensed stock footage (Pexels License); no consent recorded from the individuals. Internal benchmark use only; do not redistribute.",
+      "consent_cloud": false,
+      "license": "Pexels License (https://www.pexels.com/license/)",
+      "tags": [
+        "bags",
+        "people"
+      ],
+      "notes": ""
+    },
+    {
+      "clip_id": "street-torsos",
+      "video": {
+        "sha256": "d87d915926a9420e96cb200ac58bf5760119e7ec4bcda35b5737e05ad8b33be3",
+        "ext": ".mp4",
+        "original_name": "pexels-39060901.mp4"
+      },
+      "size_bytes": 46627413,
+      "duration": 77.36,
+      "width": 1920,
+      "height": 1080,
+      "fps": "25",
+      "has_audio": false,
+      "source": "Pexels 39060901, Kiwi and Camera: https://www.pexels.com/video/busy-city-street-with-diverse-people-walking-39060901/",
+      "consent": "Licensed stock footage (Pexels License); no consent recorded from the individuals. Internal benchmark use only; do not redistribute.",
+      "consent_cloud": false,
+      "license": "Pexels License (https://www.pexels.com/license/)",
+      "tags": [
+        "bags",
+        "crowd",
+        "cut-off",
+        "people"
+      ],
+      "notes": ""
+    },
+    {
+      "clip_id": "crossing-crowd-above",
+      "video": {
+        "sha256": "30bc92561b3a9e2c6376819d2f7de82f65c124ab6f19f0e70643973be8082015",
+        "ext": ".mp4",
+        "original_name": "pexels-27697943.mp4"
+      },
+      "size_bytes": 23338283,
+      "duration": 11.862,
+      "width": 1080,
+      "height": 1920,
+      "fps": "60000/1001",
+      "has_audio": false,
+      "source": "Pexels 27697943, Çağrı KANMAZ: https://www.pexels.com/video/pedestrians-crossing-the-street-27697943/",
+      "consent": "Licensed stock footage (Pexels License); no consent recorded from the individuals. Internal benchmark use only; do not redistribute.",
+      "consent_cloud": false,
+      "license": "Pexels License (https://www.pexels.com/license/)",
+      "tags": [
+        "crowd",
+        "people",
+        "portrait",
+        "small-targets"
+      ],
+      "notes": ""
+    },
+    {
+      "clip_id": "crowd-dark-coats",
+      "video": {
+        "sha256": "49cd1a89be90932de34c773e64210e631a2b042429a64cd92c2cdc965d57e425",
+        "ext": ".mp4",
+        "original_name": "pexels-34762082.mp4"
+      },
+      "size_bytes": 47710899,
+      "duration": 14.867,
+      "width": 1920,
+      "height": 1080,
+      "fps": "60",
+      "has_audio": false,
+      "source": "Pexels 34762082, Talha Uğuz: https://www.pexels.com/video/vibrant-city-scene-with-crowded-urban-streets-34762082/",
+      "consent": "Licensed stock footage (Pexels License); no consent recorded from the individuals. Internal benchmark use only; do not redistribute.",
+      "consent_cloud": false,
+      "license": "Pexels License (https://www.pexels.com/license/)",
+      "tags": [
+        "crowd",
+        "people"
+      ],
+      "notes": ""
+    },
+    {
+      "clip_id": "crowd-orange",
+      "video": {
+        "sha256": "cb883ea07db621c5e17ff83c9ef995cce1fe07378b1eef003e9c5eb14c15e28f",
+        "ext": ".mp4",
+        "original_name": "pexels-32137652.mp4"
+      },
+      "size_bytes": 4821234,
+      "duration": 4.0,
+      "width": 1920,
+      "height": 1080,
+      "fps": "25",
+      "has_audio": false,
+      "source": "Pexels 32137652: https://www.pexels.com/video/celebration-with-crowd-wearing-orange-32137652/",
+      "consent": "Licensed stock footage (Pexels License); no consent recorded from the individuals. Internal benchmark use only; do not redistribute.",
+      "consent_cloud": false,
+      "license": "Pexels License (https://www.pexels.com/license/)",
+      "tags": [
+        "crowd",
+        "people"
+      ],
+      "notes": "Not inspected before download; check it shows a crowd in orange."
+    }
+  ]
 }
