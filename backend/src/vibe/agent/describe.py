@@ -8,7 +8,7 @@ from typing import Any
 
 from vibe.agent.execute import Execution, StepReport
 from vibe.agent.plan import Plan, as_ref
-from vibe.toolbox import TOOLS
+from vibe.toolbox import UI_TOOLS
 
 _NOUNS = {
     "face": ("face", "faces"),
@@ -83,7 +83,7 @@ def describe(plan: Plan, done: Execution) -> str:
     """One sentence per edit step of a plan that ran, e.g. "Muted 0:00–0:05."."""
     steps = {s.step_id: s for s in done.steps}
     return " ".join(
-        _sentence(plan, s, steps) for s in done.steps if s.ok and TOOLS[s.tool].kind == "edit"
+        _sentence(plan, s, steps) for s in done.steps if s.ok and UI_TOOLS[s.tool].kind == "edit"
     )
 
 
