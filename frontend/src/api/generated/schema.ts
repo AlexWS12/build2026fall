@@ -682,7 +682,7 @@ export interface components {
         ReviewReply: {
             /**
              * Analysed
-             * @description Whether the video has an analysis. Without one, there is nothing to audit.
+             * @description Whether the video has an analysis. Without one, masks on analysed targets show as no_track: the whole frame is hidden until the video is analysed.
              */
             analysed: boolean;
             /**

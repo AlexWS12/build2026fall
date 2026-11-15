@@ -28,6 +28,7 @@ reason, and nothing is written, so no reply claims an edit that didn't happen.
 Error details are short fixed texts. Whatever names a file on the server is logged, not sent.
 """
 
+import functools
 import logging
 import re
 import tempfile
@@ -193,7 +194,8 @@ class TracksReply(Model):
 
 class ReviewReply(Model):
     analysed: bool = Field(
-        description="Whether the video has an analysis. Without one, there is nothing to audit."
+        description="Whether the video has an analysis. Without one, masks on analysed targets "
+        "show as no_track: the whole frame is hidden until the video is analysed."
     )
     items: list[ReviewItem] = Field(
         description="The stretches of the masks to check, most serious first."
@@ -600,9 +602,16 @@ def _tracks(storage: Storage, project: Project) -> tuple[bool, list[Track]]:
     return cached is not None, [*(cached or []), *drawn]
 
 
+@functools.lru_cache(maxsize=8)
+def _cached_frame_index(path: str) -> FrameIndex:
+    # Videos are content-addressed by sha256, so a path never changes what it holds and the
+    # cache needs no invalidation.
+    return FrameIndex.build(path)
+
+
 def _frame_index(storage: Storage, project: Project) -> FrameIndex:
     try:
-        return FrameIndex.build(storage.video_path(project.info.video))
+        return _cached_frame_index(str(storage.video_path(project.info.video)))
     except (VideoError, OSError, ValueError) as e:
         logger.exception("reading the frames of project %s failed", project.id)
         raise HTTPException(status_code=500, detail="couldn't read this project's video") from e

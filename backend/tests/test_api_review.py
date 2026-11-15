@@ -20,6 +20,12 @@ from vibe.api import projects
 from vibe.contract import AddMask, Effect, Track
 from vibe.modules.vision import save_tracks
 from vibe.storage import Storage
+from vibe.video import FrameIndex
+
+
+@pytest.fixture(autouse=True)
+def fresh_frame_index_cache() -> None:
+    projects._cached_frame_index.cache_clear()
 
 
 def sparse_face(track_id: str = "trk_1") -> Track:
@@ -157,3 +163,22 @@ def test_a_masked_id_with_no_track_is_a_no_track_item(
     assert [(i["kind"], i["track_id"], i["label"]) for i in reply["items"]] == [
         ("no_track", "trk_9", None)
     ]
+
+
+def test_the_frame_index_is_built_once_per_video(
+    client: TestClient, long_clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_id = upload(client, long_clip)["project_id"]
+    real_build = FrameIndex.build
+    calls: list[str] = []
+
+    def counting(path: str | Path) -> FrameIndex:
+        calls.append(str(path))
+        return real_build(path)
+
+    monkeypatch.setattr(FrameIndex, "build", staticmethod(counting))
+
+    get(client, project_id, "review")
+    get(client, project_id, "review")
+
+    assert len(calls) == 1
