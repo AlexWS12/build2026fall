@@ -166,7 +166,9 @@ class AddMaskArgs(Model):
 
 class ConfirmMaskArgs(Model):
     targets: list[str] = Field(min_length=1, description="Track ids to mark as checked.")
-    time_range: TimeRange
+    time_range: TimeRange = Field(
+        description="The stretch that was checked; each target must be masked somewhere in it."
+    )
 
 
 class CutRangeArgs(Model):

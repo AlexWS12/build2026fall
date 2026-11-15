@@ -60,6 +60,9 @@ def _sentence(plan: Plan, step: StepReport, steps: dict[str, StepReport]) -> str
             effect = args["effect"]["type"]
             tail = " with a black box" if effect == "box" else ""
             return f"{_MASKED.get(effect, 'Hid')} {what}{tail} ({when})."
+        case "confirm_mask":
+            what = _counted(_label(plan, step, steps), len(args["targets"]))
+            return f"Marked {what} as checked ({when})."
         case "cut_range":
             return f"Cut {when}."
         case "keep_range":
