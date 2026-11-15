@@ -1,0 +1,330 @@
+{
+  "labels_version": 1,
+  "clip_id": "trio-sidewalk-totes",
+  "sha256": "ed47ab77ba8bba5f4b99a41b755789a14d12c1028007c539e84a825853328721",
+  "tracks": [
+    {
+      "track_id": "r1",
+      "label": "person",
+      "source": "user",
+      "identity": null,
+      "keyframes": [
+        {
+          "t": 0.0,
+          "box": [
+            0.176,
+            0.344,
+            0.519,
+            0.969
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 1.001,
+          "box": [
+            0.022,
+            0.339,
+            0.485,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 2.002,
+          "box": [
+            0.033,
+            0.328,
+            0.509,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 3.003,
+          "box": [
+            0.046,
+            0.313,
+            0.478,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 4.004,
+          "box": [
+            0.031,
+            0.313,
+            0.541,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 5.005,
+          "box": [
+            0.0,
+            0.273,
+            0.5,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 6.006,
+          "box": [
+            0.0,
+            0.234,
+            0.352,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 6.506,
+          "box": [
+            0.0,
+            0.198,
+            0.72,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 7.007,
+          "box": [
+            0.144,
+            0.135,
+            0.774,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 7.508,
+          "box": [
+            0.5,
+            0.113,
+            1.0,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 8.008,
+          "box": [
+            0.848,
+            0.28,
+            1.0,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        }
+      ]
+    },
+    {
+      "track_id": "r2",
+      "label": "person",
+      "source": "user",
+      "identity": null,
+      "keyframes": [
+        {
+          "t": 0.0,
+          "box": [
+            0.419,
+            0.427,
+            0.652,
+            0.922
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 1.001,
+          "box": [
+            0.343,
+            0.432,
+            0.556,
+            0.967
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 2.002,
+          "box": [
+            0.319,
+            0.425,
+            0.552,
+            0.971
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 3.003,
+          "box": [
+            0.389,
+            0.424,
+            0.626,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 4.004,
+          "box": [
+            0.393,
+            0.429,
+            0.654,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 5.005,
+          "box": [
+            0.326,
+            0.417,
+            0.657,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 6.006,
+          "box": [
+            0.319,
+            0.396,
+            0.719,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 6.506,
+          "box": [
+            0.533,
+            0.385,
+            0.926,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 7.007,
+          "box": [
+            0.704,
+            0.38,
+            1.0,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        }
+      ]
+    },
+    {
+      "track_id": "r3",
+      "label": "person",
+      "source": "user",
+      "identity": null,
+      "keyframes": [
+        {
+          "t": 0.0,
+          "box": [
+            0.667,
+            0.375,
+            0.978,
+            0.964
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 1.001,
+          "box": [
+            0.63,
+            0.365,
+            0.956,
+            0.964
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 2.002,
+          "box": [
+            0.689,
+            0.359,
+            1.0,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 3.003,
+          "box": [
+            0.663,
+            0.365,
+            1.0,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 4.004,
+          "box": [
+            0.737,
+            0.349,
+            1.0,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 5.005,
+          "box": [
+            0.863,
+            0.37,
+            1.0,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        },
+        {
+          "t": 6.006,
+          "box": [
+            0.92,
+            0.36,
+            1.0,
+            1.0
+          ],
+          "conf": 1.0,
+          "state": "user"
+        }
+      ]
+    }
+  ],
+  "speech": [],
+  "notes": "Person boxes drafted by Claude from one frame per second plus frames at 6.506, 7.508, 8.3 and 8.592 s for the exits. Portrait video; the camera pans to follow them, then onto the wall. Boxes cover the body; the tote bags are left out where they hang outside it. Reviewed by eduardo on 2026-11-15 against an overlay of every keyframe. Faces not labelled. r3 leaves after 6.006 s, r2 after 7.007 s, r1 after 8.008 s (only an arm at the right edge then); nobody is in frame from 8.3 s. r1: tan short-sleeved shirt, jeans, white tote bag. r2: red plaid shirt over a white tank top, light ripped jeans. r3: white striped shirt, sage-green trousers, cream tote bag."
+}
