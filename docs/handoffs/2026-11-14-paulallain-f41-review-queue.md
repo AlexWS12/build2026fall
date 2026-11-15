@@ -4,7 +4,7 @@ date: 2026-11-14
 branch: paulallain/f41-review-queue
 features: [F-41]
 base: v0.1.0 @ 1642a7d
-head: 866e899
+head: f8a02d4
 status: ready for review
 ---
 
