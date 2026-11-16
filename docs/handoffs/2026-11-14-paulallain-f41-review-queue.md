@@ -4,7 +4,7 @@ date: 2026-11-14
 branch: paulallain/f41-review-queue
 features: [F-41]
 base: v0.1.0 @ 1642a7d
-head: f8a02d4
+head: de869f0
 status: ready for review
 ---
 
@@ -18,6 +18,7 @@ status: ready for review
 - **Toolbox:** `HAND_TOOLS` registry (first tool: `confirm_mask`) and `UI_TOOLS` (= `TOOLS` + `HAND_TOOLS`). The planner only gets `TOOLS`. `describe.py` words a confirmation in plain language.
 - **API:** `GET /api/projects/{id}/review` and `POST /api/projects/{id}/review/{item_id}` (`confirm` or `cut`, hand edits with source `user`; 404 when the spot has moved on). The frame index is cached for these routes. `openapi.json` and the generated TypeScript types are regenerated.
 - **Frontend:** the API client, the session state and a Review panel in the editor (go to a spot, Confirm, Cut). The buttons are named by kind, target and range, and are disabled while the project is busy.
+- **Cut shows the stretch length** ("Cut 4.6 s"), so one click doesn't remove several seconds unnoticed (PR #36 review, AlexWS12).
 
 ## How to check it
 ```
