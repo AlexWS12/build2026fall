@@ -1,0 +1,64 @@
+---
+author: jonathan
+date: 2026-11-16
+branch: jonathan/f43-history-list
+features: [F-43]
+base: v0.1.0 @ 73394e3
+head: 58da8b1
+status: ready for review
+---
+
+# The editor lists the requests that changed the video (F-43 history list)
+
+## What changed
+Continues alex's F-43 work ([his entry](2026-11-14-alex-demo-wiring-redesign.md)), which left undo, redo and the history route done and "no history list in the UI yet". This is that list. Frontend only.
+
+- **History button in the header**, between Redo and Export (`frontend/src/components/HistoryMenu.tsx`). It opens a popover under itself.
+- **The list** shows every request from `GET /{id}/history`, newest first:
+  - the chat message, cut off on one line, with the full text on hover;
+  - the edit kinds on the right ("mute", "add mask");
+  - undone requests struck through and marked "Undone";
+  - the request Undo would take back marked "Undo next".
+- **Long sessions:** the popover grows to `min(70vh, 560px)`, then the list scrolls inside it. The page behind doesn't move.
+- **Closing:** Escape, a press outside, or the button again. A press on Undo, Redo or Export keeps it open, so the list can be watched while it changes.
+- **Empty project:** "No edits yet. Requests that change the video are listed here."
+- **`undoTarget(history)`** in `frontend/src/state/session.ts`: the latest request still applied, or null when the server says there is nothing to undo.
+- **`requestLabel` / `kindsLabel`** in `frontend/src/components/history.ts`: a request with no chat text is named by what it wrote ("Hand edit: add mask, cut"), or by its id when nothing is known (the mock API's demo data).
+- `Toolbar` takes a new `history` prop.
+
+No contract, toolbox, API route or `frontend/src/api/` change. No shared file touched.
+
+## How to check it
+```bash
+npm run dev                    # repo root; open http://localhost:5173
+npm --prefix frontend test
+```
+In the app: drop a short video, send "mute the first 5 seconds" and "cut 0:10 to 0:15", click the clock button in the header. Click Undo with the list open: the top row becomes "Undone" and "Undo next" moves down one.
+
+Verified on 2026-11-16 at 58da8b1, Windows 11, `VIBE_BACKEND=stub`:
+- Frontend `vitest`: **69 passed** (16 new). `oxlint` and `tsc -b` are clean.
+- Frontend `npm --prefix frontend run build` (`tsc -b && vite build`): **passes**, 46 modules.
+- Backend `pytest`: **1199 passed, 118 skipped, 1 failed.** The failure is `tests/toolbox/test_toolbox_cli.py::test_writing_keeps_the_timeline_permissions` (expects mode `0o644`, Windows reports `0o666`). This branch changes no backend file, so it is the same on `main` on this machine.
+- Driven in the browser against the real backend on a generated 20 s clip, with requests sent through the API: 5 requests with one undone, then 40 requests. The list showed all 40 and scrolled, the page didn't, and Undo with the list open updated it in place. No console errors.
+
+**Not tested:**
+- Hand edits in the list in a real project: the UI can't make them yet (F-42). Unit test only.
+- Narrow windows and touch. The popover is `min(340px, 86vw)` wide and anchored to the button's right edge.
+- Safari and Firefox.
+
+## Decisions made
+jonathan, 2026-11-16. UI choices, none architecture-level.
+- **A popover from the header, not a tab beside the chat.** It keeps chat, player and timeline visible and takes no permanent room. The list is its own component (`HistoryList`), so moving it into a tab later is small.
+- **Read-only.** Undo is linear, so the list shows what Undo would act on instead of offering a request to jump back to.
+- **Scroll only for long sessions**, no "show all" control.
+
+## Next steps
+- jonathan: push, open the PR, tell alex and the team chat that the history list is taken.
+- "Jump back to this request" (several undos in one click) is not on the card. It would need a decision on what happens to the requests jumped past.
+- When F-42 lands, check that hand edits read well in the list.
+
+## Gotchas
+- **`undoTarget` is worked out in the UI** from `can_undo` and the statuses, because `HistoryReply` only says whether undo is possible, not which request it would take. It matches the backend's rule (`History.can_undo` is the last active request). If undo ever stops being linear, return the target from the route instead.
+- **An undone request can sit in the middle of the list**: undo one, then send a new request, and the undone one stays behind for good (redo is cleared). The list keeps log order and doesn't group them.
+- **The backend permissions test fails on Windows** (above). Not from this branch.
+- **Ports 5173 and 8000 may be taken by another project on your machine.** `vite.config.ts` pins the proxy to 8000, so running on other ports needs a temporary config.
