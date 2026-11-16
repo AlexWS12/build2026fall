@@ -107,8 +107,8 @@ Every candidate costs $0 per call. The real costs are rate limits for hosted tie
 | `groq-gpt-oss-120b` | `openai/gpt-oss-120b` | 30 RPM, 1K requests/day, 8K tokens/min, 200K tokens/day | Strict JSON schema supported. Lowest reasoning effort is `low` |
 | `groq-gpt-oss-20b` | `openai/gpt-oss-20b` | Same | Same |
 | `groq-qwen3.8-27b` | `qwen/qwen3.8-27b` | Same | Strict JSON schema supported. Reasoning can be off (`none`) |
-| `gemini-3.8-flash` | `gemini-3.8-flash` | Not published: shown per project in AI Studio | Free tier. **Free-tier content is used to improve Google's products** |
-| `gemini-3.5-flash-lite` | `gemini-3.5-flash-lite` | Same | Same |
+| `gemini-3.8-flash` | `gemini-3.8-flash` | Not published: shown per project in AI Studio | Free tier. **Free-tier content is used to improve Google's products.** Its lowest thinking level is `low`: `minimal` returns a 400 |
+| `gemini-3.5-flash-lite` | `gemini-3.5-flash-lite` | Same | Free tier, same terms. Thinking `minimal` |
 | `openrouter-nemotron-3.5-super-vl` | `nvidia/nemotron-3.5-super-vl:free` | Daily cap per account, from `GET /api/v1/key` | Lists `structured_outputs`. **Quality only**: the proxy hop makes latency not comparable |
 | `openrouter-gemma-4-31b` | `google/gemma-4-31b-it:free` | Same | Lists `response_format` only, so schema adherence may be best-effort. Quality only |
 | `qwen3.5-4b` | Ollama `qwen3.5:4b` | Our hardware | 3.3 GB download. Runs on every team GPU |
@@ -201,11 +201,12 @@ It replaces R-1's Oct 31 rule ("correct within 5 points of the Opus 5.5 ceiling"
 
 - The same system prompt, few-shot examples and schema go to every candidate, with no few-shot example in the scored set.
 - Each record carries a hash of the prompt and schema. The report leaves out results made with an older prompt and says how many, so a run spread over several days can't mix prompts.
-- Each provider uses its native schema mode: OpenAI-compatible strict `json_schema` (Groq, OpenRouter), Gemini's `response_json_schema`, Ollama's `format` field.
+- Every hosted candidate uses OpenAI-compatible strict `json_schema`: Groq, OpenRouter, and Gemini through [its OpenAI-compatible endpoint](https://aistudio.google.com/docs/openai). Local models use Ollama's `format` field.
+  - Gemini moved off the `google-genai` SDK on Nov 16, because that endpoint takes the key as `Authorization: Bearer`, which a Claude cloud session can store.
 - Reasoning is at the lowest setting each model allows:
   - GPT-OSS `low`;
   - Qwen 3.8 `none`;
-  - Gemini thinking `minimal`;
+  - Gemini 3.8 Flash `low` and 3.5 Flash-Lite `minimal` (Gemini 3 can't turn thinking off);
   - Ollama `think: false`. Per Ollama's docs, models that can't turn thinking off use their lowest level.
 - Sampling stays at each provider's default.
 - A rate limit (HTTP 429) **stops** the run and keeps what's saved. A free tier's daily cap would otherwise be scored as the model failing. `--resume` picks up where it stopped.
@@ -228,7 +229,12 @@ Hosted candidates can run from any machine. Their latency includes the network, 
 cp .env.example .env
 ```
 
-Fill in `GROQ_API_KEY=`, `GEMINI_API_KEY=` and `OPENROUTER_API_KEY=`, and leave the paid keys empty. For runs from a Claude cloud session, don't use `.env`. Claude asks for each key through the session's secure key form, and the network proxy adds the key to the requests.
+Fill in `GROQ_API_KEY=`, `GEMINI_API_KEY=` and `OPENROUTER_API_KEY=`, and leave the paid keys empty.
+
+**In a Claude Code cloud session there's no `.env`, on purpose.** The container is temporary, and keys never go in a file or in chat.
+- Claude opens a secure key form for each host: `api.groq.com`, `generativelanguage.googleapis.com` and `openrouter.ai`.
+- The key is saved on the session's cloud environment, and the network proxy adds it to requests to that host, so Python never sees it.
+- Commands then pass a placeholder in each variable (`GROQ_API_KEY=proxy-injected` and so on), because the SDK won't start without one. The proxy replaces it.
 
 **3. Install the SDKs** (once), from `backend/`:
 
@@ -251,9 +257,7 @@ uv run --group llm --env-file ../.env python -m vibe.agent.bench preflight --can
 What to look for:
 
 - **`core schema: accepted`** for each candidate, which is the one that matters.
-- **A missing key fails clearly:**
-  - `FAILED: KeyError: 'GROQ_API_KEY'` (OpenRouter shows its own key name);
-  - Gemini says `No API key was provided`.
+- **A missing key fails clearly,** with `FAILED: KeyError: 'GROQ_API_KEY'` (or `GEMINI_API_KEY`, `OPENROUTER_API_KEY`).
 - **A rejected property named `$ref`:** set `WIRE_REF_KEY = "ref"` in `backend/src/vibe/agent/bench/run.py` for **all** candidates, before any scored run.
 - **Extras schema rejected:** fine, extras don't decide anything.
 
@@ -361,7 +365,7 @@ Everyone has to run the same commit. The report only counts results made with th
 | Piece | Where |
 | --- | --- |
 | Reply schema with `clarify`, built from the registry; system prompt with 5 few-shot examples | `backend/src/vibe/agent/llm.py` |
-| Provider adapters (Groq and OpenRouter through the OpenAI-compatible one, Gemini, Ollama, plus Anthropic for paid). A 429 is `RateLimited` | `agent/providers.py` |
+| Provider adapters: Groq, OpenRouter and Gemini through the OpenAI-compatible one, plus Ollama, and Anthropic for paid. A native Gemini adapter is kept but unused. A 429 is `RateLimited` | `agent/providers.py` |
 | Benchmark: request set, scorer, runner (`--rpm`, `--resume`, `--set llm`, `--allow-paid`), report, decision rule | `agent/bench/`, `tests/agent/requests_llm.json` |
 | The invented-cut guard | `agent/grounding.py`, used by `plan_with_llm` |
 | `VIBE_PLANNER_LLM=<bench name>`: the chat route plans non-template requests with that model. It's unset by default (templates only, no network), and a model the app can't use stops it at startup | `config.py`, `agent/llm.py` (`planner_from_env`), `api/projects.py`, `api/app.py` |
@@ -382,12 +386,13 @@ VIBE_PLANNER_LLM=groq-gpt-oss-20b uv run --group llm --env-file ../.env uvicorn 
 - [x] Fix the decision rule before any scored run
 - [x] Pick free candidates from the providers' pages (Nov 12)
 - [ ] Jean reviews the gold results, above all the 22 in `requests_llm.json`
-- [ ] Create the Groq, Gemini and OpenRouter keys (Plan A, step 1)
+- [x] Create the Groq, Gemini and OpenRouter keys (Plan A, step 1). Saved on the "Testing" cloud environment on Nov 16, and tested by preflight
 - [ ] Install Ollama and pull the models (Plan B, steps 1 to 3)
 
 **Run**
 
-- [ ] Preflight every free and local candidate. If any rejects `$ref`, switch `WIRE_REF_KEY` for all of them first
+- [x] Preflight the free hosted candidates (Nov 16, see "Results so far"). No model rejected `$ref`
+- [ ] Preflight the local candidates
 - [ ] Run hosted candidates, 5 runs each, over as many days as the limits need
 - [ ] Run local candidates on Paul's 4060 Ti; `gemma4-12b` on Nickolas's or Pablo's machine
 - [ ] Collect every `.jsonl` and run `report --detail`
