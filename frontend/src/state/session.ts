@@ -354,3 +354,9 @@ export function busyLabel(session: Session): string | null {
 export function requestStatuses(history: HistoryReply): Map<string, 'applied' | 'undone'> {
   return new Map(history.requests.map((r) => [r.request_id, r.status]))
 }
+
+/** The request Undo would take back: undo is linear, so it is the latest one still applied. */
+export function undoTarget(history: HistoryReply): string | null {
+  if (!history.can_undo) return null
+  return history.requests.findLast((r) => r.status === 'applied')?.request_id ?? null
+}

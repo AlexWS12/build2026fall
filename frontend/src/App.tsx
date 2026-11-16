@@ -130,6 +130,7 @@ function App({ api = defaultClient }: { api?: ApiClient }) {
             canExport={canExport(session)}
             exporting={project.activity.kind === 'exporting'}
             exported={project.export}
+            history={project.history}
             onUndo={commands.undo}
             onRedo={commands.redo}
             onExport={commands.exportVideo}
