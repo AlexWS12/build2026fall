@@ -47,7 +47,8 @@ export function ReviewPanel({
             const range = `${formatTime(item.start)}–${formatTime(item.end)}`
             const who = names.get(item.track_id) ?? item.label ?? item.track_id
             const what = `${KIND_LABEL[item.kind]}, ${who}, ${range}`
-            const length = (item.end - item.start).toFixed(1)
+            const seconds = item.end - item.start
+            const length = seconds < 0.05 ? '<0.1' : seconds.toFixed(1)
             const goTo = `Go to ${formatTime(item.start)}`
             return (
               <li key={item.item_id} className={styles.item}>

@@ -399,6 +399,17 @@ describe('App wired to a backend', () => {
       expect(cut).toHaveTextContent('Cut 3.0 s')
     })
 
+    test.each([
+      [2, 2.000001, 'Cut <0.1 s'],
+      [1, 5.6, 'Cut 4.6 s'],
+      [0, 0.05, 'Cut 0.1 s'],
+    ])('the Cut button for a stretch of %s to %s reads %s', async (start, end, text) => {
+      const api = backend({ getReview: () => Promise.resolve(queue({ items: [{ ...item, start, end }] })) })
+      const panel = within(await open(api))
+      const cut = await panel.findByRole('button', { name: /^Cut /})
+      expect(cut).toHaveTextContent(text)
+    })
+
     test('the buttons wait while the project is busy', async () => {
       const { api } = reviewing({ sendRequest: () => new Promise(() => {}) })
       const panel = within(await open(api))
