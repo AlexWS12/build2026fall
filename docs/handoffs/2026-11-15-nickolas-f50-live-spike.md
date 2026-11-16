@@ -1,4 +1,4 @@
-﻿---
+---
 author: nickolas
 date: 2026-11-15
 branch: nickolas/f50-live-spike
