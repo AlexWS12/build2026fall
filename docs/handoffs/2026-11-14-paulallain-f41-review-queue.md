@@ -10,7 +10,7 @@ status: ready for review
 
 # Review queue: a list of mask spots to check, with Confirm and Cut (F-41)
 
-**Heads-up before merging (post in the team chat).** This changes shared files: the contract (`ops.py`, `fold.py`, `state.py`, the schemas and the examples), the toolbox (`registry.py`, `tools.py`), the API routes (`projects.py`, `openapi.json`) and `frontend/src/api`. It also touches `backend/src/vibe/agent/describe.py`, which is pablo's / alex's code (one sentence for `confirm_mask`). The new decisions row (D-020) needs the team's agreement. No `schema_version` bump: it's a new op kind and an optional field.
+**Heads-up before merging (post in the team chat).** This changes shared files: the contract (`ops.py`, `fold.py`, `state.py`, the schemas and the examples), the toolbox (`registry.py`, `tools.py`), the API routes (`projects.py`, `openapi.json`) and `frontend/src/api`. It also touches `backend/src/vibe/agent/describe.py`, which is pablo's / alex's code (one sentence for `confirm_mask`). The new decisions row (D-021) needs the team's agreement. No `schema_version` bump: it's a new op kind and an optional field.
 
 ## What changed
 - **Contract:** new op `confirm_mask` (targets + time range; changes nothing in the render), folded into optional `TimelineState.reviewed`. `add_mask`, `remove_mask` and `set_effect` erase a confirmation over their range. Schemas and example states regenerated.
@@ -52,7 +52,7 @@ The panel shows ranges in whole seconds (`formatTime`), so a stretch that starts
 - `ruff check`, `ruff format --check`, `python -m vibe.api --check`, lint, typecheck and build all passed. The generated types are fresh.
 
 ## Decisions made
-- **`confirm_mask` is an op** (D-020, Proposed), so a confirmation is undoable and the queue is derived from the log.
+- **`confirm_mask` is an op** (D-021, Proposed), so a confirmation is undoable and the queue is derived from the log.
 - **Confirm and Cut only.** Fixing a box by hand is F-42.
 - **Held stretches are only counted**, not listed: they're short and expected.
 - **Hand-only tools in a separate `HAND_TOOLS` registry**, so the planner can't invent track ids.
