@@ -14,7 +14,6 @@ from typing import Any, Literal
 
 from vibe.agent.providers import (
     AnthropicProvider,
-    GeminiProvider,
     OllamaProvider,
     OpenAIProvider,
     Provider,
@@ -30,6 +29,11 @@ FREE_TIERS_AS_OF = "2026-11-12"
 - Gemini, https://aistudio.google.com/docs/pricing: ``gemini-3.8-flash``, ``gemini-3.6-flash``,
   ``gemini-3.5-flash-lite`` and ``gemini-3.1-flash-lite`` are free; free-tier content is used to
   improve Google's products. Per-model limits are only shown per project in AI Studio.
+  https://aistudio.google.com/docs/openai: the OpenAI-compatible endpoint takes the key as
+  ``Authorization: Bearer``, supports structured output, and maps ``reasoning_effort="minimal"``
+  to thinking level ``minimal`` on Gemini 3 Flash and Flash-Lite (thinking can't be turned off).
+  ``gemini-3.8-flash`` refuses ``minimal`` ("Thinking level MINIMAL is not supported", a call on
+  2026-11-16), so it runs at ``low``, its lowest.
 - OpenRouter, https://openrouter.ai/api/v1/models: ``:free`` models that list
   ``structured_outputs`` (Nemotron 3.5 Super VL) or only ``response_format`` (Gemma 4 31B).
   The daily cap is per account: ``GET /api/v1/key`` reports ``free_model_daily_requests``.
@@ -49,6 +53,10 @@ GROQ_RPM = 2
 """Groq's free plan allows 30 RPM but only 8K tokens a minute. A call here is about 3.3K tokens
 (an estimate: the prompt and schema are 13.3K characters at ~4 per token), so 2 a minute."""
 OPENROUTER_URL = "https://openrouter.ai/api/v1"
+GEMINI_OPENAI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+"""Gemini through its OpenAI-compatible endpoint rather than the google-genai SDK: the key goes
+in ``Authorization: Bearer``, which a Claude cloud session's key store can inject, and every
+hosted candidate then uses the same strict ``json_schema`` path."""
 
 Access = Literal["local", "free", "paid"]
 
@@ -95,6 +103,16 @@ def _groq(model: str, **settings: Any) -> Provider:
     )
 
 
+def _gemini(model: str, reasoning_effort: str) -> Provider:
+    return OpenAIProvider(
+        model,
+        base_url=GEMINI_OPENAI_URL,
+        api_key_env="GEMINI_API_KEY",
+        label="gemini",
+        reasoning_effort=reasoning_effort,
+    )
+
+
 def _openrouter(model: str) -> Provider:
     return OpenAIProvider(
         model, base_url=OPENROUTER_URL, api_key_env="OPENROUTER_API_KEY", label="openrouter"
@@ -123,12 +141,12 @@ _CANDIDATES = (
     ),
     Candidate(
         "gemini-3.8-flash",
-        lambda: GeminiProvider("gemini-3.8-flash", thinking_level="minimal"),
+        lambda: _gemini("gemini-3.8-flash", "low"),  # its lowest: "minimal" is a 400
         "free",
     ),
     Candidate(
         "gemini-3.5-flash-lite",
-        lambda: GeminiProvider("gemini-3.5-flash-lite", thinking_level="minimal"),
+        lambda: _gemini("gemini-3.5-flash-lite", "minimal"),
         "free",
     ),
     Candidate(

@@ -13,6 +13,7 @@ import pytest
 from vibe.agent import Clarify, LlmError, Plan, plan_request, validate_plan
 from vibe.agent import llm as llm_module
 from vibe.agent.bench.candidates import CANDIDATES, Candidate
+from vibe.agent.bench.extras import EXTRAS
 from vibe.agent.llm import (
     _EXAMPLES,
     _UNSUPPORTED,
@@ -74,6 +75,15 @@ def test_every_object_is_closed_and_requires_all_its_properties() -> None:
     for node in objects:
         assert node["additionalProperties"] is False
         assert node["required"] == list(node["properties"])
+
+
+def test_a_tool_with_no_arguments_has_no_required_list() -> None:
+    """Groq's strict mode refuses "required" on an object with no properties."""
+    args = call_variant("undo", reply_schema(EXTRAS))["properties"]["args"]
+
+    assert args["properties"] == {}
+    assert "required" not in args
+    assert args["additionalProperties"] is False
 
 
 def test_mask_targets_must_be_a_ref_and_times_may_be_one() -> None:

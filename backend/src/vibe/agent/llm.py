@@ -369,7 +369,10 @@ def _portable(node: Any, defs: Mapping[str, Any]) -> Any:
             out[key] = _portable(value, defs)
     if out.get("type") == "object":
         out.setdefault("properties", {})
-        out["required"] = list(out["properties"])
+        if out["properties"]:
+            out["required"] = list(out["properties"])
+        else:  # Groq refuses "required" on an object with no properties (an args-free tool)
+            out.pop("required", None)
         out["additionalProperties"] = False
     return out
 
