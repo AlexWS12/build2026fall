@@ -138,7 +138,10 @@ def preflight(names: Sequence[str], out_dir: Path = OUT_DIR, allow_paid: bool = 
                 check_allowed(CANDIDATES[name], allow_paid)
                 provider = CANDIDATES[name].build()
                 say(f"  model: {json.dumps(provider.describe(), default=str)[:600]}")
-                for label, registry in (("core", TOOLS), ("extras", EXTRAS)):
+                rpm = CANDIDATES[name].rpm
+                for i, (label, registry) in enumerate((("core", TOOLS), ("extras", EXTRAS))):
+                    if i and rpm:  # the free tier's pace: Groq's 8K TPM won't take both at once
+                        sleep(60 / rpm)
                     reply = provider.complete(
                         system_prompt(registry, WIRE_REF_KEY),
                         user_message("blur faces for the first half", None, None),

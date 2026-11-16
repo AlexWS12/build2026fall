@@ -25,7 +25,8 @@ R-1 picks the model for the planner's LLM slot. R-1b has **no budget**, so only 
   - `VIBE_PLANNER_LLM`, which wires the chosen model into the chat route;
   - a guard that asks before cutting at a time the user didn't give.
 
-  Tests: 1242 passed, 6 skipped. The guard and the floor rule are new.
+  Tests: 1243 passed, 6 skipped. The guard and the floor rule are new.
+- **The free keys work** (tested Nov 16): all 7 hosted candidates found their model and accepted the core schema. See "Results so far".
 - **Template parser:** unchanged in scope. It takes 30 of the 64 core requests and is wrong on none (script output, no model involved).
 
 ## What R-1 asks for
@@ -116,7 +117,7 @@ Every candidate costs $0 per call. The real costs are rate limits for hosted tie
 | `gemma4-e4b` | Ollama `gemma4:e4b` | Our hardware | 6.6 GB. 8 GB cards |
 | `gemma4-12b` | Ollama `gemma4:12b` | Our hardware | 7.7 GB, so tight on an 8 GB card. Run it on 12 GB or more |
 
-- **Groq's token limit is the binding one.** A call here is about 3.3K tokens, so `run` paces Groq to 2 requests a minute by default. That's an estimate: the core prompt and schema are 13.3K characters, at about 4 characters per token.
+- **Groq's token limit is the binding one.** In preflight, Groq counted 3,403 input tokens per core call for GPT-OSS and 1,835 for Qwen 3.8. So `run` paces Groq to 2 requests a minute by default, which fits 8K tokens a minute.
 - **Not free tiers we can use:**
   - Groq's other free models are speech, safety or guard models.
   - Gemini 4 Carbon and Argon aren't on the free tier.
@@ -277,7 +278,11 @@ uv run --group llm --env-file ../.env python -m vibe.agent.bench run --candidate
 
   The reply's `free_model_daily_requests` shows the limit and what's left today.
 
-**How long it takes (an estimate, not a measurement).** One pass is 34 × 5 = 170 calls, plus retries. On Groq's 200K tokens a day, at about 3.5K tokens a call, that's about 57 calls a day per model, so **about 3 days per Groq model**. Gemini and OpenRouter depend on the project's and account's limits.
+**How long it takes (an estimate from the preflight's token counts, not a measurement of a run).** One pass is 34 × 5 = 170 calls, plus retries.
+- **GPT-OSS on Groq:** at about 3.5K tokens a call, 200K tokens a day is about 57 calls a day per model, so **about 3 days per GPT-OSS model**.
+- **Qwen 3.8 on Groq:** at about 2K tokens a call, about **2 days**.
+- **Gemini:** depends on the project's limits in AI Studio.
+- **OpenRouter:** 1,000 free requests a day for this account, shared by both models.
 
 **6. Report** (no API calls), from `backend/`:
 
@@ -353,7 +358,26 @@ Everyone has to run the same commit. The report only counts results made with th
 **No scored run exists yet, so these results don't support a model choice.**
 
 - **Candidate zero** (script output at `439b0d6`, no model): the template parser takes 30 of the 64 core requests and gets all 30 right. The set was written alongside the parser, so this is weak evidence about real traffic.
-- **Preflight without keys** (Nov 12, Linux cloud container, no GPU): every free candidate fails with a clear message. Groq and OpenRouter show a `KeyError` naming the key, Gemini shows "No API key was provided", and Ollama shows "Connection refused". This checks the error paths only.
+- **Key test: preflight with paul's free keys** (Nov 16, Claude cloud container behind its network proxy, Linux, no GPU). Each time is one cold first call, not a scored result. Token counts are what each API reported.
+
+  | Candidate | Model found | Core schema | Extras schema | Input tokens (core) |
+  | --- | --- | --- | --- | --- |
+  | `groq-gpt-oss-120b` | Yes | Accepted, 0.83 s | Accepted, 1.18 s | 3,403 |
+  | `groq-gpt-oss-20b` | Yes | Accepted, 0.55 s | Accepted, 1.12 s | 3,403 |
+  | `groq-qwen3.8-27b` | Yes | Accepted, 1.06 s | Accepted, 0.94 s | 1,835 |
+  | `gemini-3.8-flash` | Yes | Accepted, 2.63 s (thinking `low`) | Accepted, 2.30 s | 1,891 |
+  | `gemini-3.5-flash-lite` | Yes | Accepted, 1.15 s | Accepted, 1.22 s | 1,891 |
+  | `openrouter-nemotron-3.5-super-vl` | Yes | Accepted, 2.46 s | Accepted, 2.86 s | 1,838 |
+  | `openrouter-gemma-4-31b` | Yes | Accepted, 4.33 s | Not tested: 429 from the provider behind it, three tries | 1,891 |
+
+  - Every model that answered **wrote the `$ref` property** correctly, so `WIRE_REF_KEY` stays `$ref`.
+  - **Four fixes came out of it:**
+    - Gemini 3.8 Flash refuses thinking `minimal` with a 400, so it runs at `low`.
+    - Groq's strict mode refused `"required": []` on args-free tools (extras only), which the schema no longer sends.
+    - Preflight's two calls to a Groq model went just over the 8K tokens a minute (3,441 used and 4,685 requested), so preflight now waits between them.
+    - A missing key now shows `KeyError: 'GEMINI_API_KEY'` like the others.
+  - **OpenRouter allows this account 1,000 free-model requests a day,** per `GET /api/v1/key`. The account has bought credits before; only `:free` models run, so nothing is charged.
+  - **Gemma 4 31B's free endpoint** was rate-limited upstream on and off all morning, so plan for retries.
 - **R-1's preflight** (Nov 1, paid keys, prototype script, Windows 11 with an RTX 4060 Ti 8 GB, network not recorded). These were single cold calls on the old 5-tool schema:
   - Claude Opus, Sonnet and Haiku 5.5 accepted the 5-tool schema (4.30 s, 3.29 s and 1.54 s) and rejected the 12-tool one ("The compiled grammar is too large").
   - OpenRouter Qwen3.5-9B accepted both.
