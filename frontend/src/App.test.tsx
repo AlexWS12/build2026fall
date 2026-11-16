@@ -393,6 +393,12 @@ describe('App wired to a backend', () => {
       expect(panel.queryByRole('list', { name: 'Review items' })).not.toBeInTheDocument()
     })
 
+    test('the Cut button shows how long a stretch it removes', async () => {
+      const panel = within(await open(reviewing().api))
+      const cut = await panel.findByRole('button', { name: /^Cut 3\.0 s:/ })
+      expect(cut).toHaveTextContent('Cut 3.0 s')
+    })
+
     test('the buttons wait while the project is busy', async () => {
       const { api } = reviewing({ sendRequest: () => new Promise(() => {}) })
       const panel = within(await open(api))
@@ -403,7 +409,7 @@ describe('App wired to a backend', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
       await waitFor(() => expect(confirm).toBeDisabled())
-      expect(panel.getByRole('button', { name: 'Cut Target lost, face, 0:02–0:05' })).toBeDisabled()
+      expect(panel.getByRole('button', { name: 'Cut 3.0 s: Target lost, face, 0:02–0:05' })).toBeDisabled()
     })
 
     test('an empty queue says so, and mentions held boxes and standing rules', async () => {

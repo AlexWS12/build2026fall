@@ -47,6 +47,7 @@ export function ReviewPanel({
             const range = `${formatTime(item.start)}–${formatTime(item.end)}`
             const who = names.get(item.track_id) ?? item.label ?? item.track_id
             const what = `${KIND_LABEL[item.kind]}, ${who}, ${range}`
+            const length = (item.end - item.start).toFixed(1)
             const goTo = `Go to ${formatTime(item.start)}`
             return (
               <li key={item.item_id} className={styles.item}>
@@ -75,10 +76,10 @@ export function ReviewPanel({
                   className={styles.button}
                   disabled={busy}
                   title="Cut this stretch out of the video. Undo brings it back."
-                  aria-label={`Cut ${what}`}
+                  aria-label={`Cut ${length} s: ${what}`}
                   onClick={() => onReview(item.item_id, 'cut')}
                 >
-                  Cut
+                  Cut {length} s
                 </button>
               </li>
             )
