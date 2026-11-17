@@ -20,19 +20,22 @@ export function HistoryList({ history, canUndo }: { history: HistoryReply; canUn
     <ol className={styles.list} aria-label="Requests" reversed>
       {history.requests.toReversed().map((entry) => {
         const label = requestLabel(entry)
+        // Without chat text the label already names the kinds, so they aren't repeated.
+        const kinds = entry.text ? kindsLabel(entry) : ''
         const undone = entry.status === 'undone'
         return (
           <li key={entry.request_id} className={undone ? styles.undone : undefined}>
-            <span className={styles.label} title={label}>
-              {label}
-            </span>
-            {undone ? (
-              <span className={styles.status}>Undone</span>
-            ) : entry.request_id === next ? (
-              <span className={styles.next}>Undo next</span>
-            ) : (
-              entry.text && <span className={styles.status}>{kindsLabel(entry)}</span>
-            )}
+            <div className={styles.line}>
+              <span className={styles.label} title={label}>
+                {label}
+              </span>
+              {undone ? (
+                <span className={styles.status}>Undone</span>
+              ) : (
+                entry.request_id === next && <span className={styles.next}>Undo next</span>
+              )}
+            </div>
+            {kinds && <span className={styles.kinds}>{kinds}</span>}
           </li>
         )
       })}

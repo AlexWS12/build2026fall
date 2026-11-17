@@ -65,12 +65,28 @@
   list-style: none;
 }
 
+/* Two lines per request: what was asked (and its badge), then the kinds of edits it made. */
 .list li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 14px;
+  font-size: 0.87rem;
+}
+
+.line {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  padding: 7px 14px;
-  font-size: 0.87rem;
+  min-width: 0;
+}
+
+.kinds {
+  overflow: hidden;
+  font-size: 0.75rem;
+  color: var(--faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .label {

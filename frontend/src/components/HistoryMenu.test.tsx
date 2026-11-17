@@ -32,7 +32,7 @@ const rows = () => within(screen.getByRole('list', { name: 'Requests' })).getAll
 describe('HistoryList', () => {
   test('lists every request, newest first', () => {
     render(<HistoryList history={three} canUndo />)
-    expect(rows().map((row) => row.firstChild?.textContent)).toEqual([
+    expect(rows().map((row) => row.firstChild?.firstChild?.textContent)).toEqual([
       'blur the faces',
       'cut 0:10 to 0:15',
       'mute the first 5 seconds',
@@ -46,6 +46,19 @@ describe('HistoryList', () => {
     expect(within(cut).getByText('Undo next')).toBeInTheDocument()
     expect(within(mute).getByText('mute')).toBeInTheDocument()
     expect(screen.getAllByText('Undo next')).toHaveLength(1)
+  })
+
+  test('keeps the edit kinds on rows with a badge, each kind once', () => {
+    render(<HistoryList history={three} canUndo />)
+    const [blur, cut] = rows()
+    expect(within(blur).getByText('add mask')).toBeInTheDocument()
+    expect(within(cut).getByText('cut')).toBeInTheDocument()
+  })
+
+  test("doesn't repeat the kinds when they already name the request", () => {
+    const hand = entry('r_1', { source: 'user', text: null, kinds: ['cut'] })
+    render(<HistoryList history={history([hand])} canUndo />)
+    expect(rows()[0]).toHaveTextContent(/^Hand edit: cutUndo next$/)
   })
 
   test('marks nothing as next when there is nothing to undo', () => {
