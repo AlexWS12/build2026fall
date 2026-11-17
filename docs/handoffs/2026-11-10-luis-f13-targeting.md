@@ -3,9 +3,9 @@ author: luis
 date: 2026-11-10
 branch: luis/f13-targeting-by-description
 features: [F-13]
-base: origin/main @ 1642a7d
+base: origin/main @ e4a96f9 (merged in, not rebased)
 head: see the PR
-status: in progress (combined criteria and following the target are in PR #33; the VLM judge is still open)
+status: in progress (PR #33 review fixes done; the VLM judge, D-020, is the next PR)
 ---
 
 # F-13 first cut: pick tracks by description ("the person in red"), with a colour stub and a slot for the VLM
@@ -57,8 +57,8 @@ luis made these on 2026-11-10; say on the PR if you disagree. None is architectu
 ## Second step: combined criteria, following the target, review fixes
 Done on top of the first cut, after watching the demo video where one box followed the right person.
 - **Several criteria in one request.** "blur the person in a grey t-shirt with a bag" is split into "in a grey t-shirt" (the judge) and "with a bag" (answered from the tracks: is a handbag / backpack / suitcase track inside the person's box in at least half of their keyframes). Combined three-valued: any `no` is a no, all `yes` is a yes, else `unsure`. Any detector label works as the object ("with a dog"); words like "bag" or "phone" map to labels. "With a red bag" needs eyes, so it goes to the judge as a whole. A judge that reads sentences (`Judge.compound = True`, the VLM) gets the whole description instead.
-- **No object track anywhere = unsure, not no** (maybe the detector never looked for bags); a person seen under 10 keyframes never gets a `no` from the object rule.
-- **The mask follows the target.** `add_mask(while_tracked=True)`: each target is masked from just before its track starts to just after it ends (a quarter second plus a quarter-second grid, so never longer than the renderer's 0.5 s hold), targets that come and go together share one op, and it stays inside the requested range. The planner sets it for one described person; "everyone except ..." keeps whole-range masks because it hides bystanders.
+- **No object track anywhere = unsure, not no** (maybe the detector never looked for bags). Since the PR review, the object rule never says `no` at all (see "Third step").
+- **The mask follows the target.** `add_mask(while_tracked=True)`: each target is masked from just before its track starts to just after it ends (since the PR review: at least the renderer's 0.5 s hold, plus up to a quarter-second grid; see "Third step"), targets that come and go together share one op, and it stays inside the requested range. The planner sets it for one described person; "everyone except ..." keeps whole-range masks because it hides bystanders.
 - **"Only if sure."** `find_by_description(unsure="leave")`, only when the user says so in words ("only if sure", "the sure ones only"). Default is still `mask`. Nobody sure is an error, not an empty result; the unsure ones are still reported (`unsure`, `left_out`).
 - **Review findings fixed:** stub judge (dark / pale / teal colours are unsure, skin is not red or orange, colour elsewhere in the box blocks a "no", one crop is never enough, unreadable words make it unsure, clothing words on non-person labels are unsure); keyframes past the end of the video give no crop; crops are copies; cache entries are validated and re-read before writing, a cache key covers the crop pipeline; every module error comes out as `DescribeError`; the planner declines negated or duplicated times, a second target in one description, identity words, places, effect words ("with a strong blur"), "box everyone in black".
 - **The executor now passes a describer** (`execute_plan(describer=...)`, `execute_request` builds `project_describer`), so the chat path works. On a backend with no judge, only a request that describes someone fails, with the reason.
@@ -70,14 +70,25 @@ Done on top of the first cut, after watching the demo video where one box follow
 - Default (unsure masked): 583 person tracks, 245 ops, 841 frames in 100 s, 87 render notes. Correct by the privacy rule, and crowded: this is the cost of 572 unsure tracks, most of them fragments under 5 keyframes.
 - Wrong or doubtful in the sure-only video: one of the 11 sure tracks is a second person (man in a grey t-shirt pushing a stroller with a pink bag; arguably a match); two are 2-keyframe fragments.
 
+## Third step: Edugre's review on PR #33, and main merged in
+luis did these on 2026-11-17, after merging `origin/main` (e4a96f9: F-41, F-43, F-09b, D-020) into the branch. The merge had two conflicts, both in the toolbox imports: main's `HAND_TOOLS` / `UI_TOOLS` sit next to `Describer`, and main renamed `MuteSpan` to `Span` in that import.
+- **The object rule never says `no`** (`with_object`, review item 1). Before, a person seen in 10+ keyframes with no bag box inside theirs got `no`, which made the whole description `no` and left them unmasked whenever the detector missed their bag. Now it is `yes` or `unsure`; only a judge looking at pixels can rule someone out. Cost: "with a bag" narrows only through `yes`, so more people are masked until the VLM. `OBJECT_MIN_SEEN` is gone.
+- **The object rule counts only `detected` / `user` keyframes** (item 2), like `sample_keyframes`: predicted boxes may have drifted onto someone else's bag.
+- **A followed mask lasts at least the renderer's hold** (item 3). `TRACKED_PAD_S` is now 0.5 s (was 0.25), then rounded outward to the quarter-second grid, so 0.5 to 0.75 s each side. Before, the mask could stop up to 0.25 s before the renderer's `HOLD_SECONDS`, at each end and at every handover between fragments of one person. Two fragments up to 1 s apart now overlap. The constant isn't imported from `render.geometry` (that loads av and numpy into the planner, which a test forbids); a test keeps `TRACKED_PAD_S >= HOLD_SECONDS`. Cost: past the hold, the renderer keeps the held box and marks it lost, so a few more render notes.
+- **"Only if sure" works before a time too** (item 4, a bug): "blur the person in red only if sure from 0:10 to 0:20" used to keep "only if sure" in the description, so the stub was unsure about everyone and everyone in the range was blurred. The template now looks for it on both sides of the time. Any other "sure" / "certain" / "unsure" word in a description makes the template decline, so the planner asks.
+- **"And" splits only before a new criterion** (item 5): "in black and white", "wearing a red shirt and a hat" and "with a black and white dog" stay whole (unsure for the stub, so masked). "In red, and carrying a bag" still splits. What "and" between colours means is left to the VLM, which reads the sentence.
+- **Not re-run by hand:** the street-clip numbers in the second step predate these fixes. With the object rule never saying `no`, the 94 combined `no`s for "in a grey t-shirt with a bag" will drop (some become `unsure`, so masked).
+- **Checks:** Windows 11, Python 3.12, no GPU. `ruff check` and `ruff format --check` clean. Full suite 1529 passed, 2 skipped, 1 failed (`test_writing_keeps_the_timeline_permissions`, POSIX `chmod`, Windows only).
+
 ## What is missing to close F-13
 Exit check: *a request picks the right tracks on a labeled clip; unsure = masked.* Not met yet:
 1. **A real judge.** The colour stub only answers one clothing colour, and objects the detector has labels for. "The tall one", "with a red bag", "wearing glasses" are all `unsure` today (so masked, and too many tracks). A VLM judge for `local` (and `remote` through F-08's model server) is the main missing piece.
 2. **A labeled, consented clip** (F-09b, Jean) and a script that reports right / wrong / unsure per description. Until then every number in this file is an eyeball check, not a measurement.
-3. **The remaining review findings below** (the ones listed as fixed in the second step are done).
-4. **Team steps:** heads-up about the new tool and `ToolContext.describer`; the owner of the plan executor wires `describer=project_describer(...)`; claim the F-13 row in ROADMAP; D-017 is still *Proposed*.
+3. **The remaining review notes below** (small; none leaves anyone unmasked).
+4. **Team steps:** heads-up about the new tool and `ToolContext.describer` (the executor already passes a describer, see the second step); D-017 and D-020 are still *Proposed*.
 
-## VLM choice (not decided; the team picks, then it goes in the ARCHITECTURE decisions log)
+## VLM choice (D-020 proposes Qwen3.5-4B local / 9B on the 5070; accepted only after it's measured)
+The notes below are from before D-020; see that row in `docs/ARCHITECTURE.md` and `docs/handoffs/2026-11-15-eduardo-d020-vlm-qwen.md`.
 Needs: runs on a team machine (D-017: crops are media, they don't go to a third-party API without an opt-in), fits 6 GB (RTX 4050 laptops) or at least the 5070's 12 GB, permissive license, answers `yes` / `no` / `unsure` for one track from 3 crops, ideally several attributes in one call.
 - Candidates to evaluate, **none measured by us yet**: a small Qwen2.5-VL (3B / 7B, 4-bit), InternVL, SmolVLM, MiniCPM-V, moondream. Check each one's license (some sizes have different licenses), VRAM at 4-bit, and seconds per track on our hardware.
 - How to decide: a script that runs each candidate on the same labeled clip, reports right / wrong / unsure and seconds per track with the hardware stated (same rule as the benchmark). Pick the smallest model that never says a confident wrong "no" on that clip.
@@ -92,12 +103,11 @@ Needs: runs on a team machine (D-017: crops are media, they don't go to a third-
 - **Surface "sure" vs "possible"** in the UI: show confident targets and ask about the unsure ones, instead of silently masking all.
 - **Short noise fragments** (under ~5 keyframes) inside a longer track: decide with the team whether they inherit the longer track's verdict. Measured on the grey + bag clip: 349 of 405 masked tracks had under 5 keyframes (155 inside a yes/unsure track, 167 alone, 27 inside a sure-no track), so this is the biggest lever and also the riskiest for privacy.
 
-**Review findings, confirmed** (an independent review, items I reproduced). Fixed in the second step: the planner's negated / duplicated times, compound and non-description phrases; the stub's fail-open cases; past-the-end keyframes; non-person labels with clothing words; error wrapping, cache validation, crop copies; the unsafe tests. **Still open:**
-- Planner templates: "except … from 0:10" parses a negated time as the opposite range; the first of two time ranges is dropped; compound requests fold into one description; phrases that aren't descriptions after `in` / `with` / `wearing` become whole-clip descriptions ("in 0:10", "in the video", "with a strong blur", "box everyone in black").
-- Stub judge fail-open: confident `no` for navy, burgundy, pastel, dark and teal; confident `yes` on skin tones (e.g. 150,80,60 reads as red); a single usable crop can give a sure verdict (require 2+); a keyframe past the end of the clip is cropped from the last frame yet gets a sure verdict (a test currently locks this in); words the stub can't tokenise are ignored.
-- Tool: accepts non-person labels (the stub then answers clothing questions for faces).
-- Describer: only `ModuleError` is converted (judge or cache-write errors escape); concurrent `ask` calls lose cache entries; cache entries aren't validated against the request; crops are views that keep full frames alive (`np.ascontiguousarray`); cache key doesn't cover the crop pipeline or the colour constants; punctuation variants make separate cache files.
-- Tests: the black-in-the-chest-band test and the past-the-end test lock in unsafe behaviour; missing tests for the template findings, the real describer with `ColorJudge` through the tool, judge and cache exceptions, and the one-usable-crop case.
+**Review findings, confirmed** (an independent review before the PR, then Edugre's review on PR #33). Everything from the first review is fixed (second step); Edugre's items 1 to 5 are fixed in the third step. **Still open:**
+- **Describer:** two `ask` calls at the same time can still lose each other's cache entries (it re-reads before writing, but there is no lock). The cache key doesn't cover the colour stub's constants, so tuning them needs a `_CROPS_VERSION` bump by hand.
+- **Memory and speed:** every crop of every track is held before anything is judged (about 2,000 crops on the 677-track clip). Judge each track as its last crop is read, in batches, with progress: part of the VLM work.
+- **Two word lists:** `_NOT_A_DESCRIPTION` (templates) and `ColorJudge._FILLER` / `color_in` overlap and will drift. One shared vocabulary later.
+- **Not tested:** a hand-drawn (`user`) track through the describer on a real clip.
 
 ## Gotchas
 - **The stub is easily fooled** by coloured backgrounds, lighting, and a box that includes a barrier or another person. It is there to test the path and give CPU laptops a narrow answer, not to be good.
