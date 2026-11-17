@@ -97,9 +97,15 @@
   white-space: nowrap;
 }
 
-.undone .label {
+.undone .label,
+.forGood .label {
   text-decoration: line-through;
   color: var(--faint);
+}
+
+/* Redo can't bring these back: fainter than an undone request it still could. */
+.forGood {
+  opacity: 0.6;
 }
 
 .status,

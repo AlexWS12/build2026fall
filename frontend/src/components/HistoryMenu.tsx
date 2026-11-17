@@ -1,18 +1,31 @@
 import { type RefObject, useEffect, useId, useRef, useState } from 'react'
 import type { HistoryReply } from '../api/types'
-import { undoTarget } from '../state/session'
+import { redoTarget, undoneForGood, undoTarget } from '../state/session'
 import { kindsLabel, requestLabel } from './history'
 import styles from './HistoryMenu.module.css'
 
+const FOR_GOOD_HINT = "A newer request came after this one, so Redo can't bring it back."
+
 /**
  * Every request that changed the video, newest first. Read-only: undo is linear, so the list
- * shows which request Undo would take back rather than offering one to pick.
+ * shows which request Undo or Redo would act on rather than offering one to pick.
  *
- * `canUndo` is the Undo button's own state (it also needs the project idle), so the list never
- * says "Undo next" while the button beside it is disabled.
+ * `canUndo` and `canRedo` are the toolbar buttons' own state (they also need the project idle),
+ * so the list never says "Undo next" or "Redo next" while the button beside it is disabled.
+ * "Redo next" shows only when the history makes it certain (see `redoTarget`).
  */
-export function HistoryList({ history, canUndo }: { history: HistoryReply; canUndo: boolean }) {
-  const next = canUndo ? undoTarget(history) : null
+export function HistoryList({
+  history,
+  canUndo,
+  canRedo,
+}: {
+  history: HistoryReply
+  canUndo: boolean
+  canRedo: boolean
+}) {
+  const undoNext = canUndo ? undoTarget(history) : null
+  const redoNext = canRedo ? redoTarget(history) : null
+  const forGood = undoneForGood(history)
   if (history.requests.length === 0) {
     return <p className={styles.empty}>No edits yet. Requests that change the video are listed here.</p>
   }
@@ -22,17 +35,25 @@ export function HistoryList({ history, canUndo }: { history: HistoryReply; canUn
         const label = requestLabel(entry)
         // Without chat text the label already names the kinds, so they aren't repeated.
         const kinds = entry.text ? kindsLabel(entry) : ''
+        const id = entry.request_id
         const undone = entry.status === 'undone'
+        const gone = undone && forGood.has(id)
         return (
-          <li key={entry.request_id} className={undone ? styles.undone : undefined}>
+          <li key={id} className={gone ? styles.forGood : undone ? styles.undone : undefined}>
             <div className={styles.line}>
               <span className={styles.label} title={label}>
                 {label}
               </span>
-              {undone ? (
-                <span className={styles.status}>Undone</span>
+              {!undone ? (
+                id === undoNext && <span className={styles.next}>Undo next</span>
+              ) : id === redoNext ? (
+                <span className={styles.next}>Redo next</span>
+              ) : gone ? (
+                <span className={styles.status} title={FOR_GOOD_HINT}>
+                  Undone for good
+                </span>
               ) : (
-                entry.request_id === next && <span className={styles.next}>Undo next</span>
+                <span className={styles.status}>Undone</span>
               )}
             </div>
             {kinds && <span className={styles.kinds}>{kinds}</span>}
@@ -52,10 +73,12 @@ export function HistoryList({ history, canUndo }: { history: HistoryReply; canUn
 export function HistoryMenu({
   history,
   canUndo,
+  canRedo,
   keepOpen = [],
 }: {
   history: HistoryReply
   canUndo: boolean
+  canRedo: boolean
   keepOpen?: readonly RefObject<HTMLElement | null>[]
 }) {
   const [open, setOpen] = useState(false)
@@ -108,7 +131,7 @@ export function HistoryMenu({
               </span>
             )}
           </h2>
-          <HistoryList history={history} canUndo={canUndo} />
+          <HistoryList history={history} canUndo={canUndo} canRedo={canRedo} />
         </section>
       )}
     </div>

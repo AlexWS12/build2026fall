@@ -62,7 +62,12 @@ export function Toolbar({
           <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
         </svg>
       </button>
-      <HistoryMenu history={history} canUndo={canUndo} keepOpen={keepHistoryOpen} />
+      <HistoryMenu
+        history={history}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        keepOpen={keepHistoryOpen}
+      />
       <button type="button" className={styles.primary} disabled={!canExport} onClick={onExport}>
         <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />

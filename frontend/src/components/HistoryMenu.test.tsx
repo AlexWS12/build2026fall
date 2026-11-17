@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
 import type { HistoryEntry, HistoryReply } from '../api/types'
-import { undoTarget } from '../state/session'
+import { redoTarget, undoneForGood, undoTarget } from '../state/session'
 import { requestLabel } from './history'
 import { HistoryList, HistoryMenu } from './HistoryMenu'
 
@@ -15,11 +15,12 @@ const entry = (id: string, overrides: Partial<HistoryEntry> = {}): HistoryEntry 
   ...overrides,
 })
 
-const history = (requests: HistoryEntry[], can_undo = true): HistoryReply => ({
-  requests,
-  can_undo,
-  can_redo: requests.some((r) => r.status === 'undone'),
-})
+// By default Redo is possible when the newest request is undone, as it would be on the server.
+const history = (
+  requests: HistoryEntry[],
+  can_undo = true,
+  can_redo = requests.at(-1)?.status === 'undone',
+): HistoryReply => ({ requests, can_undo, can_redo })
 
 const three = history([
   entry('r_1', { text: 'mute the first 5 seconds' }),
@@ -31,7 +32,7 @@ const rows = () => within(screen.getByRole('list', { name: 'Requests' })).getAll
 
 describe('HistoryList', () => {
   test('lists every request, newest first', () => {
-    render(<HistoryList history={three} canUndo />)
+    render(<HistoryList history={three} canUndo canRedo />)
     expect(rows().map((row) => row.firstChild?.firstChild?.textContent)).toEqual([
       'blur the faces',
       'cut 0:10 to 0:15',
@@ -39,17 +40,57 @@ describe('HistoryList', () => {
     ])
   })
 
-  test('marks undone requests, and the one Undo would take back', () => {
-    render(<HistoryList history={three} canUndo />)
+  test('marks the requests Undo and Redo would act on', () => {
+    render(<HistoryList history={three} canUndo canRedo />)
     const [blur, cut, mute] = rows()
-    expect(within(blur).getByText('Undone')).toBeInTheDocument()
+    expect(within(blur).getByText('Redo next')).toBeInTheDocument()
     expect(within(cut).getByText('Undo next')).toBeInTheDocument()
     expect(within(mute).getByText('mute')).toBeInTheDocument()
     expect(screen.getAllByText('Undo next')).toHaveLength(1)
+    expect(screen.getAllByText('Redo next')).toHaveLength(1)
+  })
+
+  test('marks undone requests a newer request has made permanent', () => {
+    // r_1 undone, then r_2 made (clearing redo), then r_3 made and undone: Redo brings back r_3.
+    const left = history([
+      entry('r_1', { status: 'undone' }),
+      entry('r_2'),
+      entry('r_3', { status: 'undone' }),
+    ])
+    render(<HistoryList history={left} canUndo canRedo />)
+    const [r3, r2, r1] = rows()
+    expect(within(r3).getByText('Redo next')).toBeInTheDocument()
+    expect(within(r2).getByText('Undo next')).toBeInTheDocument()
+    expect(within(r1).getByText('Undone for good')).toHaveAttribute(
+      'title',
+      "A newer request came after this one, so Redo can't bring it back.",
+    )
+  })
+
+  test('marks every undone request permanent when nothing can be redone', () => {
+    const cleared = history([entry('r_1', { status: 'undone' }), entry('r_2', { status: 'undone' })], false, false)
+    render(<HistoryList history={cleared} canUndo canRedo />)
+    expect(screen.getAllByText('Undone for good')).toHaveLength(2)
+    expect(screen.queryByText('Redo next')).not.toBeInTheDocument()
+  })
+
+  test("claims nothing about redo when the history can't tell", () => {
+    // Both "r_1, undo r_1, r_2, undo r_2" and "r_1, r_2, undo r_2, undo r_1" read like this.
+    const unclear = history([entry('r_1', { status: 'undone' }), entry('r_2', { status: 'undone' })], false)
+    render(<HistoryList history={unclear} canUndo canRedo />)
+    expect(screen.getAllByText('Undone')).toHaveLength(2)
+    expect(screen.queryByText('Redo next')).not.toBeInTheDocument()
+    expect(screen.queryByText('Undone for good')).not.toBeInTheDocument()
+  })
+
+  test('marks nothing as Redo next while Redo is disabled', () => {
+    render(<HistoryList history={three} canUndo canRedo={false} />)
+    expect(screen.queryByText('Redo next')).not.toBeInTheDocument()
+    expect(within(rows()[0]).getByText('Undone')).toBeInTheDocument()
   })
 
   test('keeps the edit kinds on rows with a badge, each kind once', () => {
-    render(<HistoryList history={three} canUndo />)
+    render(<HistoryList history={three} canUndo canRedo />)
     const [blur, cut] = rows()
     expect(within(blur).getByText('add mask')).toBeInTheDocument()
     expect(within(cut).getByText('cut')).toBeInTheDocument()
@@ -57,37 +98,37 @@ describe('HistoryList', () => {
 
   test("doesn't repeat the kinds when they already name the request", () => {
     const hand = entry('r_1', { source: 'user', text: null, kinds: ['cut'] })
-    render(<HistoryList history={history([hand])} canUndo />)
+    render(<HistoryList history={history([hand])} canUndo canRedo />)
     expect(rows()[0]).toHaveTextContent(/^Hand edit: cutUndo next$/)
   })
 
   test('marks nothing as next when there is nothing to undo', () => {
-    render(<HistoryList history={history([entry('r_1', { status: 'undone' })], false)} canUndo />)
+    render(<HistoryList history={history([entry('r_1', { status: 'undone' })], false)} canUndo canRedo />)
     expect(screen.queryByText('Undo next')).not.toBeInTheDocument()
   })
 
   test('marks nothing as next while Undo is disabled, even when the server could undo', () => {
     // A request is planning, rendering or exporting: the toolbar disables Undo.
-    render(<HistoryList history={three} canUndo={false} />)
+    render(<HistoryList history={three} canUndo={false} canRedo />)
     expect(three.can_undo).toBe(true)
     expect(screen.queryByText('Undo next')).not.toBeInTheDocument()
   })
 
   test('says so when no request has changed the video', () => {
-    render(<HistoryList history={history([], false)} canUndo />)
+    render(<HistoryList history={history([], false)} canUndo canRedo />)
     expect(screen.getByText(/No edits yet\./)).toBeInTheDocument()
     expect(screen.queryByRole('list')).not.toBeInTheDocument()
   })
 
   test('keeps the full text of a long request reachable', () => {
     const long = 'blur everyone in the background except the man in the red shirt near the door'
-    render(<HistoryList history={history([entry('r_1', { text: long })])} canUndo />)
+    render(<HistoryList history={history([entry('r_1', { text: long })])} canUndo canRedo />)
     expect(screen.getByTitle(long)).toBeInTheDocument()
   })
 
   test('lists a long session in full', () => {
     const forty = history(Array.from({ length: 40 }, (_, i) => entry(`r_${i + 1}`)))
-    render(<HistoryList history={forty} canUndo />)
+    render(<HistoryList history={forty} canUndo canRedo />)
     expect(rows()).toHaveLength(40)
     expect(rows()[0]).toHaveTextContent('request r_40')
     expect(rows()[39]).toHaveTextContent('request r_1')
@@ -124,12 +165,44 @@ describe('undoTarget', () => {
   })
 })
 
+describe('redoTarget and undoneForGood', () => {
+  const undone = (id: string) => entry(id, { status: 'undone' })
+
+  test('one undone request after the latest applied one: Redo brings it back', () => {
+    const h = history([entry('r_1'), undone('r_2')])
+    expect(redoTarget(h)).toBe('r_2')
+    expect(undoneForGood(h)).toEqual(new Set())
+  })
+
+  test('undone requests before the latest applied one are gone for good', () => {
+    const h = history([undone('r_1'), entry('r_2'), undone('r_3')])
+    expect(redoTarget(h)).toBe('r_3')
+    expect(undoneForGood(h)).toEqual(new Set(['r_1']))
+  })
+
+  test('two or more undone after the latest applied one: no target, none marked permanent', () => {
+    const h = history([entry('r_1'), undone('r_2'), undone('r_3')])
+    expect(redoTarget(h)).toBeNull()
+    expect(undoneForGood(h)).toEqual(new Set())
+  })
+
+  test('when the server says redo is unavailable, every undone request is gone for good', () => {
+    const h = history([entry('r_1'), undone('r_2')], true, false)
+    expect(redoTarget(h)).toBeNull()
+    expect(undoneForGood(h)).toEqual(new Set(['r_2']))
+  })
+
+  test('nothing undone after the latest applied one: no target, even if the server says redo', () => {
+    expect(redoTarget(history([undone('r_1'), entry('r_2')], true, true))).toBeNull()
+  })
+})
+
 describe('HistoryMenu', () => {
   const open = () => fireEvent.click(screen.getByRole('button', { name: 'History' }))
   const panel = () => screen.queryByRole('region', { name: 'Request history' })
 
   test('stays closed until the button is pressed, then shows the count', () => {
-    render(<HistoryMenu history={three} canUndo />)
+    render(<HistoryMenu history={three} canUndo canRedo />)
     expect(panel()).not.toBeInTheDocument()
     open()
     expect(panel()).toHaveTextContent('3 requests')
@@ -137,7 +210,7 @@ describe('HistoryMenu', () => {
   })
 
   test('closes on Escape, on a press outside, and on the button again', () => {
-    render(<HistoryMenu history={three} canUndo />)
+    render(<HistoryMenu history={three} canUndo canRedo />)
     open()
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(panel()).not.toBeInTheDocument()
@@ -152,7 +225,7 @@ describe('HistoryMenu', () => {
   })
 
   test('a press inside the list keeps it open', () => {
-    render(<HistoryMenu history={three} canUndo />)
+    render(<HistoryMenu history={three} canUndo canRedo />)
     open()
     fireEvent.pointerDown(screen.getByText('cut 0:10 to 0:15'))
     expect(panel()).toBeInTheDocument()
