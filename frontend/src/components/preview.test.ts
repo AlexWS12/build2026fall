@@ -5,6 +5,7 @@ import { boxAt, cutAt, masksAt, mutedAt, outputDuration } from './preview'
 const empty: TimelineState = {
   schema_version: 1,
   masks: {},
+  reviewed: {},
   cuts: [],
   mutes: [],
   audio_filters: [],

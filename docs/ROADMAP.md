@@ -58,9 +58,9 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
 | F-40 | Agent reports what it did in plain words + raw tool calls | Must | F-05 | in progress | alex, `alex/demo-wiring-redesign` |
-| F-41 | Review queue for low-confidence results | Must | F-02, F-07 | idea | Knight Hacks "Check" |
+| F-41 | Review queue for low-confidence results | Must | F-02, F-07 | in progress | paulallain, `paulallain/f41-review-queue`; Knight Hacks "Check" |
 | F-42 | Hand fixes: select, change effect, remove, drag/correct box | Must | F-07, F-11 | idea | Through the same toolbox |
-| F-43 | Undo per request + version history | Must | F-02 | in progress | alex, `alex/demo-wiring-redesign`: undo/redo done, history list in the UI still open |
+| F-43 | Undo per request + version history | Must | F-02 | in progress | alex, `alex/demo-wiring-redesign`: undo/redo done. jonathan, `jonathan/f43-history-list`: history list in the UI, ready for review |
 | F-44 | Preview-before-apply for heavy edits (inpainting, cuts) | Should | F-04 | idea | |
 
 ### Live mode (top-priority stretch)
@@ -221,13 +221,13 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 | Plan executor: run the plan through `call_tool`, resolve `$ref`s, dry-run on an `OpLog` copy, reply `applied`. **Priority: first** | alex | alex/demo-wiring-redesign | In the UI (`VITE_API_MODE=http`), "mute the first 5 seconds" is applied and shows in the timeline | in review |
 | Export route + source-video route + Export button in the UI. Shared file (API routes) | alex | alex/demo-wiring-redesign | Upload → request → Export → the MP4 has the edit; route test in stub mode | in review |
 | F-33b Renderer applies `audio_filters` (denoise) + pick the local/remote model | _open_ | | A test exports a clip with a denoise span, no GPU | planned |
-| F-09b Consented clips + labels in `clips.json` / `labels/` | _open_ | | `benchmark report` scores an F-10 run against real labels | planned |
+| F-09b Consented clips + labels in `clips.json` / `labels/` | eduardo | eduardo/f09b-pexels-clips | `benchmark report` scores an F-10 run against real labels | in progress |
 | F-10b Detector bake-off → decision row, then harden the winner (stitching, face↔person, fit under `run_analysis`) | _open_ | | Report table with hardware stated → decision row | planned |
 | F-13 Targeting by description ("the person in red", "everyone except me") | _open_ | | A request picks the right tracks on a labeled clip; unsure = masked | planned |
 | F-40 Agent reports what it did in plain words + raw tool calls | alex | alex/demo-wiring-redesign | The chat shows a plain summary and the tool calls for each applied request | in review |
-| F-41 Review queue for low-confidence results (uses `RenderResult.issues` and the mask audit) | _open_ | | Low-confidence stretches show in a queue; confirming or fixing one writes an op | planned |
+| F-41 Review queue for low-confidence results (uses `RenderResult.issues` and the mask audit) | paulallain | paulallain/f41-review-queue | Low-confidence stretches show in a queue; confirming or fixing one writes an op | in review |
 | F-42 Hand fixes: select, change effect, remove, correct a box (through the toolbox) | _open_ | | A hand fix from the UI is an op in the timeline and can be undone | planned |
-| F-43 Undo per request + version history in the UI | alex | alex/demo-wiring-redesign | Undo removes one whole request; history lists the requests | in progress (undo and redo work; the history route exists, no history list in the UI yet) |
+| F-43 Undo per request + version history in the UI | alex, jonathan | alex/demo-wiring-redesign, jonathan/f43-history-list | Undo removes one whole request; history lists the requests | in progress (undo and redo work; the history list in the UI is ready for review on jonathan's branch) |
 
 **Risks / dependencies:**
 - The executor and the export route gate F-40–F-43 and the demo path. If they aren't merged by midweek, the HITL cards build against the CLI.

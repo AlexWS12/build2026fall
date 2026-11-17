@@ -2,8 +2,10 @@ import type {
   ChatRecord,
   ChatReply,
   ExportReply,
+  HistoryEntry,
   HistoryReply,
   ProjectDetail,
+  ReviewReply,
   StepReport,
   TimelineState,
   Track,
@@ -23,7 +25,7 @@ import type {
  *   empty ──open_started──► opening ──open_succeeded──► open(idle)
  *     ▲                        │                          │  ▲
  *     └──────open_failed───────┘        *_started ────────┘  └──── *_settled / activity_failed
- *                         (requesting | undoing | redoing | analysing | transcribing | exporting)
+ *                         (requesting | undoing | redoing | analysing | transcribing | exporting | reviewing)
  */
 
 export type ChatEntry =
@@ -50,6 +52,7 @@ export type Activity =
   | { kind: 'analysing' }
   | { kind: 'transcribing' }
   | { kind: 'exporting' }
+  | { kind: 'reviewing' }
 
 export type ExportState =
   | { kind: 'none' }
@@ -57,8 +60,17 @@ export type ExportState =
   | { kind: 'ready'; result: ExportReply; stale: boolean }
   | { kind: 'failed'; message: string }
 
+/**
+ * The review queue (F-41) is extra reading: when it can't be read, `review` is null and
+ * `reviewError` says why, and the rest of the project still loads.
+ */
+export interface ReviewData {
+  review: ReviewReply | null
+  reviewError: string | null
+}
+
 /** What the server knows about a project, fetched together when it opens. */
-export interface Snapshot {
+export interface Snapshot extends ReviewData {
   detail: ProjectDetail
   videoUrl: string
   timeline: TimelineState
@@ -68,7 +80,7 @@ export interface Snapshot {
   messages: ChatRecord[]
 }
 
-export interface OpenProject {
+export interface OpenProject extends ReviewData {
   detail: ProjectDetail
   videoUrl: string
   timeline: TimelineState
@@ -88,8 +100,8 @@ export type Session =
   | { status: 'opening'; label: string; fallback: OpenProject | null }
   | { status: 'open'; project: OpenProject; error: string | null }
 
-/** The timeline and its history always travel together, so they can't drift apart. */
-export interface Sync {
+/** The timeline, its history and the review queue travel together, so they can't drift apart. */
+export interface Sync extends ReviewData {
   timeline: TimelineState
   history: HistoryReply
 }
@@ -105,11 +117,13 @@ export type SessionEvent =
   | { type: 'redo_started' }
   | { type: 'history_settled'; sync: Sync }
   | { type: 'analysis_started' }
-  | { type: 'analysis_settled'; analysed: boolean; tracks: Track[] }
+  | ({ type: 'analysis_settled'; analysed: boolean; tracks: Track[] } & ReviewData)
   | { type: 'transcript_started' }
   | { type: 'transcript_settled'; transcript: Transcript }
   | { type: 'export_started' }
   | { type: 'export_settled'; result: ExportReply }
+  | { type: 'review_started' }
+  | { type: 'review_settled'; sync: Sync; gone: boolean }
   /** The activity in flight failed. `sync`, when the server could still be read, is the truth. */
   | { type: 'activity_failed'; message: string; sync?: Sync }
 
@@ -216,6 +230,8 @@ function projectTransition(project: OpenProject, event: ProjectEvent): OpenProje
         activity: IDLE,
         analysed: event.analysed,
         tracks: event.tracks,
+        review: event.review,
+        reviewError: event.reviewError,
         chat: [...project.chat, { kind: 'note', id: nextId(project), text }],
       }
     }
@@ -235,6 +251,28 @@ function projectTransition(project: OpenProject, event: ProjectEvent): OpenProje
         activity: IDLE,
         export: { kind: 'ready', result: event.result, stale: false },
       }
+    case 'review_started':
+      if (!idle) return project
+      return { ...project, activity: { kind: 'reviewing' } }
+    case 'review_settled':
+      if (activity.kind !== 'reviewing') return project
+      return synced(
+        {
+          ...project,
+          activity: IDLE,
+          chat: event.gone
+            ? [
+                ...project.chat,
+                {
+                  kind: 'note',
+                  id: nextId(project),
+                  text: 'That stretch was already handled. The review queue was refreshed.',
+                },
+              ]
+            : project.chat,
+        },
+        event.sync,
+      )
     case 'activity_failed': {
       if (idle) return project
       const failed: OpenProject =
@@ -272,6 +310,8 @@ function fromSnapshot(snapshot: Snapshot): OpenProject {
     history: snapshot.history,
     tracks: snapshot.tracks,
     analysed: snapshot.analysed,
+    review: snapshot.review,
+    reviewError: snapshot.reviewError,
     transcript: null,
     chat,
     activity: IDLE,
@@ -289,17 +329,27 @@ function synced(project: OpenProject, sync: Sync): OpenProject {
   const moved = JSON.stringify(sync.timeline) !== JSON.stringify(project.timeline)
   const exported =
     moved && project.export.kind === 'ready' ? { ...project.export, stale: true } : project.export
-  return { ...project, timeline: sync.timeline, history: sync.history, export: exported }
+  return {
+    ...project,
+    timeline: sync.timeline,
+    history: sync.history,
+    review: sync.review,
+    reviewError: sync.reviewError,
+    export: exported,
+  }
 }
 
 const nextId = (project: OpenProject) => `e${project.chat.length}`
+
+const KIND_LABEL: Record<string, string> = { confirm_mask: 'a review confirmation', cut: 'a cut' }
+const named = (kinds: string[]) => [...new Set(kinds.map((k) => KIND_LABEL[k] ?? k))].join(', ')
 
 /** What the request whose status flipped between two histories was, in the user's words. */
 function changedRequest(before: HistoryReply, after: HistoryReply): string | null {
   const was = new Map(before.requests.map((r) => [r.request_id, r.status]))
   const changed = after.requests.find((r) => was.get(r.request_id) !== r.status)
   if (!changed) return null
-  return changed.text ? `"${changed.text}"` : (changed.reply ?? changed.kinds.join(', '))
+  return changed.text ? `"${changed.text}"` : (changed.reply ?? named(changed.kinds))
 }
 
 function failureText(activity: Activity, message: string): string {
@@ -309,6 +359,7 @@ function failureText(activity: Activity, message: string): string {
     redoing: 'Redo failed',
     analysing: 'Analysis failed',
     transcribing: 'Transcription failed',
+    reviewing: 'Review failed',
   }
   const label = activity.kind === 'idle' || activity.kind === 'exporting' ? '' : what[activity.kind]
   return `${label}: ${message}`
@@ -341,6 +392,7 @@ const ACTIVITY_LABEL: Record<Activity['kind'], string | null> = {
   analysing: 'Analysing the video…',
   transcribing: 'Waiting for the transcript…',
   exporting: 'Rendering the export…',
+  reviewing: 'Applying review…',
 }
 
 /** One line saying what's in flight, or null when idle. */
@@ -353,4 +405,47 @@ export function busyLabel(session: Session): string | null {
 /** Status of each request by id, for marking undone replies in the chat. */
 export function requestStatuses(history: HistoryReply): Map<string, 'applied' | 'undone'> {
   return new Map(history.requests.map((r) => [r.request_id, r.status]))
+}
+
+/** The request Undo would take back: undo is linear, so it is the latest one still applied. */
+export function undoTarget(history: HistoryReply): string | null {
+  if (!history.can_undo) return null
+  return history.requests.findLast((r) => r.status === 'applied')?.request_id ?? null
+}
+
+/*
+ * What Redo would bring back, worked out from the statuses alone. The backend keeps redo as a
+ * stack (vibe/contract/fold.py `history`): Redo brings back the most recently undone request,
+ * and a new request clears the stack. `HistoryReply` doesn't say which request that is, and
+ * statuses in log order can't always tell: "A, undo A, B, undo B" and "A, B, undo B, undo A"
+ * both read `[A undone, B undone]`, but the first redoes B (A is gone for good) and the second
+ * redoes A. What can be told for certain:
+ * - an undone request logged before the latest applied one is gone for good: undo is linear,
+ *   so it was undone before that applied request was made, and making it cleared redo;
+ * - when nothing can be redone, every undone request is gone for good;
+ * - when exactly one undone request comes after the latest applied one, Redo brings back that one.
+ * Anything else is left unmarked. If the reply ever names the redo target, use it instead.
+ */
+
+/** The undone requests logged after the latest one still applied. */
+function trailingUndone(history: HistoryReply): HistoryEntry[] {
+  const lastApplied = history.requests.findLastIndex((r) => r.status === 'applied')
+  return history.requests.slice(lastApplied + 1)
+}
+
+/** The request Redo would bring back, or null when there is none or it can't be told for certain. */
+export function redoTarget(history: HistoryReply): string | null {
+  if (!history.can_redo) return null
+  const trailing = trailingUndone(history)
+  return trailing.length === 1 ? trailing[0].request_id : null
+}
+
+/** Undone requests that Redo can no longer bring back, because a newer request came after them. */
+export function undoneForGood(history: HistoryReply): Set<string> {
+  const mayRedo = new Set(history.can_redo ? trailingUndone(history).map((r) => r.request_id) : [])
+  return new Set(
+    history.requests
+      .filter((r) => r.status === 'undone' && !mayRedo.has(r.request_id))
+      .map((r) => r.request_id),
+  )
 }

@@ -511,6 +511,111 @@
         }
       }
     },
+    "/api/projects/{project_id}/review": {
+      "get": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Get Review",
+        "description": "The stretches of the masks a person should check (F-41), most serious first.",
+        "operationId": "get_review_api_projects__project_id__review_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewReply"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/review/{item_id}": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Act On Review Item",
+        "description": "Confirm one review item or cut it out, as a hand edit, and return the new queue.\n\n404 if the item is no longer in the queue (someone else's edit changed it); 400 if the\ntoolbox refuses.",
+        "operationId": "act_on_review_item_api_projects__project_id__review__item_id__post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewReply"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/analysis": {
       "post": {
         "tags": [
@@ -1270,6 +1375,133 @@
         ],
         "title": "ProjectInfo"
       },
+      "ReviewAction": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "confirm",
+              "cut"
+            ],
+            "title": "Action",
+            "description": "confirm: mark the stretch as checked. cut: cut the stretch out of the video."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "ReviewAction"
+      },
+      "ReviewItem": {
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "title": "Item Id",
+            "description": "Stable for the same track, kind and range, so a client can keep its place."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "lost",
+              "no_track",
+              "uncertain",
+              "gap"
+            ],
+            "title": "Kind"
+          },
+          "track_id": {
+            "type": "string",
+            "title": "Track Id"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label",
+            "description": "The track's label (``face``, ...), or null if no track has this id."
+          },
+          "start": {
+            "type": "number",
+            "title": "Start"
+          },
+          "end": {
+            "type": "number",
+            "title": "End"
+          },
+          "effect": {
+            "$ref": "#/components/schemas/Effect"
+          },
+          "op_id": {
+            "type": "string",
+            "title": "Op Id",
+            "description": "The mask op whose span this stretch is in."
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "item_id",
+          "kind",
+          "track_id",
+          "label",
+          "start",
+          "end",
+          "effect",
+          "op_id",
+          "request_id"
+        ],
+        "title": "ReviewItem"
+      },
+      "ReviewReply": {
+        "properties": {
+          "analysed": {
+            "type": "boolean",
+            "title": "Analysed",
+            "description": "Whether the video has an analysis. Without one, masks on analysed targets show as no_track: the whole frame is hidden until the video is analysed."
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewItem"
+            },
+            "type": "array",
+            "title": "Items",
+            "description": "The stretches of the masks to check, most serious first."
+          },
+          "held_seconds": {
+            "type": "number",
+            "title": "Held Seconds",
+            "description": "Time in held stretches (a box kept just past a track's end) not yet reviewed."
+          },
+          "rules_not_audited": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Rules Not Audited",
+            "description": "Standing rules, which can't be audited ahead of a render."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "analysed",
+          "items",
+          "held_seconds",
+          "rules_not_audited"
+        ],
+        "title": "ReviewReply"
+      },
       "Rule": {
         "properties": {
           "rule_id": {
@@ -1344,6 +1576,43 @@
         ],
         "title": "Segment",
         "description": "Same field names as F-09's ``SpeechSegment``; ``speaker`` comes with F-32."
+      },
+      "Span": {
+        "properties": {
+          "start": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Start"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End",
+            "description": "Null means until the end of the video."
+          },
+          "op_id": {
+            "type": "string",
+            "title": "Op Id"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "start",
+          "op_id",
+          "request_id"
+        ],
+        "title": "Span"
       },
       "StepReport": {
         "properties": {
@@ -1436,6 +1705,17 @@
             "type": "object",
             "title": "Masks",
             "description": "Per track id: when it's masked and how."
+          },
+          "reviewed": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/Span"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Reviewed",
+            "description": "Per track id: the source-time spans a person confirmed (F-41 review queue). May cover time with no mask, so consumers intersect it with `masks`."
           },
           "cuts": {
             "items": {

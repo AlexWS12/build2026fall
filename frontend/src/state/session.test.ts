@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import type { ChatReply, HistoryReply, TimelineState } from '../api/types'
+import type { ChatReply, HistoryReply, ReviewReply, TimelineState } from '../api/types'
 import {
   busyLabel,
   canExport,
@@ -19,6 +19,7 @@ import {
 const emptyTimeline: TimelineState = {
   schema_version: 1,
   masks: {},
+  reviewed: {},
   cuts: [],
   mutes: [],
   audio_filters: [],
@@ -65,6 +66,7 @@ const snapshot = (overrides: Partial<Snapshot> = {}): Snapshot => ({
   tracks: [],
   analysed: false,
   messages: [],
+  ...noReview,
   ...overrides,
 })
 
@@ -75,7 +77,9 @@ const applied: ChatReply = {
   steps: [{ step_id: 's1', tool: 'mute', args: {}, result: { ops: 1 }, ok: true }],
 }
 
-const afterMute: Sync = { timeline: muted, history: history('applied') }
+const noReview = { review: null, reviewError: null }
+
+const afterMute: Sync = { timeline: muted, history: history('applied'), ...noReview }
 
 /** Runs events in order; every one of them must be accepted. */
 function play(events: SessionEvent[], from: Session = initialSession): Session {
@@ -157,6 +161,7 @@ describe('one thing at a time', () => {
     { type: 'analysis_started' },
     { type: 'transcript_started' },
     { type: 'export_started' },
+    { type: 'review_started' },
   ]
   const starts: SessionEvent[] = [
     ...busyWith,
@@ -186,7 +191,8 @@ describe('one thing at a time', () => {
     const strays: SessionEvent[] = [
       { type: 'request_settled', reply: applied, sync: afterMute },
       { type: 'history_settled', sync: afterMute },
-      { type: 'analysis_settled', analysed: true, tracks: [] },
+      { type: 'analysis_settled', analysed: true, tracks: [], ...noReview },
+      { type: 'review_settled', sync: afterMute, gone: false },
       { type: 'export_settled', result: { name: 'a.mp4', url: '/a.mp4', duration: 1, issues: [] } },
       { type: 'activity_failed', message: 'late' },
       { type: 'open_succeeded', snapshot: snapshot() },
@@ -238,7 +244,7 @@ describe('requests', () => {
     const undone = play(
       [
         { type: 'undo_started' },
-        { type: 'history_settled', sync: { timeline: emptyTimeline, history: history('undone') } },
+        { type: 'history_settled', sync: { timeline: emptyTimeline, history: history('undone'), ...noReview } },
       ],
       opened({ history: history('applied'), timeline: muted }),
     )
@@ -251,6 +257,23 @@ describe('requests', () => {
     })
     expect(canRedo(undone)).toBe(true)
     expect(canUndo(undone)).toBe(false)
+  })
+
+  test('undo of a bare review confirmation says so in plain words', () => {
+    const bare = (status: 'applied' | 'undone'): HistoryReply => ({
+      requests: [{ request_id: 'r_2', source: 'user', status, kinds: ['confirm_mask'], text: null, reply: null }],
+      can_undo: status === 'applied',
+      can_redo: status === 'undone',
+    })
+    const undone = play(
+      [
+        { type: 'undo_started' },
+        { type: 'history_settled', sync: { timeline: emptyTimeline, history: bare('undone'), ...noReview } },
+      ],
+      opened({ history: bare('applied') }),
+    )
+    const { chat } = project(undone)
+    expect(chat[chat.length - 1]).toMatchObject({ kind: 'note', text: 'Undid: a review confirmation' })
   })
 })
 
@@ -281,7 +304,7 @@ describe('exports', () => {
         { type: 'export_started' },
         { type: 'export_settled', result },
         { type: 'request_started', text: 'cut it' },
-        { type: 'request_settled', reply: clarify, sync: { timeline: emptyTimeline, history: noHistory } },
+        { type: 'request_settled', reply: clarify, sync: { timeline: emptyTimeline, history: noHistory, ...noReview } },
       ],
       opened(),
     )
@@ -295,5 +318,75 @@ describe('exports', () => {
     )
     expect(project(failed).export).toEqual({ kind: 'failed', message: 'nothing left to render' })
     expect(project(failed).chat).toEqual([])
+  })
+})
+
+describe('the review queue', () => {
+  const queue: ReviewReply = {
+    analysed: true,
+    items: [],
+    held_seconds: 2,
+    rules_not_audited: [],
+  }
+  const afterReview: Sync = { ...afterMute, review: queue, reviewError: null }
+
+  test('opens with the queue, or with the reason it could not be read', () => {
+    expect(project(opened({ review: queue })).review).toEqual(queue)
+    const unread = project(opened({ review: null, reviewError: 'no analysis' }))
+    expect(unread).toMatchObject({ review: null, reviewError: 'no analysis' })
+  })
+
+  test('confirming or cutting is one activity that ends with the fresh timeline and queue', () => {
+    const started = play([{ type: 'review_started' }], opened())
+    expect(busyLabel(started)).toBe('Applying review…')
+    const settled = play([{ type: 'review_settled', sync: afterReview, gone: false }], started)
+    expect(project(settled)).toMatchObject({
+      activity: { kind: 'idle' },
+      timeline: muted,
+      review: queue,
+      chat: [],
+    })
+  })
+
+  test('a spot that was already handled leaves a note with the refreshed queue', () => {
+    const settled = play(
+      [
+        { type: 'review_started' },
+        { type: 'review_settled', sync: afterReview, gone: true },
+      ],
+      opened(),
+    )
+    expect(project(settled).review).toEqual(queue)
+    expect(project(settled).chat).toEqual([
+      {
+        kind: 'note',
+        id: 'e0',
+        text: 'That stretch was already handled. The review queue was refreshed.',
+      },
+    ])
+  })
+
+  test('a failed review says so, frees the project and keeps what the server answered', () => {
+    const failed = play(
+      [
+        { type: 'review_started' },
+        { type: 'activity_failed', message: 'busy', sync: afterReview },
+      ],
+      opened(),
+    )
+    expect(project(failed).activity).toEqual({ kind: 'idle' })
+    expect(project(failed).review).toEqual(queue)
+    expect(project(failed).chat).toEqual([{ kind: 'error', id: 'e0', text: 'Review failed: busy' }])
+  })
+
+  test('an analysis refreshes the queue', () => {
+    const analysed = play(
+      [
+        { type: 'analysis_started' },
+        { type: 'analysis_settled', analysed: true, tracks: [], review: queue, reviewError: null },
+      ],
+      opened(),
+    )
+    expect(project(analysed).review).toEqual(queue)
   })
 })

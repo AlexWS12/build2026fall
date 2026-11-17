@@ -21,6 +21,17 @@ test('falls back to demo data when the backend is down, and says so', async () =
   expect((await client.health()).status).toBe('mock')
 })
 
+test('forwards the review queue to whichever backend answered', async () => {
+  const queue = { analysed: true, items: [], held_seconds: 0, rules_not_audited: [] }
+  const getReview = vi.fn(() => Promise.resolve(queue))
+  const reviewItem = vi.fn(() => Promise.resolve(queue))
+  const client = createAutoClient({ ...fake('ok'), getReview, reviewItem }, () => fake('mock'))
+  expect((await client.getReview('p1')).analysed).toBe(true)
+  await client.reviewItem('p1', 'rv_1', 'cut')
+  expect(getReview).toHaveBeenCalledWith('p1')
+  expect(reviewItem).toHaveBeenCalledWith('p1', 'rv_1', 'cut')
+})
+
 test('decides once, so one session never mixes the two', async () => {
   const health = vi.fn(() => Promise.reject(new Error('offline')))
   const client = createAutoClient(fake('ok', health), () => fake('mock'))

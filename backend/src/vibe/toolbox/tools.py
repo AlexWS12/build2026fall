@@ -16,6 +16,7 @@ from pydantic import Field
 from vibe.contract import (
     AddAudioFilter,
     AddMask,
+    ConfirmMask,
     ContractError,
     Cut,
     Mute,
@@ -26,7 +27,7 @@ from vibe.contract import (
     Unmute,
 )
 from vibe.contract.common import Effect, Model
-from vibe.contract.state import MuteSpan
+from vibe.contract.state import Span
 from vibe.toolbox.context import DescriberError, ToolContext
 from vibe.toolbox.spec import ToolError
 from vibe.toolbox.time_range import TimeRangeError, check_range, resolve_range
@@ -249,6 +250,13 @@ class AddMaskArgs(Model):
     )
 
 
+class ConfirmMaskArgs(Model):
+    targets: list[str] = Field(min_length=1, description="Track ids to mark as checked.")
+    time_range: TimeRange = Field(
+        description="The stretch that was checked; each target must be masked somewhere in it."
+    )
+
+
 class CutRangeArgs(Model):
     time_range: TimeRange
 
@@ -384,6 +392,26 @@ def add_mask(args: AddMaskArgs, ctx: ToolContext) -> EditResult:
     return _write("add_mask", ops, ctx)
 
 
+def confirm_mask(args: ConfirmMaskArgs, ctx: ToolContext) -> EditResult:
+    """Mark masked stretches as checked by a person (F-41), for hand edits from the review queue.
+
+    Refuses a target with no mask over any part of the range, so a confirmation never covers a
+    track that isn't hidden there. Overlap, not containment: a review item may start a little
+    before its mask span when it comes from frame times.
+    """
+    if ctx.log is None:
+        raise ToolError("confirm_mask: needs a timeline to write to")
+    with _timeline_errors("confirm_mask"):
+        masks = ctx.log.state().masks
+    r = args.time_range
+    targets = list(dict.fromkeys(args.targets))  # drop repeats, keep order
+    for target in targets:
+        if not any(_overlaps(m, r) for m in masks.get(target, [])):
+            raise ToolError(f"confirm_mask: {target!r} isn't masked from {_range(r)}")
+    op = ConfirmMask(request_id=ctx.request_id, source=ctx.source, targets=targets, time_range=r)
+    return _write("confirm_mask", [op], ctx)
+
+
 def cut_range(args: CutRangeArgs, ctx: ToolContext) -> EditResult:
     r = args.time_range
     if ctx.duration is not None and r.start <= 0 and (r.end is None or r.end >= ctx.duration):
@@ -499,7 +527,7 @@ def unmute(args: UnmuteArgs, ctx: ToolContext) -> UnmuteResult:
     return UnmuteResult(op_ids=result.op_ids, still_muted=others)
 
 
-def _overlaps(span: MuteSpan, r: TimeRange | None) -> bool:
+def _overlaps(span: Span, r: TimeRange | None) -> bool:
     if r is None:
         return True
     return (r.end is None or span.start < r.end) and (span.end is None or span.end > r.start)

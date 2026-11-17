@@ -138,6 +138,27 @@ _TOOLS = (
 
 TOOLS: Mapping[str, ToolSpec] = MappingProxyType({t.name: t for t in _TOOLS})
 
+_HAND_TOOLS = (
+    ToolSpec(
+        name="confirm_mask",
+        kind="edit",
+        description=(
+            "Mark masked stretches as checked by a person, taking them off the review queue. "
+            "Hand edits only: it takes literal track ids, so the planner never gets it."
+        ),
+        args=tools.ConfirmMaskArgs,
+        result=tools.EditResult,
+        returns="none",
+        run=tools.confirm_mask,
+    ),
+)
+
+HAND_TOOLS: Mapping[str, ToolSpec] = MappingProxyType({t.name: t for t in _HAND_TOOLS})
+"""Tools only the UI calls: the agent's planner and LLM stay on ``TOOLS`` and never see these."""
+
+UI_TOOLS: Mapping[str, ToolSpec] = MappingProxyType({**TOOLS, **HAND_TOOLS})
+"""Everything a hand edit can call: ``TOOLS`` plus ``HAND_TOOLS``."""
+
 
 def call_tool(
     name: str,
