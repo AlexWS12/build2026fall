@@ -50,6 +50,29 @@ describe('Toolbar history list', () => {
     expect(panel()).toBeInTheDocument()
   })
 
+  test('marks "Undo next" only while the Undo button is enabled', () => {
+    const { rerender } = renderToolbar({ canUndo: false })
+    openHistory()
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled()
+    expect(screen.queryByText('Undo next')).not.toBeInTheDocument()
+
+    rerender(
+      <Toolbar
+        history={history}
+        canUndo
+        canRedo={false}
+        canExport
+        exporting={false}
+        exported={{ kind: 'none' }}
+        onUndo={noop}
+        onRedo={noop}
+        onExport={noop}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled()
+    expect(screen.getByText('Undo next')).toBeInTheDocument()
+  })
+
   test('closes on a press on Export', () => {
     renderToolbar()
     openHistory()

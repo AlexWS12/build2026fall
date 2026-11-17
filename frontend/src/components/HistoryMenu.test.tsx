@@ -31,7 +31,7 @@ const rows = () => within(screen.getByRole('list', { name: 'Requests' })).getAll
 
 describe('HistoryList', () => {
   test('lists every request, newest first', () => {
-    render(<HistoryList history={three} />)
+    render(<HistoryList history={three} canUndo />)
     expect(rows().map((row) => row.firstChild?.textContent)).toEqual([
       'blur the faces',
       'cut 0:10 to 0:15',
@@ -40,7 +40,7 @@ describe('HistoryList', () => {
   })
 
   test('marks undone requests, and the one Undo would take back', () => {
-    render(<HistoryList history={three} />)
+    render(<HistoryList history={three} canUndo />)
     const [blur, cut, mute] = rows()
     expect(within(blur).getByText('Undone')).toBeInTheDocument()
     expect(within(cut).getByText('Undo next')).toBeInTheDocument()
@@ -49,25 +49,32 @@ describe('HistoryList', () => {
   })
 
   test('marks nothing as next when there is nothing to undo', () => {
-    render(<HistoryList history={history([entry('r_1', { status: 'undone' })], false)} />)
+    render(<HistoryList history={history([entry('r_1', { status: 'undone' })], false)} canUndo />)
+    expect(screen.queryByText('Undo next')).not.toBeInTheDocument()
+  })
+
+  test('marks nothing as next while Undo is disabled, even when the server could undo', () => {
+    // A request is planning, rendering or exporting: the toolbar disables Undo.
+    render(<HistoryList history={three} canUndo={false} />)
+    expect(three.can_undo).toBe(true)
     expect(screen.queryByText('Undo next')).not.toBeInTheDocument()
   })
 
   test('says so when no request has changed the video', () => {
-    render(<HistoryList history={history([], false)} />)
+    render(<HistoryList history={history([], false)} canUndo />)
     expect(screen.getByText(/No edits yet\./)).toBeInTheDocument()
     expect(screen.queryByRole('list')).not.toBeInTheDocument()
   })
 
   test('keeps the full text of a long request reachable', () => {
     const long = 'blur everyone in the background except the man in the red shirt near the door'
-    render(<HistoryList history={history([entry('r_1', { text: long })])} />)
+    render(<HistoryList history={history([entry('r_1', { text: long })])} canUndo />)
     expect(screen.getByTitle(long)).toBeInTheDocument()
   })
 
   test('lists a long session in full', () => {
     const forty = history(Array.from({ length: 40 }, (_, i) => entry(`r_${i + 1}`)))
-    render(<HistoryList history={forty} />)
+    render(<HistoryList history={forty} canUndo />)
     expect(rows()).toHaveLength(40)
     expect(rows()[0]).toHaveTextContent('request r_40')
     expect(rows()[39]).toHaveTextContent('request r_1')
@@ -109,7 +116,7 @@ describe('HistoryMenu', () => {
   const panel = () => screen.queryByRole('region', { name: 'Request history' })
 
   test('stays closed until the button is pressed, then shows the count', () => {
-    render(<HistoryMenu history={three} />)
+    render(<HistoryMenu history={three} canUndo />)
     expect(panel()).not.toBeInTheDocument()
     open()
     expect(panel()).toHaveTextContent('3 requests')
@@ -117,7 +124,7 @@ describe('HistoryMenu', () => {
   })
 
   test('closes on Escape, on a press outside, and on the button again', () => {
-    render(<HistoryMenu history={three} />)
+    render(<HistoryMenu history={three} canUndo />)
     open()
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(panel()).not.toBeInTheDocument()
@@ -132,7 +139,7 @@ describe('HistoryMenu', () => {
   })
 
   test('a press inside the list keeps it open', () => {
-    render(<HistoryMenu history={three} />)
+    render(<HistoryMenu history={three} canUndo />)
     open()
     fireEvent.pointerDown(screen.getByText('cut 0:10 to 0:15'))
     expect(panel()).toBeInTheDocument()

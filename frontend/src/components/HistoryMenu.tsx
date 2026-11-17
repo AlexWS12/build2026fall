@@ -7,9 +7,12 @@ import styles from './HistoryMenu.module.css'
 /**
  * Every request that changed the video, newest first. Read-only: undo is linear, so the list
  * shows which request Undo would take back rather than offering one to pick.
+ *
+ * `canUndo` is the Undo button's own state (it also needs the project idle), so the list never
+ * says "Undo next" while the button beside it is disabled.
  */
-export function HistoryList({ history }: { history: HistoryReply }) {
-  const next = undoTarget(history)
+export function HistoryList({ history, canUndo }: { history: HistoryReply; canUndo: boolean }) {
+  const next = canUndo ? undoTarget(history) : null
   if (history.requests.length === 0) {
     return <p className={styles.empty}>No edits yet. Requests that change the video are listed here.</p>
   }
@@ -45,9 +48,11 @@ export function HistoryList({ history }: { history: HistoryReply }) {
  */
 export function HistoryMenu({
   history,
+  canUndo,
   keepOpen = [],
 }: {
   history: HistoryReply
+  canUndo: boolean
   keepOpen?: readonly RefObject<HTMLElement | null>[]
 }) {
   const [open, setOpen] = useState(false)
@@ -100,7 +105,7 @@ export function HistoryMenu({
               </span>
             )}
           </h2>
-          <HistoryList history={history} />
+          <HistoryList history={history} canUndo={canUndo} />
         </section>
       )}
     </div>
