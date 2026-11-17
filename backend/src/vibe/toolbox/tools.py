@@ -245,7 +245,7 @@ class AddMaskArgs(Model):
         default=False,
         description="False: every target stays hidden for the whole range; where the tracker "
         "lost it, its last box is held. True: each target is hidden only while its track "
-        "exists (plus up to half a second each side), so the mask follows it and doesn't stay "
+        "exists (plus at least half a second each side), so the mask follows it and doesn't stay "
         "behind. For one described target, not for hiding everyone.",
     )
 
@@ -332,15 +332,18 @@ def _write(tool: str, ops: Sequence[Op], ctx: ToolContext) -> EditResult:
     return EditResult(op_ids=[op.op_id for op in ops])
 
 
-TRACKED_PAD_S = 0.25
+TRACKED_PAD_S = 0.5
 """With ``while_tracked``, the least time before a track's first keyframe and after its last
-one that the mask stays."""
+one that the mask stays: at least the renderer's own hold (``render.geometry.HOLD_SECONDS``),
+so the mask never stops while the renderer still holds the target's box. A shorter pad left a
+gap of up to a quarter second at each end, and at every handover between two fragments of one
+person. Two fragments up to twice this apart are covered without a gap. Not imported from the
+renderer, which would load av and numpy into the planner; a test keeps the two in step."""
 
 TRACKED_GRID_S = 0.25
 """``while_tracked`` ranges are rounded outward to this, so targets that come and go together
-share one op instead of each writing its own. Pad plus rounding is under half a second, the
-time after which the renderer calls a held box "lost" (``render.geometry.HOLD_SECONDS``): the
-mask stays exactly as long as something still says where the target is."""
+share one op instead of each writing its own. Rounding only ever adds time: past the hold the
+renderer keeps the held box (marked lost), which errs on the masked side."""
 
 
 def _tracked_ranges(

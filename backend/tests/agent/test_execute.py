@@ -393,7 +393,7 @@ def test_a_described_person_is_found_by_looking_at_the_stored_video(
     (op,) = project.log().ops
     # Followed, not held: the mask covers the track's own time on screen plus the margin.
     assert op.targets == ["trk_aaaa1111_1"]
-    assert (op.time_range.start, op.time_range.end) == (0.75, 1.75)
+    assert (op.time_range.start, op.time_range.end) == (0.5, 2.0)
 
 
 def test_a_description_with_no_judge_on_this_backend_is_refused(

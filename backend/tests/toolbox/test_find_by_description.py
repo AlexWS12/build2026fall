@@ -155,9 +155,9 @@ def test_a_mask_can_follow_each_target_only_while_it_is_tracked() -> None:
 
     result = call_tool("add_mask", args, tracked_ctx(log))
 
-    # A quarter second around each track, rounded outward to a quarter-second grid: a and b
-    # come and go together, so they share an op.
-    assert spans(log) == [(["trk_a", "trk_b"], 1.75, 4.25), (["trk_c"], 8.0, 9.25)]
+    # The renderer's half-second hold around each track, rounded outward to a quarter-second
+    # grid: a and b come and go together, so they share an op.
+    assert spans(log) == [(["trk_a", "trk_b"], 1.5, 4.5), (["trk_c"], 7.75, 9.5)]
     assert len(result.op_ids) == 2
     assert {op.request_id for op in log.ops} == {"req_1"}  # one request: one undo
 
@@ -168,11 +168,17 @@ def test_a_followed_mask_stops_at_the_end_of_the_video() -> None:
 
     call_tool("add_mask", args, tracked_ctx(log, duration=9.1))
 
-    assert spans(log) == [(["trk_c"], 8.0, 9.1)]
+    assert spans(log) == [(["trk_c"], 7.75, 9.1)]
 
 
-def test_a_followed_mask_never_outlives_the_renderers_hold() -> None:
+def test_a_followed_mask_lasts_at_least_as_long_as_the_renderers_hold() -> None:
+    """The mask must not stop while the renderer still holds the target's box (review of PR
+    33: a quarter-second pad left a gap at each end, and at every handover between fragments).
+    Rounding to the grid may add up to one grid step more, never less."""
     from vibe.render.geometry import HOLD_SECONDS
+    from vibe.toolbox.tools import TRACKED_GRID_S, TRACKED_PAD_S
+
+    assert TRACKED_PAD_S >= HOLD_SECONDS  # change the renderer's hold, change the pad too
 
     log = OpLog()
     tracks = [seen(f"trk_{i}", 1 + i * 0.013, 2 + i * 0.017) for i in range(40)]
@@ -184,8 +190,8 @@ def test_a_followed_mask_never_outlives_the_renderers_hold() -> None:
     for op in log.ops:
         for track_id in op.targets:
             first, last = by_id[track_id].keyframes[0].t, by_id[track_id].keyframes[-1].t
-            assert 0 < first - op.time_range.start <= HOLD_SECONDS
-            assert 0 < op.time_range.end - last <= HOLD_SECONDS
+            assert HOLD_SECONDS <= first - op.time_range.start < HOLD_SECONDS + TRACKED_GRID_S
+            assert HOLD_SECONDS <= op.time_range.end - last < HOLD_SECONDS + TRACKED_GRID_S
 
 
 def test_a_followed_mask_stays_inside_the_requested_range() -> None:
@@ -199,7 +205,7 @@ def test_a_followed_mask_stays_inside_the_requested_range() -> None:
 
     call_tool("add_mask", args, tracked_ctx(log))
 
-    assert spans(log) == [(["trk_a"], 3.0, 4.25)]  # c isn't on screen between 3 s and 6 s
+    assert spans(log) == [(["trk_a"], 3.0, 4.5)]  # c isn't on screen between 3 s and 6 s
 
 
 def test_a_followed_mask_with_nothing_on_screen_is_an_error() -> None:
@@ -252,7 +258,7 @@ def test_one_described_person_is_followed_from_the_template_to_the_masks() -> No
     call_tool("add_mask", {**plan.calls[1].args, "targets": found.track_ids}, context)
 
     assert found.track_ids == ["trk_a", "trk_c"] and found.unsure == ["trk_b"]
-    assert spans(log) == [(["trk_a"], 1.75, 4.25), (["trk_c"], 8.0, 9.25)]
+    assert spans(log) == [(["trk_a"], 1.5, 4.5), (["trk_c"], 7.75, 9.5)]
 
 
 def test_a_described_request_runs_from_the_template_to_a_mask() -> None:
@@ -267,3 +273,16 @@ def test_a_described_request_runs_from_the_template_to_a_mask() -> None:
     [op] = log.ops
     assert isinstance(op, AddMask)
     assert op.targets == ["trk_p2", "trk_p3"]
+
+
+def test_two_fragments_of_one_person_leave_no_unmasked_gap() -> None:
+    """The tracker split one person into two ids with a gap between them (common in crowds):
+    the two followed masks still overlap, so nothing is shown in the handover."""
+    log = OpLog()
+    fragments = [seen("trk_first", 1.0, 2.3), seen("trk_second", 3.2, 4.0)]
+    args = {"targets": ["trk_first", "trk_second"], "effect": BLUR, "while_tracked": True}
+
+    call_tool("add_mask", args, tracked_ctx(log, tracks=fragments))
+
+    (first_op, second_op) = sorted(log.ops, key=lambda op: op.time_range.start)
+    assert first_op.time_range.end >= second_op.time_range.start
