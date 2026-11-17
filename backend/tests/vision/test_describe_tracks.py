@@ -12,7 +12,6 @@ from vibe.modules.vision import cache
 from vibe.modules.vision.__main__ import main
 from vibe.modules.vision.describe import (
     KIND,
-    OBJECT_MIN_SEEN,
     ColorJudge,
     DescribeError,
     Judge,
@@ -355,12 +354,26 @@ def test_a_cache_that_cant_be_read_is_an_error_not_a_no(describer: VideoDescribe
         ("in red", ["in red"]),
         ("in a grey t-shirt with a bag", ["in a grey t-shirt", "with a bag"]),
         ("In a grey t-shirt, and carrying a bag.", ["in a grey t-shirt", "carrying a bag"]),
-        ("wearing a red shirt and a hat", ["wearing a red shirt", "a hat"]),
+        ("in red and with a bag", ["in red", "with a bag"]),
+        ("in red, plus wearing a hat", ["in red", "wearing a hat"]),
         ("dressed in red", ["dressed in red"]),
+        # "and" that doesn't start a new criterion stays inside one (review of PR 33)
+        ("in black and white", ["in black and white"]),
+        ("wearing a red shirt and a hat", ["wearing a red shirt and a hat"]),
+        ("with a black and white dog", ["with a black and white dog"]),
+        ("in red, white and blue", ["in red, white and blue"]),
     ],
 )
 def test_a_description_splits_into_criteria(description: str, parts: list[str]) -> None:
     assert split_criteria(description) == parts
+
+
+def test_black_and_white_is_never_a_sure_no_for_someone_in_black() -> None:
+    """Split, "in black and white" was "in black" (yes) + "white" (no) = a sure no, which
+    leaves a person in black unmasked. Whole, the stub can't read it: unsure."""
+    black = twice(solid((10, 10, 10), size=40))
+
+    assert ColorJudge().judge(black, "person", "in black and white") == "unsure"
 
 
 def test_criteria_combine_without_ever_guessing() -> None:
@@ -389,16 +402,39 @@ def test_object_words_map_to_what_the_detector_found() -> None:
 
 
 def test_with_an_object_is_answered_from_the_tracks() -> None:
-    long = OBJECT_MIN_SEEN
-    carrier = still("trk_carrier", "person", (10, 10, 30, 50), long)
-    alone = still("trk_alone", "person", (60, 10, 80, 50), long)
-    glimpse = still("trk_glimpse", "person", (60, 10, 80, 50), long - 1)
-    bag = still("trk_bag", "handbag", (20, 30, 28, 40), long)
+    carrier = still("trk_carrier", "person", (10, 10, 30, 50), 10)
+    alone = still("trk_alone", "person", (60, 10, 80, 50), 10)
+    bag = still("trk_bag", "handbag", (20, 30, 28, 40), 10)
 
     assert with_object(carrier, [bag]) == "yes"
-    assert with_object(alone, [bag]) == "no"
-    # Seen too briefly to say the detector didn't just miss the bag.
-    assert with_object(glimpse, [bag]) == "unsure"
+    # Never a "no", however long the person is seen: the detector may have missed their bag,
+    # and a "no" would leave them unmasked.
+    assert with_object(alone, [bag]) == "unsure"
+    assert with_object(still("trk_long", "person", (60, 10, 80, 50), 500), [bag]) == "unsure"
+
+
+def test_with_an_object_counts_only_boxes_a_model_saw() -> None:
+    bag = still("trk_bag", "handbag", (20, 30, 28, 40), 10)
+    keys = [
+        Keyframe(
+            t=i / FPS,
+            box=box(10, 10, 30, 50),
+            conf=0.9,
+            # 3 sure keyframes, then 7 predicted ones that drifted onto the bag
+            state="detected" if i < 3 else "tracked",
+        )
+        for i in range(10)
+    ]
+    keys[:3] = [k.model_copy(update={"box": box(60, 10, 80, 50)}) for k in keys[:3]]
+    drifted = Track(track_id="trk_drift", label="person", source="detector", keyframes=keys)
+    predicted = drifted.model_copy(
+        update={"keyframes": [k.model_copy(update={"state": "tracked"}) for k in keys]}
+    )
+
+    # 7 of 10 boxes hold the bag, but none of the 3 a model saw: not a yes.
+    assert with_object(drifted, [bag]) == "unsure"
+    # No box a model saw at all: nothing to go on.
+    assert with_object(predicted, [bag]) == "unsure"
 
 
 def test_an_object_seen_only_part_of_the_time_is_unsure() -> None:
@@ -421,15 +457,16 @@ def test_the_describer_combines_a_judged_part_and_an_object_part(square_clip: Pa
 
     assert each == {
         "in red": {"trk_red": "yes", "trk_blue": "no"},
-        "with a bag": {"trk_red": "yes", "trk_blue": "no"},
+        "with a bag": {"trk_red": "yes", "trk_blue": "unsure"},
     }
     assert describer.ask([red, blue], "in red with a bag", scene) == {
         "trk_red": "yes",
         "trk_blue": "no",
     }
+    # Blue is in blue, but no bag was ever seen with them: unsure (masked), not a "no".
     assert describer.ask([red, blue], "in blue with a bag", scene) == {
         "trk_red": "no",
-        "trk_blue": "no",
+        "trk_blue": "unsure",
     }
 
 

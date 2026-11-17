@@ -351,16 +351,22 @@ def normalize(description: str) -> str:
     return " ".join(description.lower().split()).strip(_PUNCTUATION + " ")
 
 
+_CRITERION_START = r"(?:in|with|wearing|carrying|holding|dressed)\b"
 _CRITERIA_SPLIT = re.compile(
-    r"\s*(?:[,;]|\band\b|\bplus\b)\s*|\s+(?=(?:with|wearing|carrying|holding)\b)"
+    rf"\s*(?:[,;]|\band\b|\bplus\b)\s*(?:(?:and|plus)\s+)?(?={_CRITERION_START})"
+    rf"|\s+(?=(?:with|wearing|carrying|holding)\b)"
 )
 
 
 def split_criteria(description: str) -> list[str]:
     """ "in a grey t-shirt with a bag" is two questions: "in a grey t-shirt" and "with a bag".
 
-    A cut in the wrong place ("with a black and white dog") only gives parts that a judge
-    can't read, which are unsure, never a wrong yes or no."""
+    A cut happens before "with" / "wearing" / "carrying" / "holding", and at "and", "plus" or
+    a comma only when what follows starts a new criterion ("in red, and carrying a bag"). So
+    "in black and white" and "with a black and white dog" stay whole: what "and" between
+    colours means (both, either, one outfit) is for a judge that reads the sentence; the
+    colour stub is unsure about it, which is masked. Cutting there gave a bare "white" the
+    stub *could* answer, and a wrong ``no`` for a person in black."""
     parts = (part.strip() for part in _CRITERIA_SPLIT.split(normalize(description)))
     return [part for part in parts if part]
 
@@ -393,10 +399,7 @@ _OBJECT = re.compile(
 OBJECT_INSIDE = 0.5
 """An object is "with" a person when at least this much of its box is inside the person's."""
 OBJECT_YES_AT = 0.5
-"""... in at least this share of the person's keyframes."""
-OBJECT_MIN_SEEN = 10
-"""A person seen in fewer keyframes than this never gets a ``no``: the detector may simply
-have missed the object in those few frames. Starting points, not measured."""
+"""... in at least this share of the person's keyframes. Starting points, not measured."""
 _OBJECT_GAP = 1.0  # seconds; like the renderer, no straight line across a longer gap
 _OBJECT_EDGE = 0.1  # seconds past an object's first or last keyframe it still counts as there
 
@@ -449,12 +452,18 @@ def _inside(obj: tuple[float, float, float, float], box: tuple[float, float, flo
 def with_object(track: Track, objects: Sequence[Track]) -> Verdict:
     """Is one of ``objects`` (bag tracks, say) with the target of ``track``?
 
-    ``yes`` when an object sits inside the track's box in at least ``OBJECT_YES_AT`` of its
-    keyframes; ``no`` when none ever does and the track was seen often enough to tell; else
-    ``unsure``. In a crowd a neighbour's bag can sit inside someone's box, so a ``yes`` here
-    can be wrong: fine for masking more, a known gap for "everyone except".
+    ``yes`` when an object sits inside the track's box in at least ``OBJECT_YES_AT`` of the
+    keyframes a model saw or a person drew; else ``unsure``. Never ``no``: a detector often
+    misses a small or hidden bag, and a ``no`` here would rule the person out of the whole
+    description and leave them unmasked. Only a judge looking at the pixels can say "no bag".
+    ``tracked`` and ``uncertain`` keyframes don't count, as in :func:`sample_keyframes`: their
+    boxes may have drifted off the person. In a crowd a neighbour's bag can sit inside
+    someone's box, so a ``yes`` here can be wrong: fine for masking more, a known gap for
+    "everyone except".
     """
-    keys = track.keyframes
+    keys = [k for k in track.keyframes if k.state in ("detected", "user")]
+    if len(keys) < MIN_CROPS:
+        return "unsure"
     first, last = keys[0].t - _OBJECT_EDGE, keys[-1].t + _OBJECT_EDGE
     paths = [_Path(o) for o in objects if o.keyframes[0].t <= last and o.keyframes[-1].t >= first]
     hits = 0
@@ -464,11 +473,7 @@ def with_object(track: Track, objects: Sequence[Track]) -> Verdict:
             if box is not None and _inside(box, key.box):
                 hits += 1
                 break
-    if len(keys) >= MIN_CROPS and hits / len(keys) >= OBJECT_YES_AT:
-        return "yes"
-    if hits == 0 and len(keys) >= OBJECT_MIN_SEEN:
-        return "no"
-    return "unsure"
+    return "yes" if hits / len(keys) >= OBJECT_YES_AT else "unsure"
 
 
 def _object_rule(
