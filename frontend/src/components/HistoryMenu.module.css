@@ -3,19 +3,7 @@
   display: inline-flex;
 }
 
-.button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-}
-
+/* The button's shape comes from the parent (`buttonClassName`); this only marks it open. */
 .button[aria-expanded='true'] {
   border-color: var(--accent);
   color: var(--accent-text);

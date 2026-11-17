@@ -67,6 +67,7 @@ export function Toolbar({
         canUndo={canUndo}
         canRedo={canRedo}
         keepOpen={keepHistoryOpen}
+        buttonClassName={styles.icon}
       />
       <button type="button" className={styles.primary} disabled={!canExport} onClick={onExport}>
         <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">

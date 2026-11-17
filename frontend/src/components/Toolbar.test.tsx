@@ -73,6 +73,15 @@ describe('Toolbar history list', () => {
     expect(screen.getByText('Undo next')).toBeInTheDocument()
   })
 
+  test('the History button looks like Undo and draws its icon as a line', () => {
+    renderToolbar()
+    const undo = screen.getByRole('button', { name: 'Undo' })
+    const historyButton = screen.getByRole('button', { name: 'History' })
+    expect(historyButton).toHaveClass(undo.className)
+    expect(historyButton.querySelector('svg')).toHaveAttribute('fill', 'none')
+    expect(historyButton.querySelector('svg')).toHaveAttribute('stroke', 'currentColor')
+  })
+
   test('closes on a press on Export', () => {
     renderToolbar()
     openHistory()
