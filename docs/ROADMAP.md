@@ -58,7 +58,7 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
 | F-40 | Agent reports what it did in plain words + raw tool calls | Must | F-05 | in progress | alex, `alex/demo-wiring-redesign` |
-| F-41 | Review queue for low-confidence results | Must | F-02, F-07 | idea | Knight Hacks "Check" |
+| F-41 | Review queue for low-confidence results | Must | F-02, F-07 | in progress | paulallain, `paulallain/f41-review-queue`; Knight Hacks "Check" |
 | F-42 | Hand fixes: select, change effect, remove, drag/correct box | Must | F-07, F-11 | idea | Through the same toolbox |
 | F-43 | Undo per request + version history | Must | F-02 | in progress | alex, `alex/demo-wiring-redesign`: undo/redo done. jonathan, `jonathan/f43-history-list`: history list in the UI, ready for review |
 | F-44 | Preview-before-apply for heavy edits (inpainting, cuts) | Should | F-04 | idea | |
@@ -225,7 +225,7 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 | F-10b Detector bake-off → decision row, then harden the winner (stitching, face↔person, fit under `run_analysis`) | _open_ | | Report table with hardware stated → decision row | planned |
 | F-13 Targeting by description ("the person in red", "everyone except me") | _open_ | | A request picks the right tracks on a labeled clip; unsure = masked | planned |
 | F-40 Agent reports what it did in plain words + raw tool calls | alex | alex/demo-wiring-redesign | The chat shows a plain summary and the tool calls for each applied request | in review |
-| F-41 Review queue for low-confidence results (uses `RenderResult.issues` and the mask audit) | _open_ | | Low-confidence stretches show in a queue; confirming or fixing one writes an op | planned |
+| F-41 Review queue for low-confidence results (uses `RenderResult.issues` and the mask audit) | paulallain | paulallain/f41-review-queue | Low-confidence stretches show in a queue; confirming or fixing one writes an op | in review |
 | F-42 Hand fixes: select, change effect, remove, correct a box (through the toolbox) | _open_ | | A hand fix from the UI is an op in the timeline and can be undone | planned |
 | F-43 Undo per request + version history in the UI | alex, jonathan | alex/demo-wiring-redesign, jonathan/f43-history-list | Undo removes one whole request; history lists the requests | in progress (undo and redo work; the history list in the UI is ready for review on jonathan's branch) |
 

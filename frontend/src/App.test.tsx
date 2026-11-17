@@ -1,8 +1,8 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import App from './App'
 import type { ApiClient } from './api'
-import type { HistoryReply, TimelineState } from './api/types'
+import type { HistoryReply, ReviewItem, ReviewReply, TimelineState } from './api/types'
 import { createMockClient } from './api/mock'
 import { TranscriptPanel } from './components/TranscriptPanel'
 
@@ -177,6 +177,7 @@ describe('App wired to a backend', () => {
   const muted: TimelineState = {
     schema_version: 1,
     masks: {},
+    reviewed: {},
     cuts: [],
     mutes: [{ start: 0, end: 5, op_id: 'op_1', request_id: 'r_1', speaker: null }],
     audio_filters: [],
@@ -350,5 +351,122 @@ describe('App wired to a backend', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'interview' }))
     expect(await screen.findByText('interview', { selector: 'strong' })).toBeInTheDocument()
     expect(screen.getByLabelText('Request')).toBeEnabled()
+  })
+
+  describe('the review panel', () => {
+    const item: ReviewItem = {
+      item_id: 'rv_1',
+      kind: 'lost',
+      track_id: 'trk_1',
+      label: 'face',
+      start: 2,
+      end: 5,
+      effect: { type: 'blur', padding: 0.15 },
+      op_id: 'op_1',
+      request_id: 'r_1',
+    }
+    const queue = (over: Partial<ReviewReply> = {}): ReviewReply => ({
+      analysed: true,
+      items: [item],
+      held_seconds: 0,
+      rules_not_audited: [],
+      ...over,
+    })
+
+    /** A backend whose queue loses the item once it has been confirmed. */
+    function reviewing(over: Partial<ApiClient> = {}) {
+      let current = queue()
+      const reviewItem = vi.fn((_id: string, _item: string, _action: 'confirm' | 'cut') => {
+        current = queue({ items: [] })
+        return Promise.resolve(current)
+      })
+      return { reviewItem, api: backend({ getReview: () => Promise.resolve(current), reviewItem, ...over }) }
+    }
+
+    async function open(api: ApiClient) {
+      render(<App api={api} />)
+      upload()
+      await screen.findByText('street')
+      return screen.getByRole('region', { name: 'Review' })
+    }
+
+    test('lists a stretch with its kind, track and range', async () => {
+      const panel = within(await open(reviewing().api))
+      const items = within(await panel.findByRole('list', { name: 'Review items' }))
+      expect(items.getByText('Target lost')).toBeInTheDocument()
+      expect(items.getByText('face')).toBeInTheDocument()
+      expect(items.getByText('0:02–0:05')).toBeInTheDocument()
+    })
+
+    test('clicking a stretch moves the player to its start', async () => {
+      const panel = within(await open(reviewing().api))
+      fireEvent.click(await panel.findByRole('button', { name: /Go to 0:02/ }))
+      expect(document.querySelector('video')?.currentTime).toBe(2)
+    })
+
+    test('confirming sends the action, and the stretch leaves the queue', async () => {
+      const { api, reviewItem } = reviewing()
+      const panel = within(await open(api))
+      fireEvent.click(await panel.findByRole('button', { name: 'Confirm Target lost, face, 0:02–0:05' }))
+      await waitFor(() => expect(reviewItem).toHaveBeenCalledWith('prj_mock', 'rv_1', 'confirm'))
+      expect(await panel.findByText('Nothing to check.')).toBeInTheDocument()
+      expect(panel.queryByRole('list', { name: 'Review items' })).not.toBeInTheDocument()
+    })
+
+    test('the Cut button shows how long a stretch it removes', async () => {
+      const panel = within(await open(reviewing().api))
+      const cut = await panel.findByRole('button', { name: /^Cut 3\.0 s:/ })
+      expect(cut).toHaveTextContent('Cut 3.0 s')
+    })
+
+    test.each([
+      [2, 2.000001, 'Cut <0.1 s'],
+      [1, 5.6, 'Cut 4.6 s'],
+      [0, 0.05, 'Cut 0.1 s'],
+    ])('the Cut button for a stretch of %s to %s reads %s', async (start, end, text) => {
+      const api = backend({ getReview: () => Promise.resolve(queue({ items: [{ ...item, start, end }] })) })
+      const panel = within(await open(api))
+      const cut = await panel.findByRole('button', { name: /^Cut /})
+      expect(cut).toHaveTextContent(text)
+    })
+
+    test('the buttons wait while the project is busy', async () => {
+      const { api } = reviewing({ sendRequest: () => new Promise(() => {}) })
+      const panel = within(await open(api))
+      const confirm = await panel.findByRole('button', { name: 'Confirm Target lost, face, 0:02–0:05' })
+      expect(confirm).toBeEnabled()
+
+      fireEvent.change(screen.getByLabelText('Request'), { target: { value: 'blur faces' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+      await waitFor(() => expect(confirm).toBeDisabled())
+      expect(panel.getByRole('button', { name: 'Cut 3.0 s: Target lost, face, 0:02–0:05' })).toBeDisabled()
+    })
+
+    test('an empty queue says so, and mentions held boxes and standing rules', async () => {
+      const api = backend({
+        getReview: () =>
+          Promise.resolve(queue({ items: [], held_seconds: 1.25, rules_not_audited: ['rule_1'] })),
+      })
+      const panel = within(await open(api))
+      expect(await panel.findByText('Nothing to check.')).toBeInTheDocument()
+      expect(panel.getByText(/1\.3 s of boxes held/)).toBeInTheDocument()
+      expect(panel.getByText("Standing rules can't be checked here.")).toBeInTheDocument()
+    })
+
+    test('a video that was not analysed says what that means for the masks', async () => {
+      const api = backend({ getReview: () => Promise.resolve(queue({ analysed: false, items: [] })) })
+      const panel = within(await open(api))
+      expect(await panel.findByText(/hasn't been analysed/)).toBeInTheDocument()
+      expect(panel.queryByText('Nothing to check.')).not.toBeInTheDocument()
+    })
+
+    test('a queue that could not be read shows why', async () => {
+      const api = backend({ getReview: () => Promise.reject(new Error('503')) })
+      const panel = within(await open(api))
+      expect(await panel.findByRole('alert')).toHaveTextContent(
+        "Couldn't load the review queue: 503",
+      )
+    })
   })
 })
