@@ -1,4 +1,4 @@
-import { type RefObject, useEffect, useId, useRef, useState } from 'react'
+import { type KeyboardEvent, type RefObject, useEffect, useId, useRef, useState } from 'react'
 import type { HistoryReply } from '../api/types'
 import { redoTarget, undoneForGood, undoTarget } from '../state/session'
 import { kindsLabel, requestLabel } from './history'
@@ -30,7 +30,8 @@ export function HistoryList({
     return <p className={styles.empty}>No edits yet. Requests that change the video are listed here.</p>
   }
   return (
-    <ol className={styles.list} aria-label="Requests" reversed>
+    // Focusable so the keyboard can scroll a long session, and Escape works from inside it.
+    <ol className={styles.list} aria-label="Requests" reversed tabIndex={0}>
       {history.requests.toReversed().map((entry) => {
         const label = requestLabel(entry)
         // Without chat text the label already names the kinds, so they aren't repeated.
@@ -68,7 +69,9 @@ export function HistoryList({
  * The History button in the header, and the list it opens under itself.
  *
  * `keepOpen` names elements outside the menu that don't close it, so the list can be watched
- * while they change it (the toolbar passes Undo and Redo). Anything else closes it.
+ * while they change it (the toolbar passes Undo and Redo). Anything else closes it: a press
+ * elsewhere, or focus moving elsewhere (tabbing out). Escape closes it only from inside the
+ * menu, so Escape typed in the chat box doesn't, and it puts focus back on the History button.
  */
 export function HistoryMenu({
   history,
@@ -83,30 +86,37 @@ export function HistoryMenu({
 }) {
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
+  const button = useRef<HTMLButtonElement>(null)
   const panelId = useId()
 
   useEffect(() => {
     if (!open) return
     const keeps = (node: Node) =>
       !!root.current?.contains(node) || keepOpen.some((ref) => ref.current?.contains(node))
-    const onPointerDown = (event: PointerEvent) => {
+    const close = (event: Event) => {
       if (!keeps(event.target as Node)) setOpen(false)
     }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
+    // focusin only fires when something takes focus, so a press on plain text in the list (or a
+    // click that doesn't focus, as in Safari) is left to pointerdown.
+    document.addEventListener('pointerdown', close)
+    document.addEventListener('focusin', close)
     return () => {
-      document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('pointerdown', close)
+      document.removeEventListener('focusin', close)
     }
   }, [open, keepOpen])
 
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key !== 'Escape' || !open) return
+    setOpen(false)
+    button.current?.focus()
+  }
+
   const count = history.requests.length
   return (
-    <div className={styles.root} ref={root}>
+    <div className={styles.root} ref={root} onKeyDown={onKeyDown}>
       <button
+        ref={button}
         type="button"
         className={styles.button}
         aria-label="History"

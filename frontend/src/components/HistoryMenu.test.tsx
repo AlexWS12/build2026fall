@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { useRef } from 'react'
 import { describe, expect, test } from 'vitest'
 import type { HistoryEntry, HistoryReply } from '../api/types'
 import { redoTarget, undoneForGood, undoTarget } from '../state/session'
@@ -209,12 +210,8 @@ describe('HistoryMenu', () => {
     expect(screen.getByRole('button', { name: 'History' })).toHaveAttribute('aria-expanded', 'true')
   })
 
-  test('closes on Escape, on a press outside, and on the button again', () => {
+  test('closes on a press outside, and on the button again', () => {
     render(<HistoryMenu history={three} canUndo canRedo />)
-    open()
-    fireEvent.keyDown(document, { key: 'Escape' })
-    expect(panel()).not.toBeInTheDocument()
-
     open()
     fireEvent.pointerDown(document.body)
     expect(panel()).not.toBeInTheDocument()
@@ -228,6 +225,62 @@ describe('HistoryMenu', () => {
     render(<HistoryMenu history={three} canUndo canRedo />)
     open()
     fireEvent.pointerDown(screen.getByText('cut 0:10 to 0:15'))
+    expect(panel()).toBeInTheDocument()
+  })
+
+  test('Escape inside the menu closes it and puts focus back on the History button', () => {
+    render(<HistoryMenu history={three} canUndo canRedo />)
+    open()
+    const list = screen.getByRole('list', { name: 'Requests' })
+    act(() => list.focus())
+    fireEvent.keyDown(list, { key: 'Escape' })
+    expect(panel()).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'History' })).toHaveFocus()
+  })
+
+  test('Escape typed somewhere else, like the chat box, leaves it open', () => {
+    render(
+      <>
+        <input aria-label="Request" />
+        <HistoryMenu history={three} canUndo canRedo />
+      </>,
+    )
+    open()
+    const chat = screen.getByRole('textbox', { name: 'Request' })
+    fireEvent.keyDown(chat, { key: 'Escape' })
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(panel()).toBeInTheDocument()
+  })
+
+  test('closes when focus moves out of it, as when tabbing away', () => {
+    render(
+      <>
+        <HistoryMenu history={three} canUndo canRedo />
+        <button type="button">Export</button>
+      </>,
+    )
+    open()
+    act(() => screen.getByRole('list', { name: 'Requests' }).focus())
+    expect(panel()).toBeInTheDocument()
+    act(() => screen.getByRole('button', { name: 'Export' }).focus())
+    expect(panel()).not.toBeInTheDocument()
+  })
+
+  test('stays open when focus moves to an element it is told to keep open for', () => {
+    function WithUndo() {
+      const undo = useRef<HTMLButtonElement>(null)
+      return (
+        <>
+          <button type="button" ref={undo}>
+            Undo
+          </button>
+          <HistoryMenu history={three} canUndo canRedo keepOpen={[undo]} />
+        </>
+      )
+    }
+    render(<WithUndo />)
+    open()
+    act(() => screen.getByRole('button', { name: 'Undo' }).focus())
     expect(panel()).toBeInTheDocument()
   })
 })
