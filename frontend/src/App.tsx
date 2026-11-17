@@ -6,6 +6,7 @@ import { ChatPanel } from './components/ChatPanel'
 import { Landing } from './components/Landing'
 import { Logo } from './components/Logo'
 import { Player, type PlayerHandle } from './components/Player'
+import { ReviewPanel } from './components/ReviewPanel'
 import { StatusBadge } from './components/StatusBadge'
 import { formatTime } from './components/timeline'
 import { TimelineView } from './components/TimelineView'
@@ -160,6 +161,14 @@ function App({ api = defaultClient }: { api?: ApiClient }) {
             focusedRequest={focusedRequest}
             onSend={commands.send}
             onFocusRequest={setFocusedRequest}
+          />
+          <ReviewPanel
+            review={project.review}
+            reviewError={project.reviewError}
+            tracks={project.tracks}
+            busy={!canSend(session)}
+            onSeek={(seconds) => player.current?.seek(seconds)}
+            onReview={commands.review}
           />
           <TranscriptPanel
             transcript={project.transcript}

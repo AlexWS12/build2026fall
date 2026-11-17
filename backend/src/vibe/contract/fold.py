@@ -2,7 +2,8 @@
 
 Rules (docs/ARCHITECTURE.md, "The contract"):
 - **Later ops win.** Each op paints its time range over what came before, per target (masks),
-  per speaker (mutes) or per filter. Cuts add up into one merged list.
+  per speaker (mutes) or per filter. Cuts add up into one merged list. Review confirmations
+  (``reviewed``, per target) follow the same rule: a later mask change erases them over its range.
 - **Undo is linear and works per request.** ``undo`` must name the latest request still in
   effect, and ``redo`` the most recently undone one. A new edit after an undo clears redo.
 - **A request's ops are contiguous** in the log: the server applies one request at a time.
@@ -18,6 +19,7 @@ from vibe.contract.ops import (
     AddAudioFilter,
     AddMask,
     AddRule,
+    ConfirmMask,
     Cut,
     Mute,
     Op,
@@ -31,7 +33,7 @@ from vibe.contract.ops import (
     Unmute,
 )
 from vibe.contract.ops import Rule as RuleModel
-from vibe.contract.state import AudioFilterSpan, MaskSpan, MuteSpan, TimelineState
+from vibe.contract.state import AudioFilterSpan, MaskSpan, MuteSpan, Span, TimelineState
 
 # --- History: which requests are in effect ------------------------------------------------
 
@@ -174,6 +176,7 @@ def fold(ops: Iterable[Op]) -> TimelineState:
     undone = history(ops).undone
 
     masks: dict[str, list[_Seg]] = {}
+    reviewed: dict[str, list[_Seg]] = {}
     cuts: list[_Seg] = []
     mutes: dict[str | None, list[_Seg]] = {}
     filters: dict[str, list[_Seg]] = {}
@@ -187,13 +190,19 @@ def fold(ops: Iterable[Op]) -> TimelineState:
             case AddMask():
                 for t in op.targets:
                     masks[t] = _paint(masks.get(t, []), op.time_range, (op.effect, *prov))
+                    reviewed[t] = _paint(reviewed.get(t, []), op.time_range, None)
             case RemoveMask():
                 for t in op.targets:
                     masks[t] = _paint(masks.get(t, []), op.time_range, None)
+                    reviewed[t] = _paint(reviewed.get(t, []), op.time_range, None)
+            case ConfirmMask():
+                for t in op.targets:
+                    reviewed[t] = _paint(reviewed.get(t, []), op.time_range, prov)
             case SetEffect():
                 value = (op.effect, *prov)
                 for t in op.targets:
                     masks[t] = _update(masks.get(t, []), op.time_range, lambda _, v=value: v)
+                    reviewed[t] = _paint(reviewed.get(t, []), op.time_range, None)
             case Cut():
                 cuts = _paint(cuts, op.time_range, True)
             case Uncut():
@@ -229,6 +238,14 @@ def fold(ops: Iterable[Op]) -> TimelineState:
                 for s in segs
             ]
             for t, segs in masks.items()
+            if segs
+        },
+        reviewed={
+            t: [
+                Span(start=s.start, end=_end(s.end), op_id=s.value[0], request_id=s.value[1])
+                for s in segs
+            ]
+            for t, segs in reviewed.items()
             if segs
         },
         cuts=[TimeRange(start=s.start, end=_end(s.end)) for s in cuts],

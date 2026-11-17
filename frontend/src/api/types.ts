@@ -22,6 +22,11 @@ export type ChatRecord = Schemas['ChatMessage']
 export type HistoryEntry = Schemas['HistoryEntry']
 export type HistoryReply = Schemas['HistoryReply']
 export type AnalysisReply = Schemas['AnalysisReply']
+/** The mask stretches to check (`GET /api/projects/{id}/review`, F-41). */
+export type ReviewReply = Schemas['ReviewReply']
+export type ReviewItem = Schemas['ReviewItem']
+/** Body of `POST /api/projects/{id}/review/{item_id}`. */
+export type ReviewAction = Schemas['ReviewAction']
 export type ExportReply = Required<Schemas['ExportReply']>
 /** The video's transcript with word timestamps (`POST /api/projects/{id}/transcript`, F-31). */
 export type Transcript = Schemas['Transcript']
@@ -94,6 +99,8 @@ export interface TimelineState {
   schema_version: number
   /** Per track id: when it's masked and how. */
   masks: Record<string, MaskSpan[]>
+  /** Per track id: the source-time spans a person confirmed in the review queue (F-41). */
+  reviewed: Record<string, Span[]>
   cuts: TimeRange[]
   mutes: MuteSpan[]
   audio_filters: AudioFilterSpan[]

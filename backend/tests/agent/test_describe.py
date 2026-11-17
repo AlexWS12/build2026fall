@@ -5,6 +5,7 @@ import pytest
 from vibe.agent import Plan, ToolCall, execute_plan, plan_request
 from vibe.agent.describe import clock, describe, explain_failure
 from vibe.contract import OpLog, Track
+from vibe.toolbox import UI_TOOLS
 
 
 def track(track_id: str, label: str) -> Track:
@@ -54,6 +55,19 @@ def test_clock_is_minutes_and_seconds(seconds: float, text: str) -> None:
 )  # fmt: skip
 def test_each_edit_is_one_plain_sentence(request_text: str, reply: str) -> None:
     assert said(request_text) == (True, reply)
+
+
+def test_a_review_confirmation_is_described_as_checked() -> None:
+    log = OpLog()
+    assert said("blur people from 0:10 to 0:20", log)[0]
+
+    args = {"targets": ["trk_1"], "time_range": {"start": 10, "end": 20}}
+    plan = Plan(calls=(ToolCall(step_id="s1", tool="confirm_mask", args=args),))
+    done = execute_plan(
+        plan, log, request_id="r_2", source="user", duration=90.0, tracks=TRACKS, registry=UI_TOOLS
+    )
+
+    assert describe(plan, done) == "Marked 1 target as checked (0:10–0:20)."
 
 
 def test_unmute_says_who_is_still_muted() -> None:

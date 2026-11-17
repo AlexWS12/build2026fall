@@ -108,6 +108,14 @@ export function createMockClient({ delayMs = 300 }: { delayMs?: number } = {}): 
       await wait(delayMs)
       return { analysed: false, tracks: [] }
     },
+    async getReview() {
+      await wait(delayMs)
+      return { analysed: false, items: [], held_seconds: 0, rules_not_audited: [] }
+    },
+    async reviewItem() {
+      await wait(delayMs)
+      throw unavailable('Reviewing')
+    },
     async undo() {
       await wait(delayMs)
       throw unavailable('Undo')

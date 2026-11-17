@@ -7,6 +7,8 @@ import type {
   HistoryReply,
   ProjectDetail,
   ProjectInfo,
+  ReviewAction,
+  ReviewReply,
   TimelineState,
   TracksReply,
   Transcript,
@@ -31,6 +33,14 @@ export interface ApiClient {
   getHistory(projectId: string): Promise<HistoryReply>
   getMessages(projectId: string): Promise<ChatRecord[]>
   getTracks(projectId: string): Promise<TracksReply>
+  /** The stretches of the masks worth a look, most serious first. */
+  getReview(projectId: string): Promise<ReviewReply>
+  /** Confirm a stretch of the review queue as it is, or cut it out; the queue comes back. */
+  reviewItem(
+    projectId: string,
+    itemId: string,
+    action: ReviewAction['action'],
+  ): Promise<ReviewReply>
   /** Undo the latest request still in effect. */
   undo(projectId: string): Promise<HistoryReply>
   redo(projectId: string): Promise<HistoryReply>
@@ -103,6 +113,13 @@ export const httpClient: ApiClient = {
   getHistory: (projectId) => call(project(projectId, '/history')),
   getMessages: (projectId) => call(project(projectId, '/messages')),
   getTracks: (projectId) => call(project(projectId, '/tracks')),
+  getReview: (projectId) => call(project(projectId, '/review')),
+  reviewItem: (projectId, itemId, action) =>
+    call(project(projectId, `/review/${encodeURIComponent(itemId)}`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    }),
   undo: (projectId) => post(project(projectId, '/undo')),
   redo: (projectId) => post(project(projectId, '/redo')),
   analyse: (projectId) => post(project(projectId, '/analysis')),

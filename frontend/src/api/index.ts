@@ -26,6 +26,8 @@ export function createAutoClient(
     getHistory: (id) => pick().then((c) => c.getHistory(id)),
     getMessages: (id) => pick().then((c) => c.getMessages(id)),
     getTracks: (id) => pick().then((c) => c.getTracks(id)),
+    getReview: (id) => pick().then((c) => c.getReview(id)),
+    reviewItem: (id, itemId, action) => pick().then((c) => c.reviewItem(id, itemId, action)),
     undo: (id) => pick().then((c) => c.undo(id)),
     redo: (id) => pick().then((c) => c.redo(id)),
     analyse: (id) => pick().then((c) => c.analyse(id)),

@@ -15,7 +15,7 @@ export interface Lane {
 }
 
 /** "face 1", "face 2", "person 1"... for tracks the analysis knows; the id for the rest. */
-function trackNames(tracks: Track[]): Map<string, string> {
+export function trackNames(tracks: Track[]): Map<string, string> {
   const counts = new Map<string, number>()
   const names = new Map<string, string>()
   for (const track of tracks) {

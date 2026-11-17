@@ -60,6 +60,20 @@ class SetEffect(OpBase):
     time_range: TimeRange | None = None
 
 
+class ConfirmMask(OpBase):
+    """A person checked that these targets are hidden correctly over this range (F-41).
+
+    Takes a stretch off the review queue. It changes nothing in the render. A later ``add_mask``,
+    ``remove_mask`` or ``set_effect`` on the same targets and range takes the confirmation
+    back: a changed mask needs a new review. A combined fix in one request must write ``set_effect``
+    before ``confirm_mask``.
+    """
+
+    kind: Literal["confirm_mask"] = "confirm_mask"
+    targets: list[str] = Field(min_length=1, description="Track ids (detector or user tracks).")
+    time_range: TimeRange
+
+
 # --- Cuts ---------------------------------------------------------------------------------
 
 
@@ -161,6 +175,7 @@ EditOp = (
     AddMask
     | RemoveMask
     | SetEffect
+    | ConfirmMask
     | Cut
     | Uncut
     | Mute
