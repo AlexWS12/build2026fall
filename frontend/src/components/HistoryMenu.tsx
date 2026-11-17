@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { type RefObject, useEffect, useId, useRef, useState } from 'react'
 import type { HistoryReply } from '../api/types'
 import { undoTarget } from '../state/session'
 import { kindsLabel, requestLabel } from './history'
@@ -37,18 +37,29 @@ export function HistoryList({ history }: { history: HistoryReply }) {
   )
 }
 
-/** The History button in the header, and the list it opens under itself. */
-export function HistoryMenu({ history }: { history: HistoryReply }) {
+/**
+ * The History button in the header, and the list it opens under itself.
+ *
+ * `keepOpen` names elements outside the menu that don't close it, so the list can be watched
+ * while they change it (the toolbar passes Undo and Redo). Anything else closes it.
+ */
+export function HistoryMenu({
+  history,
+  keepOpen = [],
+}: {
+  history: HistoryReply
+  keepOpen?: readonly RefObject<HTMLElement | null>[]
+}) {
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const panelId = useId()
 
   useEffect(() => {
     if (!open) return
+    const keeps = (node: Node) =>
+      !!root.current?.contains(node) || keepOpen.some((ref) => ref.current?.contains(node))
     const onPointerDown = (event: PointerEvent) => {
-      // Undo and redo sit beside the button: pressing them keeps the list open, to watch it change.
-      const keep = root.current?.closest('[role="toolbar"]') ?? root.current
-      if (!keep?.contains(event.target as Node)) setOpen(false)
+      if (!keeps(event.target as Node)) setOpen(false)
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setOpen(false)
@@ -59,7 +70,7 @@ export function HistoryMenu({ history }: { history: HistoryReply }) {
       document.removeEventListener('pointerdown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [open])
+  }, [open, keepOpen])
 
   const count = history.requests.length
   return (
