@@ -1,8 +1,8 @@
 """What a tool call runs against: who asked, the timeline to write to, and the video's facts."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from vibe.contract import History, Op, TimelineState, Track
 from vibe.contract.common import Source
@@ -30,6 +30,31 @@ class OpSink(Protocol):
     def history(self) -> History: ...
 
 
+Verdict = Literal["yes", "no", "unsure"]
+"""Whether a track matches a description. ``unsure`` is an answer: privacy edits mask it."""
+
+
+class DescriberError(Exception):
+    """A describer couldn't look (no judge, unreadable video, bad cache). The tool turns it into a
+    ``ToolError``: "unknown" never becomes "nobody matches". Defined here so the toolbox needs no
+    media or model code."""
+
+
+class Describer(Protocol):
+    """Looks at the video so a tool doesn't have to: does each track match ``description``
+    ("in red", "wearing a hat", "in grey with a bag")? ``scene`` is every track of the video,
+    for descriptions about other things ("with a bag").
+    ``vibe.modules.vision.describe.VideoDescriber`` fits. Returns a verdict per track id and
+    raises :class:`DescriberError` if it can't look."""
+
+    def ask(
+        self,
+        tracks: Sequence[Track],
+        description: str,
+        scene: Sequence[Track] | None = None,
+    ) -> Mapping[str, Verdict]: ...
+
+
 @dataclass(frozen=True)
 class ToolContext:
     request_id: str
@@ -44,3 +69,6 @@ class ToolContext:
     means the video hasn't been analysed; ``[]`` means it was and nothing was found."""
     transcript: "Transcript | None" = None
     """The video's transcript (F-31), for ``find_speech``. ``None``: never transcribed."""
+    describer: Describer | None = None
+    """Answers ``find_by_description`` (F-13). ``None`` means nothing here can look at the
+    video, so a description request fails instead of guessing."""

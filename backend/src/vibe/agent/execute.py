@@ -21,7 +21,7 @@ from vibe.agent.validate import validate_plan
 from vibe.contract import Op, OpLog, Track
 from vibe.contract.common import Model, Source
 from vibe.storage import Project, Storage
-from vibe.toolbox import TOOLS, Returns, ToolContext, ToolError, ToolSpec, call_tool
+from vibe.toolbox import TOOLS, Describer, Returns, ToolContext, ToolError, ToolSpec, call_tool
 
 if TYPE_CHECKING:
     # Type checkers only: planning and running a plan need no media or model code (a toolbox
@@ -97,13 +97,15 @@ def execute_plan(
     duration: float | None = None,
     tracks: Sequence[Track] | None = None,
     transcript: "Transcript | None" = None,
+    describer: Describer | None = None,
     registry: Mapping[str, ToolSpec] = TOOLS,
 ) -> Execution:
     """Run ``plan`` and write its ops to ``timeline``, all of them or none.
 
     Every op carries ``request_id`` and ``source``. ``duration`` and ``tracks`` are what the
     tools know about the video (``ToolContext``): ``tracks=None`` means it was never analysed,
-    so a step that looks for targets fails and nothing gets masked by guesswork.
+    so a step that looks for targets fails and nothing gets masked by guesswork. ``describer``
+    looks at the video for ``find_by_description`` (F-13); without one that step fails too.
 
     Raises ``PlanError`` for a plan the registry rejects (the planner validates before this, so
     that's a bug), and whatever the timeline raises when it can't be read or written.
@@ -121,6 +123,7 @@ def execute_plan(
         duration=duration,
         tracks=tracks,
         transcript=transcript,
+        describer=describer,
     )
     steps: list[StepReport] = []
     values: dict[str, Any] = {}
@@ -176,7 +179,7 @@ def execute_request(
     """
     from vibe.modules import ModuleError
     from vibe.modules.transcribe import cached_transcript
-    from vibe.modules.vision import CacheError, project_tracks
+    from vibe.modules.vision import CacheError, project_describer, project_tracks
     from vibe.video import probe
 
     duration = probe(storage.video_path(project.info.video)).duration
@@ -201,6 +204,9 @@ def execute_request(
         duration=duration,
         tracks=tracks,
         transcript=transcript,
+        # Built lazily: on a backend with no description judge yet, only a request that
+        # describes someone ("the person in red") fails, and says why.
+        describer=project_describer(storage, project),
     )
     if not done.ok and unusable and TOOLS[done.steps[-1].tool].returns == "track_ids":
         return done.model_copy(update={"error": UNREADABLE_ANALYSIS})

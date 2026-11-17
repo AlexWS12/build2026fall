@@ -368,6 +368,49 @@ def test_blur_uses_the_cached_tracks_and_the_drawn_ones(storage: Storage, clip: 
     assert set(project.state().masks) == {"trk_aaaa1111_1", "usr_1"}
 
 
+def person(track_id: str, times: Sequence[float]) -> Track:
+    keyframes = [
+        {"t": t, "box": (0.0, 0.0, 1.0, 1.0), "conf": 0.9, "state": "detected"} for t in times
+    ]
+    return Track.model_validate(
+        {"track_id": track_id, "label": "person", "source": "detector", "keyframes": keyframes}
+    )
+
+
+def test_a_described_person_is_found_by_looking_at_the_stored_video(
+    storage: Storage, clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VIBE_BACKEND", "stub")
+    project = storage.create_project(clip)
+    # The clip goes from black to white: grey around 1.0-1.5 s, nearly black at the start.
+    tracks = [person("trk_1", (1.0, 1.2, 1.4)), person("trk_2", (0.0, 0.1, 0.2))]
+    save_tracks(storage, project.info.video.sha256, "k-aaaa1111", tracks)
+
+    done = execute_request(storage, project, from_text("blur the person in grey"), "r_1")
+
+    assert done.ok, done.error
+    assert done.steps[0].result["track_ids"] == ["trk_aaaa1111_1"]
+    (op,) = project.log().ops
+    # Followed, not held: the mask covers the track's own time on screen plus the margin.
+    assert op.targets == ["trk_aaaa1111_1"]
+    assert (op.time_range.start, op.time_range.end) == (0.5, 2.0)
+
+
+def test_a_description_with_no_judge_on_this_backend_is_refused(
+    storage: Storage, clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VIBE_BACKEND", "local")
+    project = storage.create_project(clip)
+    save_tracks(storage, project.info.video.sha256, "k-aaaa1111", [person("trk_1", (1.0, 1.2))])
+
+    done = execute_request(storage, project, from_text("blur the person in grey"), "r_1")
+
+    assert not done.ok and "isn't built yet" in done.error
+    assert len(project.log()) == 0
+    # ... and edits that describe nobody still work there.
+    assert execute_request(storage, project, from_text("mute the first half"), "r_2").ok
+
+
 def test_an_ambiguous_analysis_fails_closed_with_its_own_reason(
     storage: Storage, clip: Path
 ) -> None:

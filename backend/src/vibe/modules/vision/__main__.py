@@ -5,6 +5,8 @@
     retrack VIDEO --from KEY      new tracks from cached detections (other tracker or settings)
     list VIDEO                    the cached detection and track keys for a video
     default VIDEO --key KEY       mark a cached track set as the one the app uses for this video
+    describe VIDEO "in red"       which tracks match a description (F-13): yes / no / unsure
+                                  ("in a grey t-shirt with a bag" is answered part by part)
 
 Every cached track set is a column in ``python -m vibe.benchmark report``, which is how models
 are compared. Times printed here are wall time on this machine, for orientation only.
@@ -20,8 +22,10 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from vibe.modules import ModuleError
 from vibe.modules.vision import cache
 from vibe.modules.vision.analyze import analyze_video, retrack
+from vibe.modules.vision.describe import VideoDescriber, combine
 from vibe.modules.vision.detection import NotInstalled
 from vibe.modules.vision.detectors import DETECTORS, make_detector
 from vibe.modules.vision.tracking import TRACKERS, Tracker, TrackerSettings
@@ -84,6 +88,13 @@ def _parser() -> argparse.ArgumentParser:
     default = commands.add_parser("default", help="mark a track set as the video's default")
     default.add_argument("video", type=Path)
     default.add_argument("--key", required=True, help="a tracks cache key (see `list`)")
+
+    describe = commands.add_parser("describe", help="which tracks match a description")
+    describe.add_argument("video", type=Path)
+    describe.add_argument("description", help='e.g. "in red"')
+    describe.add_argument("--label", default="person", help="which tracks to ask about")
+    describe.add_argument("--key", default=None, help="a tracks cache key (default: the video's)")
+    describe.add_argument("--all", action="store_true", help="also list the tracks answered no")
     return parser
 
 
@@ -159,18 +170,54 @@ def _default(storage: Storage, args: argparse.Namespace) -> int:
     return 0
 
 
+def _describe(storage: Storage, args: argparse.Namespace) -> int:
+    sha = cache.video_sha256(args.video)
+    tracks = cache.load_tracks(storage, sha, args.key)
+    if tracks is None:
+        raise cache.CacheError(f"no cached tracks for {args.video.name}; run `analyze` first")
+    scene = tracks
+    tracks = [t for t in scene if t.label == args.label]
+    describer = VideoDescriber(storage, sha, args.video)
+    each = describer.ask_each(tracks, args.description, scene)
+    verdicts = {t.track_id: combine(v[t.track_id] for v in each.values()) for t in tracks}
+
+    def tally(answers: dict) -> str:
+        counts = Counter(answers.values())
+        return ", ".join(f"{counts[v]} {v}" for v in ("yes", "unsure", "no"))
+
+    print(f"judge: {describer.judge.name}; {len(tracks)} {args.label} tracks")
+    if len(each) > 1:
+        for criterion, answers in each.items():
+            print(f"  {criterion!r}: {tally(answers)}")
+    print(f"verdicts: {tally(verdicts)}")
+    shown = [t for t in tracks if args.all or verdicts[t.track_id] != "no"]
+    for track in shown:
+        first, last = track.keyframes[0].t, track.keyframes[-1].t
+        print(f"  {verdicts[track.track_id]:6} {track.track_id}  {first:.2f}s to {last:.2f}s")
+    if len(shown) < len(tracks):
+        print(
+            f"  ({len(tracks) - len(shown)} tracks that are surely not a match; --all lists them)"
+        )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.command == "detectors":
         return _detectors()
     storage = Storage(args.data_dir)
-    run = {"analyze": _analyze, "retrack": _retrack, "list": _list, "default": _default}[
-        args.command
-    ]
+    run = {
+        "analyze": _analyze,
+        "retrack": _retrack,
+        "list": _list,
+        "default": _default,
+        "describe": _describe,
+    }[args.command]
     try:
         return run(storage, args)
     except (
         NotInstalled,
+        ModuleError,
         cache.CacheError,
         StorageError,
         VideoError,

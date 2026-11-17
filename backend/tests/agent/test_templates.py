@@ -156,7 +156,11 @@ def test_and_inside_a_between_range_is_not_a_clause_split() -> None:
         "blur faces and make it nicer",
         "trim 0:10 to 0:20",
         "mute 0:10 and 0:20",
-        "blur the person in red",
+        "blur faces in red",
+        "blur faces except the person in red",
+        "blur everyone except me",
+        "blur the person in",
+        "blur the person on the left",
         "",
     ],
 )
