@@ -77,11 +77,29 @@ def test_asking_for_sure_matches_only_is_explicit(ending: str) -> None:
     }
 
 
-def test_sure_matches_only_can_follow_a_time() -> None:
-    result = calls("blur the person in red from 0:10 to 0:20, only if sure")
+@pytest.mark.parametrize(
+    "text",
+    [
+        "blur the person in red from 0:10 to 0:20, only if sure",
+        # Before the time (review of PR 33): "only if sure" used to stay in the description,
+        # so the judge was unsure about everyone and everyone in the range was blurred.
+        "blur the person in red only if sure from 0:10 to 0:20",
+        "blur the person in red, only if you're sure, from 0:10 to 0:20",
+        "blur the person in red sure matches only between 0:10 and 0:20",
+    ],
+)
+def test_sure_matches_only_can_come_before_or_after_a_time(text: str) -> None:
+    result = calls(text)
 
     assert result[0]["args"] == {"label": "person", "description": "in red", "unsure": "leave"}
     assert result[1]["args"]["time_range"] == {"start": 10.0, "end": 20.0}
+
+
+def test_sure_matches_only_with_a_duration_relative_time() -> None:
+    result = calls("blur the person in red only if sure for the first half")
+
+    assert result[0]["args"] == {"label": "person", "description": "in red", "unsure": "leave"}
+    assert [c["tool"] for c in result] == ["find_by_description", "resolve_time", "add_mask"]
 
 
 def test_only_alone_is_not_giving_up_on_unsure() -> None:
@@ -113,6 +131,11 @@ def test_only_alone_is_not_giving_up_on_unsure() -> None:
         "black box everyone in black",
         # sure of what?
         "blur everyone except the person in red, only if sure",
+        "blur everyone except the person in red only if sure from 0:10 to 0:20",
+        # a "sure" phrase in a place the parser doesn't read: never part of a description
+        "blur the person if sure in red",
+        "blur the person in red if you are certain",
+        "blur the person in red and unsure ones too",
     ],
 )
 def test_what_is_not_a_plain_description_is_left_to_the_planner(text: str) -> None:

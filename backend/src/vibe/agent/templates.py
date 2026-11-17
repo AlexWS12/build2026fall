@@ -153,6 +153,13 @@ _SURE_ONLY = re.compile(
 """The user giving up "unsure = masked" for this request, in so many words. Nothing vaguer
 ("only the person in red") counts: that may just be emphasis."""
 
+
+def _cut_sure_only(text: str) -> tuple[str, bool]:
+    """``text`` without a "only if sure" ending, and whether it had one."""
+    found = _SURE_ONLY.search(text)
+    return (text[: found.start()], True) if found else (text, False)
+
+
 _DANGLING = frozenset(
     {"in", "with", "wearing", "dressed", "a", "an", "the", "and", "or", "of"}
     | {"from", "to", "at", "for", "until"}
@@ -168,7 +175,9 @@ _NOT_A_DESCRIPTION = frozenset(
     "middle center centre front back bottom side corner here there "
     # the effect, not the target: "with a strong blur"
     "blur blurs blurred blurring blurry pixelate pixelated pixelation pixels box boxes "
-    "effect effects mask masks strength intensity".split()
+    "effect effects mask masks strength intensity "
+    # how sure, not how they look: a "sure" phrase _SURE_ONLY didn't take ("if sure, in red")
+    "sure certain unsure uncertain".split()
 )
 """A word that means the text after the person noun isn't (only) a description of how they
 look. The template declines, so the planner asks or the LLM reads it, instead of masking by a
@@ -187,9 +196,10 @@ def _described(rest: str, verb: str, steps: _Steps) -> tuple[str, object, bool] 
     if match is None:
         return None
     exclude, text = match.groups()
-    sure_only = _SURE_ONLY.search(text)
-    if sure_only:
-        text = text[: sure_only.start()]
+    # "Only if sure" may come after the time ("in red from 0:10 to 0:20, only if sure") or
+    # before it ("in red only if sure from 0:10 to 0:20"), so look for it on both sides of the
+    # time split. Left in the description, it would make every judge unsure and mask everyone.
+    text, sure_only = _cut_sure_only(text)
     words = text.split()
     when: object = _NO_TIME
     for i in range(1, len(words)):
@@ -197,6 +207,9 @@ def _described(rest: str, verb: str, steps: _Steps) -> tuple[str, object, bool] 
         if found is not None:
             words, when = words[:i], found
             break
+    if when is not _NO_TIME:
+        rest, before_time = _cut_sure_only(" ".join(words).rstrip(" ,"))
+        words, sure_only = rest.split(), sure_only or before_time
     description = " ".join(words).strip(" ,")  # the user's words, commas inside included
     words = [w for w in (word.strip(",") for word in words) if w]
     if len(words) < 2 or words[-1] in _DANGLING:
