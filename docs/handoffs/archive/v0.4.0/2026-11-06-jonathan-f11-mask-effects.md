@@ -15,7 +15,7 @@ status: in progress
 > **The F-11 card isn't finished.** The audit work below is done. Christopher is taking cached tracks and the export tests (see "For Christopher"), and tuning is blocked on labeled clips.
 
 ## What changed
-Builds on [paulallain's F-04 entry](2026-11-03-paulallain-f04-renderer.md), whose last next step asked for `mask_report.py` to be aligned with the final renderer. `origin/main` was merged into this branch (`3ccbd5f`).
+Builds on [paulallain's F-04 entry](../v0.3.0/2026-11-03-paulallain-f04-renderer.md), whose last next step asked for `mask_report.py` to be aligned with the final renderer. `origin/main` was merged into this branch (`3ccbd5f`).
 
 - **Item 1, audit aligned with the renderer (`e84e870`), in `backend/src/vibe/render/mask_report.py`:**
   - `off_screen` is gone, because a mask in effect always has a box now. It's replaced by `lost`: a box stays masked, but the target may have left it. This changes what the audit concludes, not just a name.
@@ -93,7 +93,7 @@ None is architecture-level.
 ## Next steps
 - Item 3 and item 4: Christopher.
 - **Tuning is blocked on labeled clips.** `backend/src/vibe/benchmark/clips.json` has 0 clips, so `MAX_GAP_SECONDS`, `HOLD_SECONDS`, `MAX_HOLD_GROWTH` and the effect sizes can't be measured yet. If they change, `mask_audit.expected.json` has to be reworked by hand; a test fails until it is.
-- **The plan executor has no owner.** Until it lands, no chat request changes the timeline, so masks don't reach the renderer from the UI. See the [F-64 entry](2026-11-03-jonathan-f64-api-routes.md) for what it involves.
+- **The plan executor has no owner.** Until it lands, no chat request changes the timeline, so masks don't reach the renderer from the UI. See the [F-64 entry](../v0.3.0/2026-11-03-jonathan-f64-api-routes.md) for what it involves.
 
 ## Gotchas
 - **The audit repeats the renderer's rules.** Sharing the constants doesn't stop the logic drifting. The comparison with `FrameRenderer` in `test_mask_report.py` is what catches that, so keep it passing rather than loosening it.

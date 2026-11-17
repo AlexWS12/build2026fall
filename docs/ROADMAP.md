@@ -1,6 +1,6 @@
 # Roadmap
 
-> **Status (2026-11-10):** sprints are weekly, and **demo day is 2026-12-04**. **Sprint 1 closed as v0.1.0. Sprints 2 and 3 are done but not yet tagged. Sprint 4 (2026-11-10 → 2026-11-17): the app really edits + human in the loop.** See [Sprints](#sprints).
+> **Status (2026-11-17):** sprints are weekly, and **demo day is 2026-12-04**. **Sprints 1–4 closed as v0.1.0–v0.4.0** (v0.2.0 and v0.3.0 were tagged late, on 2026-11-17, at the last merge of their closing day). See [Sprints](#sprints).
 
 ## How this file works
 - **Backlog** lists every feature we know of, with an ID. IDs never change or get reused, so handoffs, branches and PRs can refer to them (`F-32`).
@@ -21,19 +21,19 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 | F-03 | Video I/O: probe, decode frames, frame↔time, audio extraction | Must | F-01 | done | |
 | F-04 | Renderer: export path (ffmpeg) + per-frame path, shared effect code | Must | F-02, F-03 | done | The per-frame path is required for live later |
 | F-05 | Agent/planner: template parser + LLM JSON plan + validation + clarify | Must | F-02 | in progress | Cloud LLM allowed |
-| F-06 | Toolbox scaffolding: typed tool schemas, registry, stub implementations, CLI per tool | Must | F-02 | in progress | |
+| F-06 | Toolbox scaffolding: typed tool schemas, registry, stub implementations, CLI per tool | Must | F-02 | done | |
 | F-07 | Web UI shell: upload, chat, player, timeline view, export | Must | F-01 | done | |
-| F-08 | Compute setup: `stub`/`local`/`remote` model backends, shareable analysis cache, model download script, per-tier install notes (CPU / small GPU / RTX 5070; CUDA 12.8+ for the 5070) | Must | F-01 | in progress | ARCHITECTURE "Compute". Optional: model server on the 5070 |
+| F-08 | Compute setup: `stub`/`local`/`remote` model backends, shareable analysis cache, model download script, per-tier install notes (CPU / small GPU / RTX 5070; CUDA 12.8+ for the 5070) | Must | F-01 | done | ARCHITECTURE "Compute". Optional: model server on the 5070 |
 | F-09 | Benchmark harness: test clips + labels + request set + report script | Must | F-02 | in progress | Numbers only from here |
-| F-64 | API routes: upload, request, timeline state | Must | F-06 | in progress | Shared file. Starts from the routes F-07's mock uses |
+| F-64 | API routes: upload, request, timeline state | Must | F-06 | done | Shared file. Starts from the routes F-07's mock uses |
 
 ### Visual edits
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
 | F-10 | Find and track people, faces, plates, named objects (cached per video) | Must | F-03, F-08 | in progress | Knight Hacks: EgoBlur + YOLOE; D-015 proposes RF-DETR + EgoBlur + ByteTrack (no AGPL). Pipeline, stub, cache and detector adapters on `luis/f10-detect-track`; model comparison next |
-| F-11 | Blur / pixelate / black-box targets | Must | F-04, F-10 | in review (#29) | Mask audit: jonathan, `jonathan/f11-mask-effects`; cached tracks + export tests: christopher, `christopher/f11-track-loading` (merged into #29) |
-| F-12 | Time-bounded edits ("first half", "after 0:30") | Must | F-05 | in progress | `resolve_time` / `resolve_range` (jean/f12-time-bounded-edits) |
-| F-13 | Targeting by description ("the person in red", "everyone except me") | Must | F-10 | idea | VLM yes/no per track |
+| F-11 | Blur / pixelate / black-box targets | Must | F-04, F-10 | done | Mask audit: jonathan, `jonathan/f11-mask-effects`; cached tracks + export tests: christopher, `christopher/f11-track-loading` (merged into #29) |
+| F-12 | Time-bounded edits ("first half", "after 0:30") | Must | F-05 | done | `resolve_time` / `resolve_range` (jean/f12-time-bounded-edits) |
+| F-13 | Targeting by description ("the person in red", "everyone except me") | Must | F-10 | in progress | VLM yes/no per track |
 | F-14 | Click / draw a box to target, tracked through the clip | Should | F-10 | idea | |
 | F-15 | Segmentation masks instead of boxes | Should | F-10 | idea | SAM 2 / SAM 3 |
 | F-16 | Remove a person or object with background fill (video inpainting) | Should | F-15 | idea | Heaviest compute; preview before applying |
@@ -41,15 +41,15 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 ### Cuts
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
-| F-20 | Cut / keep a time range | Must | F-04 | in progress | Source→output time mapping in the derived state |
+| F-20 | Cut / keep a time range | Must | F-04 | done | Source→output time mapping in the derived state |
 | F-21 | Cut by transcript ("cut where she talks about X") | Should | F-31 | in progress | paul, `paul/f31-transcribe`: words only (`find_speech`, "cut / mute where he says X"); topics need the LLM. Applies once the plan executor exists |
 | F-22 | Cut by on-screen content ("cut the part with the dog") | Stretch | F-10 | idea | |
 
 ### Audio
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
-| F-30 | Mute a time range | Must | F-04 | in progress | eduardo, `eduardo/f30-mute` |
-| F-31 | Transcription with word timestamps | Should | F-03 | in progress | Whisper family. paul, `paul/f31-transcribe`: module (an F-08 `Analysis`, so stub / local / remote), CLI, `POST /api/projects/{id}/transcript` and the Transcript panel |
+| F-30 | Mute a time range | Must | F-04 | done | eduardo, `eduardo/f30-mute` |
+| F-31 | Transcription with word timestamps | Should | F-03 | done | Whisper family. paul, `paul/f31-transcribe`: module (an F-08 `Analysis`, so stub / local / remote), CLI, `POST /api/projects/{id}/transcript` and the Transcript panel |
 | F-32 | Who spoke when (diarization) + mute a specific speaker | Should | F-31 | idea | Needs separation if speakers overlap |
 | F-33 | Background noise reduction | Must | F-03 | in progress | nickolas, `nickolas/f33-denoise` |
 | F-34 | Remove a specific sound ("the fan noise", "the music") | Stretch | F-33 | idea | |
@@ -57,10 +57,10 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 ### Human in the loop
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
-| F-40 | Agent reports what it did in plain words + raw tool calls | Must | F-05 | in progress | alex, `alex/demo-wiring-redesign` |
-| F-41 | Review queue for low-confidence results | Must | F-02, F-07 | in progress | paulallain, `paulallain/f41-review-queue`; Knight Hacks "Check" |
+| F-40 | Agent reports what it did in plain words + raw tool calls | Must | F-05 | done | alex, `alex/demo-wiring-redesign` |
+| F-41 | Review queue for low-confidence results | Must | F-02, F-07 | done | paulallain, `paulallain/f41-review-queue`; Knight Hacks "Check" |
 | F-42 | Hand fixes: select, change effect, remove, drag/correct box | Must | F-07, F-11 | idea | Through the same toolbox |
-| F-43 | Undo per request + version history | Must | F-02 | in progress | alex, `alex/demo-wiring-redesign`: undo/redo done. jonathan, `jonathan/f43-history-list`: history list in the UI, ready for review |
+| F-43 | Undo per request + version history | Must | F-02 | done | alex, `alex/demo-wiring-redesign`: undo/redo done. jonathan, `jonathan/f43-history-list`: history list in the UI, ready for review |
 | F-44 | Preview-before-apply for heavy edits (inpainting, cuts) | Should | F-04 | idea | |
 
 ### Live mode (top-priority stretch)
@@ -178,7 +178,7 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 - R-1 and F-09 share the request set; F-05 uses it too.
 - Shared files (tool names, API routes, OpenAPI spec): post in the team chat before merging.
 
-**Closed (not tagged; see the Sprint 4 housekeeping card):** shipped F-06 toolbox, F-64 API routes, F-05 template planner, F-04 renderer, R-3 shortlist (D-015 Proposed), R-4 data policy (D-017, D-018), the R-1 research doc and the F-09 harness (no clips yet). Moved to Sprint 3: F-08. Still open: the R-1 comparison and the LLM planner (`paul/r1-planner-llm`, no PR), and F-50.
+**Closed (v0.2.0, tagged 2026-11-17 at `b5e3c66`):** shipped F-06 toolbox, F-64 API routes, F-05 template planner, F-04 renderer, R-3 shortlist (D-015 Proposed), R-4 data policy (D-017, D-018), the R-1 research doc and the F-09 harness (no clips yet). Moved to Sprint 3: F-08. Still open: the R-1 comparison and the LLM planner (`paul/r1-planner-llm`, no PR), and F-50.
 
 ### Sprint 3: first real edits   (2026-11-03 → 2026-11-10)  · version at close: v0.3.0
 
@@ -198,36 +198,36 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 | F-33 Background noise reduction | nickolas | nickolas/f33-denoise | Denoise module (stub) | done; the renderer doesn't apply audio filters yet → F-33b |
 | F-50 Live feasibility spike | _open_ | | | not started → Sprint 4 |
 
-**Closed:** F-08, F-10 (pipeline), F-30 and F-33 (module) merged. F-11, F-12, F-20 and F-31 merge at the start of Sprint 4. Gaps found at close: there's no plan executor (requests reply `not_applied`), no export route in the API, and the renderer refuses audio filters.
+**Closed (v0.3.0, tagged 2026-11-17 at `751159b`):** F-08, F-10 (pipeline), F-30 and F-33 (module) merged. F-64 and F-04 (listed under Sprint 2) also merged this week, so they're in v0.3.0. F-11, F-12, F-20 and F-31 merge at the start of Sprint 4. Gaps found at close: there's no plan executor (requests reply `not_applied`), no export route in the API, and the renderer refuses audio filters.
 
 ### Sprint 4: the app really edits + human in the loop   (2026-11-10 → 2026-11-17)  · version at close: v0.4.0
 
 **Goal:** by Tuesday 2026-11-17, a request typed in the UI is applied to the timeline and can be exported as a video, for blur, cut, mute and denoise with time phrases. The user sees what the agent did, can undo it per request, and can review low-confidence targets. The F-50 numbers decide on live mode at close.
 
-**Sprint lead:** _tbd_
+**Sprint lead:** Eduardo.
 
 **Order:** first, merge the open PRs (#26, #27, #29, #30), then the plan executor and the export route (everything user-facing depends on them). Then F-40, F-43, F-41, F-42. Alongside: R-1b, F-09b → F-10b, F-33b, F-13 and F-50.
 
 **Carried over**
 | Card | Owner | Branch | Exit check | Status |
 |---|---|---|---|---|
-| F-11, F-12, F-20, F-31: review and merge | (same owners) | (PR branches) | Merged, `main` green | in review |
+| F-11, F-12, F-20, F-31: review and merge | (same owners) | (PR branches) | Merged, `main` green | done (#26, #27, #29, #30) |
 | R-1b Run the planner LLM comparison, add the decision row, pass `LlmPlanner` to `plan_request`; flag LLM-invented cut ranges | paul? | paul/r1-planner-llm | Script output → decision row; a non-template request gets a valid plan | planned |
 | F-50 Live feasibility spike on the RTX 5070 (also: blur at reduced resolution, since the renderer's blur is ~311 ms per quarter-1080p frame per the F-04 handoff) | _open_ | | fps and latency per stage, hardware stated → live go/no-go | planned |
 
 **Build**
 | Card | Owner | Branch | Exit check | Status |
 |---|---|---|---|---|
-| Plan executor: run the plan through `call_tool`, resolve `$ref`s, dry-run on an `OpLog` copy, reply `applied`. **Priority: first** | alex | alex/demo-wiring-redesign | In the UI (`VITE_API_MODE=http`), "mute the first 5 seconds" is applied and shows in the timeline | in review |
-| Export route + source-video route + Export button in the UI. Shared file (API routes) | alex | alex/demo-wiring-redesign | Upload → request → Export → the MP4 has the edit; route test in stub mode | in review |
+| Plan executor: run the plan through `call_tool`, resolve `$ref`s, dry-run on an `OpLog` copy, reply `applied`. **Priority: first** | alex | alex/demo-wiring-redesign | In the UI (`VITE_API_MODE=http`), "mute the first 5 seconds" is applied and shows in the timeline | done (#32) |
+| Export route + source-video route + Export button in the UI. Shared file (API routes) | alex | alex/demo-wiring-redesign | Upload → request → Export → the MP4 has the edit; route test in stub mode | done (#32) |
 | F-33b Renderer applies `audio_filters` (denoise) + pick the local/remote model | _open_ | | A test exports a clip with a denoise span, no GPU | planned |
-| F-09b Consented clips + labels in `clips.json` / `labels/` | eduardo | eduardo/f09b-pexels-clips | `benchmark report` scores an F-10 run against real labels | in progress |
+| F-09b Consented clips + labels in `clips.json` / `labels/` | eduardo | eduardo/f09b-pexels-clips | `benchmark report` scores an F-10 run against real labels | in progress (#35: 9 clips, 5 labelled) |
 | F-10b Detector bake-off → decision row, then harden the winner (stitching, face↔person, fit under `run_analysis`) | _open_ | | Report table with hardware stated → decision row | planned |
-| F-13 Targeting by description ("the person in red", "everyone except me") | luis | luis/f13-targeting-by-description | A request picks the right tracks on a labeled clip; unsure = masked | in progress |
-| F-40 Agent reports what it did in plain words + raw tool calls | alex | alex/demo-wiring-redesign | The chat shows a plain summary and the tool calls for each applied request | in review |
-| F-41 Review queue for low-confidence results (uses `RenderResult.issues` and the mask audit) | paulallain | paulallain/f41-review-queue | Low-confidence stretches show in a queue; confirming or fixing one writes an op | in review |
+| F-13 Targeting by description ("the person in red", "everyone except me") | luis | luis/f13-targeting-by-description | A request picks the right tracks on a labeled clip; unsure = masked | first cut done (#33); VLM judge (D-020) → Sprint 5 |
+| F-40 Agent reports what it did in plain words + raw tool calls | alex | alex/demo-wiring-redesign | The chat shows a plain summary and the tool calls for each applied request | done (#32) |
+| F-41 Review queue for low-confidence results (uses `RenderResult.issues` and the mask audit) | paulallain | paulallain/f41-review-queue | Low-confidence stretches show in a queue; confirming or fixing one writes an op | done (#36) |
 | F-42 Hand fixes: select, change effect, remove, correct a box (through the toolbox) | _open_ | | A hand fix from the UI is an op in the timeline and can be undone | planned |
-| F-43 Undo per request + version history in the UI | alex, jonathan | alex/demo-wiring-redesign, jonathan/f43-history-list | Undo removes one whole request; history lists the requests | in progress (undo and redo work; the history list in the UI is ready for review on jonathan's branch) |
+| F-43 Undo per request + version history in the UI | alex, jonathan | alex/demo-wiring-redesign, jonathan/f43-history-list | Undo removes one whole request; history lists the requests | done (#32, #37) |
 
 **Risks / dependencies:**
 - The executor and the export route gate F-40–F-43 and the demo path. If they aren't merged by midweek, the HITL cards build against the CLI.
@@ -236,7 +236,7 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 - Shared files: API routes (executor, export), dependency groups (R-1b, F-10b). Post in the team chat before merging.
 - Team decisions pending: D-006, D-012 and D-015 are still Proposed, and the license posture (R-3) is open.
 
-**Closed:** (filled in at sprint close: what shipped, what moved to the next sprint)
+**Closed (v0.4.0, 2026-11-17):** shipped the plan executor, the export route and the other new routes, F-40 plain-words replies, F-41 review queue, F-43 undo/redo and history list (#32, #36, #37), and the carried-over F-11, F-12, F-20 and F-31 (+ F-21 `find_speech`). F-13 first cut merged (#33) with the colour stub; D-020 proposes the VLM. F-09b has 9 clips, 5 labelled (#35). Moved to Sprint 5: the F-13 VLM judge, the rest of F-09b, F-10b, F-33b, F-42, R-1b and F-50. The F-50 live go/no-go didn't happen (no numbers yet).
 
 ### Sprint template
 Copy this for each new sprint, above this template, so the newest sprint is last.
