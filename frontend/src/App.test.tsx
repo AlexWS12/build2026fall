@@ -267,6 +267,26 @@ describe('App wired to a backend', () => {
     expect(screen.getByTitle(/mute all audio/)).toBeInTheDocument()
   })
 
+  test('the history lists the request, and follows undo', async () => {
+    render(<App api={backend()} />)
+    await sendMute()
+
+    fireEvent.click(screen.getByRole('button', { name: 'History' }))
+    const history = within(screen.getByRole('region', { name: 'Request history' }))
+    expect(history.getByText('1 request')).toBeInTheDocument()
+    expect(history.getByText('mute the first 5 seconds')).toBeInTheDocument()
+    expect(history.getByText('Undo next')).toBeInTheDocument()
+
+    // A real press on Undo: the list stays open and changes in place, and Redo would bring it back.
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Undo' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(await history.findByText('Redo next')).toBeInTheDocument()
+    expect(history.queryByText('Undo next')).not.toBeInTheDocument()
+
+    fireEvent.pointerDown(screen.getByRole('region', { name: 'Player' }))
+    expect(screen.queryByRole('region', { name: 'Request history' })).not.toBeInTheDocument()
+  })
+
   test('a request the server fails is reported, and the chat stays usable', async () => {
     const failing = backend({
       sendRequest: () => Promise.reject(new Error('the planner is unavailable; try again.')),

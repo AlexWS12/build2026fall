@@ -1,18 +1,23 @@
+import { useMemo, useRef } from 'react'
+import type { HistoryReply } from '../api/types'
 import type { ExportState } from '../state/session'
+import { HistoryMenu } from './HistoryMenu'
 import styles from './Toolbar.module.css'
 import { formatTime } from './timeline'
 
-/** Undo, redo and export for the open project, and what the last export produced. */
+/** Undo, redo, history and export for the open project, and what the last export produced. */
 export function Toolbar({
   canUndo,
   canRedo,
   canExport,
   exporting,
   exported,
+  history,
   onUndo,
   onRedo,
   onExport,
 }: {
+  history: HistoryReply
   canUndo: boolean
   canRedo: boolean
   canExport: boolean
@@ -22,10 +27,15 @@ export function Toolbar({
   onRedo: () => void
   onExport: () => void
 }) {
+  const undoButton = useRef<HTMLButtonElement>(null)
+  const redoButton = useRef<HTMLButtonElement>(null)
+  // Pressing Undo or Redo keeps the history list open, to watch it change. Export closes it.
+  const keepHistoryOpen = useMemo(() => [undoButton, redoButton], [])
   return (
     <div className={styles.toolbar} role="toolbar" aria-label="Project actions">
       <ExportResult exported={exported} />
       <button
+        ref={undoButton}
         type="button"
         className={styles.icon}
         aria-label="Undo"
@@ -39,6 +49,7 @@ export function Toolbar({
         </svg>
       </button>
       <button
+        ref={redoButton}
         type="button"
         className={styles.icon}
         aria-label="Redo"
@@ -51,6 +62,13 @@ export function Toolbar({
           <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
         </svg>
       </button>
+      <HistoryMenu
+        history={history}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        keepOpen={keepHistoryOpen}
+        buttonClassName={styles.icon}
+      />
       <button type="button" className={styles.primary} disabled={!canExport} onClick={onExport}>
         <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />

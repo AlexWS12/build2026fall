@@ -2,6 +2,7 @@ import type {
   ChatRecord,
   ChatReply,
   ExportReply,
+  HistoryEntry,
   HistoryReply,
   ProjectDetail,
   ReviewReply,
@@ -404,4 +405,47 @@ export function busyLabel(session: Session): string | null {
 /** Status of each request by id, for marking undone replies in the chat. */
 export function requestStatuses(history: HistoryReply): Map<string, 'applied' | 'undone'> {
   return new Map(history.requests.map((r) => [r.request_id, r.status]))
+}
+
+/** The request Undo would take back: undo is linear, so it is the latest one still applied. */
+export function undoTarget(history: HistoryReply): string | null {
+  if (!history.can_undo) return null
+  return history.requests.findLast((r) => r.status === 'applied')?.request_id ?? null
+}
+
+/*
+ * What Redo would bring back, worked out from the statuses alone. The backend keeps redo as a
+ * stack (vibe/contract/fold.py `history`): Redo brings back the most recently undone request,
+ * and a new request clears the stack. `HistoryReply` doesn't say which request that is, and
+ * statuses in log order can't always tell: "A, undo A, B, undo B" and "A, B, undo B, undo A"
+ * both read `[A undone, B undone]`, but the first redoes B (A is gone for good) and the second
+ * redoes A. What can be told for certain:
+ * - an undone request logged before the latest applied one is gone for good: undo is linear,
+ *   so it was undone before that applied request was made, and making it cleared redo;
+ * - when nothing can be redone, every undone request is gone for good;
+ * - when exactly one undone request comes after the latest applied one, Redo brings back that one.
+ * Anything else is left unmarked. If the reply ever names the redo target, use it instead.
+ */
+
+/** The undone requests logged after the latest one still applied. */
+function trailingUndone(history: HistoryReply): HistoryEntry[] {
+  const lastApplied = history.requests.findLastIndex((r) => r.status === 'applied')
+  return history.requests.slice(lastApplied + 1)
+}
+
+/** The request Redo would bring back, or null when there is none or it can't be told for certain. */
+export function redoTarget(history: HistoryReply): string | null {
+  if (!history.can_redo) return null
+  const trailing = trailingUndone(history)
+  return trailing.length === 1 ? trailing[0].request_id : null
+}
+
+/** Undone requests that Redo can no longer bring back, because a newer request came after them. */
+export function undoneForGood(history: HistoryReply): Set<string> {
+  const mayRedo = new Set(history.can_redo ? trailingUndone(history).map((r) => r.request_id) : [])
+  return new Set(
+    history.requests
+      .filter((r) => r.status === 'undone' && !mayRedo.has(r.request_id))
+      .map((r) => r.request_id),
+  )
 }
