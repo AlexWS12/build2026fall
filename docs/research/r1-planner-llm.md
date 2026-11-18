@@ -1,6 +1,6 @@
 # R-1 Planner LLM: Research & Approach
 
-Oct 28, 2026 · @Paul P · updated Nov 12, 2026 for **R-1b**, against `paul/r1b-planner-llm` @ `439b0d6` (`main` @ `44708a6` plus the R-1 and R-1b commits).
+Oct 28, 2026 · @Paul P · updated Nov 12, 2026 for **R-1b**, against `paul/r1b-planner-llm` @ `439b0d6` (`main` @ `44708a6` plus the R-1 and R-1b commits). Updated Nov 17 after merging `main` @ `716554b` into the branch: the planner now has 12 tools.
 
 ## TL;DR
 
@@ -19,7 +19,7 @@ R-1 picks the model for the planner's LLM slot. R-1b has **no budget**, so only 
 
   The best free hosted model that passes wins. The best local one becomes the offline fallback.
 - **Built on the branch:**
-  - the benchmark on today's 8 tools;
+  - the benchmark on `main`'s 12 tools (8 until the Nov 17 merge);
   - the reply schema and prompt;
   - Groq, Gemini, OpenRouter and Ollama adapters;
   - `VIBE_PLANNER_LLM`, which wires the chosen model into the chat route;
@@ -61,7 +61,7 @@ The planner turns one chat request into one JSON plan, and plain code runs it th
 - The LLM sees text only: the request and the tool list. D-017 allows text to go to a cloud model.
 - The LLM is never on the live per-frame path. It runs once when a standing rule is set.
 
-**The 8 tools it plans with today** (`toolbox/registry.py`): `find_objects`, `resolve_time`, `add_mask`, `cut_range`, `keep_range`, `mute`, `unmute` and `denoise`. The reply schema and the prompt are built from the registry, so a new tool reaches the LLM without editing `llm.py`.
+**The 12 tools it plans with today** (`toolbox/registry.py`, after the Nov 17 merge): `find_objects`, `find_by_description` (F-13), `resolve_time`, `find_speech` (F-21), `add_mask`, `cut_range`, `keep_range`, `mute`, `unmute`, `denoise`, `undo` and `redo`. Hand-only tools (`confirm_mask`, F-41) are in `HAND_TOOLS`, which the planner never sees. The reply schema and the prompt are built from the registry, so a new tool reaches the LLM without editing `llm.py`.
 
 **Two behaviours R-1b added:**
 
@@ -184,6 +184,8 @@ flowchart LR
 - **Who's compared:** only free and local candidates that ran every one of those requests 5 times.
 - **Winner:** of the free hosted candidates that pass every gate, the one with the most correct, then the lowest p95.
 - **Offline fallback:** the local model that passes, or passes the most gates.
+- **If no free hosted candidate passes every gate** (added Nov 17, before any hosted candidate had a complete run): R-1b proposes no hosted LLM. The app plans with the templates, and uses the offline fallback as the planner LLM where Ollama runs.
+- **A failed provider call is re-run, not scored** (added Nov 17). It's a record whose result is "LLM call failed", such as a timeout or a provider error before a 429. Those records go to `outputs/r1-planner/set-aside/`, where `report` and `--resume` don't look, so the next `--resume` asks again. On Nov 17 that was 3 Flash-Lite records and 19 of Gemini 3.8 Flash's 21; 13 of the 19 were 120 s timeouts. Until then a failed call counted as a wrong answer, with its time.
 - **Quality-only candidates** (OpenRouter) can't pass the latency gate.
 - **Extras** (requests for tools that don't exist yet) are reported but don't decide anything.
 
@@ -355,9 +357,63 @@ Everyone has to run the same commit. The report only counts results made with th
 
 ## Results so far
 
-**No scored run exists yet, so these results don't support a model choice.**
+**Scored runs are partial (Nov 17): 4 of the 10 candidates are complete, and Groq is still running. These results don't support a model choice yet.**
 
-- **Candidate zero** (script output at `439b0d6`, no model): the template parser takes 30 of the 64 core requests and gets all 30 right. The set was written alongside the parser, so this is weak evidence about real traffic.
+- **Candidate zero** (script output at `439b0d6`, no model): the template parser takes 30 of the 64 core requests and gets all 30 right. The set was written alongside the parser, so this is weak evidence about real traffic. **After the Nov 17 merge it's the same:** 30 of 64, wrong on 0, and 34 reach the LLM.
+- **Gold result out of date after the merge:** the core request "blur the guy in red" (`requests_draft.json`) expects a question, because it was written before any description tool existed. With `find_by_description` the right answer is a plan, which the templates already give for "blur the person in red" (`find_by_description` with `label: person` and `description: "in red"`, then `add_mask`). Until the gold is updated, a model that plans it is scored as wrong. Re-scoring costs no calls, because the raw replies are saved.
+- **Preflight after the merge** (Nov 17, Paul's PC: Windows 11, RTX 4060 Ti 8 GB, its own internet connection; 12-tool schema). Each time is one cold first call, not a scored result. Token counts are what each API reported. Saved as `outputs/r1-planner/preflight-20261118T000835Z.txt` (not committed).
+
+  | Candidate | Core schema | Extras schema | Input tokens (core) | On the GPU |
+  | --- | --- | --- | --- | --- |
+  | `qwen3.5-4b` | Accepted, 10.13 s (7.34 s load) | Accepted, 2.58 s | 2,024 | 100% (3.1 GB) |
+  | `qwen3.5-9b` | Accepted, 14.77 s (9.24 s load) | Accepted, 7.42 s | 2,024 | 100% (5.6 GB) |
+  | `gemma4-e4b` | Accepted, 15.91 s (14.31 s load) | Accepted, 1.30 s | 2,101 | 100%. Ollama reports 0.35 GB, but `nvidia-smi` showed about 3.9 GB in use |
+  | `openrouter-nemotron-3.5-super-vl` | Accepted, 2.04 s | Accepted, 1.49 s | 2,034 | (hosted) |
+  | `openrouter-gemma-4-31b` | Not tested: 429 from the provider behind it, twice | Not tested | | (hosted) |
+  | `groq-gpt-oss-120b` | Accepted, 1.48 s (second try, see below) | Accepted, 1.13 s | 4,323 | (hosted) |
+  | `groq-gpt-oss-20b` | Accepted, 1.15 s (third try: once 403, once a 400 "Failed to validate JSON") | Accepted, 0.68 s | 4,323 | (hosted) |
+  | `groq-qwen3.8-27b` | Accepted, 0.94 s (second try) | Accepted, 1.55 s | 2,024 | (hosted) |
+  | `gemini-3.8-flash` | Accepted, 3.61 s (after the key change, see below) | Accepted, 2.25 s | 2,089 | (hosted) |
+  | `gemini-3.5-flash-lite` | Accepted, 1.13 s (after the key change) | Accepted, 1.30 s | 2,089 | (hosted) |
+
+  - **Ollama runs at `num_ctx` 4096 now.** At 8192 (the earlier default), `qwen3.5:9b` was only about 88% on the GPU (5.6 of 6.4 GB) and the rest ran on the CPU. At 4096 all three local models fit, and the prompts (about 2.0 to 2.3K tokens) still leave room for a plan.
+  - **Groq first answered 403 to every request, then worked.** The 403 came from Cloudflare's edge, before any auth: a request with no key got it too. On the second try, a request with no key got 401, which means Groq was reachable, and all three models passed. So if Groq gives 403, check the network (a VPN, for example), not the key.
+  - **GPT-OSS calls cost more tokens with 12 tools:** 4,323 in on the core schema (3,403 with 8 tools on Nov 16), so about 4.5K a call with the reply. At the default 2 a minute that's over Groq's 8K tokens a minute, so the GPT-OSS runs use `--rpm 1.7`. `GROQ_RPM` in `candidates.py` still assumes 3.3K tokens a call. Qwen 3.8 is about 2.1K a call and keeps 2 a minute.
+  - **Groq also limits output tokens per minute,** and checks each request against that limit before running it. `qwen3.8-27b` stopped after 16 results with a 429 "Request too large": the limit is 1,000, and the request's expected output was 1,232 at `max_tokens` 4096. At 1024 it got 21 more results, then was refused with "Requested 1024", so Groq sometimes counts `max_tokens` itself. The Groq candidates now send `max_tokens` 512 (`GROQ_MAX_TOKENS` in `candidates.py`). No Groq reply in these runs went over 205 output tokens, so 512 doesn't cut a plan short. `max_tokens` isn't part of the prompt hash, so the earlier results still count. The GPT-OSS runs already going keep 4096 until they're resumed.
+  - **Groq's daily token limit stopped all three Groq models** on the first evening: `gpt-oss-120b` at 112 of 170 results, `qwen3.8-27b` at 93 and `gpt-oss-20b` at 78. Claude Code also stopped the 120B run once (low memory on the PC, not a fault in the run); it was resumed with `--resume`. Qwen ran 56 results at `max_tokens` 512 before that, with no output-limit refusal. The 20B's message: ("tokens per day: Limit 200000, Used 196076, Requested 4521. Please try again in 4m17s"). The wait it gives points to a limit that refills gradually rather than resetting once a day. If so, once it's used up, a GPT-OSS call (about 4.5K tokens) can run only every half hour or so. That's inferred from the message; Groq doesn't say how the limit refills. Resume with `--resume` and `--rpm 1.7` the next day.
+  - **`gpt-oss-20b` once wrote JSON that failed Groq's schema check** (400 "Failed to validate JSON"), and passed on the retry. The scored runs count how often this happens.
+  - **Gemini 3.8 Flash stopped at 21 of 170** with a 429 that gave no detail, about 6 minutes into a run paced at 4 a minute. 19 of the 21 were failed calls, not answers. That points to a small daily request limit on the free tier rather than the per-minute one, but it's inferred. **Dropped on Nov 17:** at about 20 a day it would need about 8 more days. This reverses the drop order below, which listed Flash-Lite first. Flash-Lite stays as the one Gemini model never to drop. Its file is in `set-aside/`.
+  - **Gemini: a paid key gives 402.** The first key in the local `.env` belonged to a paid project. Every call came back 402, while the model lookup with the same key worked. Paul replaced it with a free-tier key, and both models then passed. So if Gemini gives 402, check which project the key belongs to before running.
+  - **Keep the prompt and schema frozen until every hosted run is done.** Groq's daily token limits spread its runs over several days. `report` drops results made with an older prompt hash, so any of these would throw away the partial hosted results:
+    - a changed tool description, such as F-31's follow-up on `find_speech`;
+    - a new tool;
+    - another merge of `main`.
+  - OpenRouter had 1,000 of 1,000 free-model requests left that day, per `GET /api/v1/key`.
+- **First scored runs** (Nov 17–18 UTC, `--set llm --runs 5`: the 34 core requests the templates don't take, 170 results each). Script output: `python -m vibe.agent.bench report` on these four files, scored against the gold results as they are (see the stale gold above).
+  - **Local:** Paul's PC (Windows 11, RTX 4060 Ti 8 GB), Ollama `num_ctx` 4096, one model at a time. All three stayed 100% on the GPU. No call went above 2,207 input tokens, retries included, so nothing was cut off.
+  - **Hosted:** Nemotron on OpenRouter, from the same PC's internet connection. It's quality only, because of the proxy hop.
+  - Hosted runs (Nemotron, Groq) and two hosted preflights ran at the same time as the local runs. They use the network, not the GPU.
+
+  | Candidate | Correct | Unsafe | Over-asked | p50 s | p95 s | Valid 1st try | Consistent | Gates (unsafe fewest, ≥80%, p95 < 5 s) |
+  | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+  | `qwen3.5-4b` | 67% | 38 | 4 | 1.41 | 2.60 | 97% | 56% | fail, fail, pass |
+  | `qwen3.5-9b` | 62% | 34 | 2 | 2.14 | 4.84 | 97% | 59% | fail, fail, pass |
+  | `gemma4-e4b` | 73% | 5 | 19 | 0.53 | 2.59 | 99% | 76% | pass, fail, pass |
+  | `openrouter-nemotron-3.5-super-vl` | 86% | 21 | 3 | 1.75 | 8.04 | 100% | 88% | fail, pass, n/a (quality only) |
+
+  - The report's offline fallback on these four is `gemma4-e4b` (2 of 3 gates). The "fewest unsafe" gate compares only the candidates in the report, so the Groq results can change it.
+  - Local speed, from the report: decode 65, 43 and 129 tokens/s; load 7.9, 7.2 and 12.5 s. Its VRAM column says 0.3 GB for `gemma4-e4b`, which is Ollama's misreport (see the preflight above).
+  - **Four requests make up most of the unsafe results:**
+    - **"blur the guy in red"** (stale gold): planned by both Qwens and Nemotron in all 5 runs, so 15 unsafe results. They planned what the F-13 template plans for "blur the person in red": `find_by_description` with `label: person` and `description: "in red"`, then `add_mask`. Gemma asked, so it's scored correct. **Re-scored in memory with that plan as the gold** (the files unchanged), no gate changes:
+      - Unsafe: 33, 29, 5 and 16.
+      - Correct: 70%, 65%, 70% and 89%.
+
+      Gemma's answer becomes a wrong question, not an unsafe result.
+    - **"trim 0:10 to 0:20"**: every candidate cuts 0:10 to 0:20, 5 of 5. The gold asks on purpose, because "trim" can mean cut or keep-only, as the templates' comment says.
+    - **"keep everything except 0:10 to 0:20"**: the gold asks. Nemotron cuts 0:10 to 0:20, while Qwen 9B keeps 0:20 to the end, which also cuts 0:00 to 0:10.
+    - **"keep faces blurred"**: the gold asks, and three candidates blur the faces.
+
+    The last two are for Jean's gold review.
 - **Key test: preflight with paul's free keys** (Nov 16, Claude cloud container behind its network proxy, Linux, no GPU). Each time is one cold first call, not a scored result. Token counts are what each API reported.
 
   | Candidate | Model found | Core schema | Extras schema | Input tokens (core) |
@@ -411,14 +467,15 @@ VIBE_PLANNER_LLM=groq-gpt-oss-20b uv run --group llm --env-file ../.env uvicorn 
 - [x] Pick free candidates from the providers' pages (Nov 12)
 - [ ] Jean reviews the gold results, above all the 22 in `requests_llm.json`
 - [x] Create the Groq, Gemini and OpenRouter keys (Plan A, step 1). Saved on the "Testing" cloud environment on Nov 16, and tested by preflight
-- [ ] Install Ollama and pull the models (Plan B, steps 1 to 3)
+- [x] Install Ollama and pull the models (Plan B, steps 1 to 3). Nov 17, on Paul's RTX 4060 Ti: `qwen3.5:4b`, `qwen3.5:9b`, `gemma4:e4b`
+- [x] Merge `main` (12 tools) and preflight again (Nov 17, see "Results so far")
 
 **Run**
 
 - [x] Preflight the free hosted candidates (Nov 16, see "Results so far"). No model rejected `$ref`
-- [ ] Preflight the local candidates
+- [x] Preflight the local candidates (Nov 17)
 - [ ] Run hosted candidates, 5 runs each, over as many days as the limits need
-- [ ] Run local candidates on Paul's 4060 Ti; `gemma4-12b` on Nickolas's or Pablo's machine
+- [ ] Run local candidates on Paul's 4060 Ti; `gemma4-12b` on Nickolas's or Pablo's machine. Paul's three are done (Nov 17); `gemma4-12b` is still open
 - [ ] Collect every `.jsonl` and run `report --detail`
 
 **Report**
@@ -435,18 +492,20 @@ VIBE_PLANNER_LLM=groq-gpt-oss-20b uv run --group llm --env-file ../.env uvicorn 
 
 Never drop the 34 decision requests, candidate zero, one Groq model, one Gemini model, or `qwen3.5-4b`.
 
+**Dropped Nov 17:** `gemini-3.8-flash`, because its free daily limit is too small, so Flash-Lite is the Gemini model kept (see "Results so far").
+
 ## Decision row draft, doc edits and risks
 
-A fill-in-the-blanks row for `docs/ARCHITECTURE.md`. D-019 is the renderer's, so the row is **D-020**, unless an open PR claims it first.
+A fill-in-the-blanks row for `docs/ARCHITECTURE.md`. On `main`, D-020 is F-13's description judge and D-021 is F-41's review confirmations, so the row is **D-022**, unless an open PR claims it first.
 
 ```markdown
-| D-020 | <date> | Planner LLM: <winner> (`<model id>`, <provider> free tier), schema-constrained JSON output behind a provider adapter, set with `VIBE_PLANNER_LLM`; <local model> on Ollama as the offline fallback. Template parser takes literal requests only. LLM cuts at times the user didn't give are confirmed first | Proposed | Free tiers and local models only (no budget). Picked by the R-1b rule fixed before any run: zero unsafe (or fewest), ≥80% correct, p95 < 5 s over the 34 core requests that reach the LLM, 5 runs each. Numbers: `python -m vibe.agent.bench report`, <hardware, network, date> |
+| D-022 | <date> | Planner LLM: <winner> (`<model id>`, <provider> free tier), schema-constrained JSON output behind a provider adapter, set with `VIBE_PLANNER_LLM`; <local model> on Ollama as the offline fallback. Template parser takes literal requests only. LLM cuts at times the user didn't give are confirmed first | Proposed | Free tiers and local models only (no budget). Picked by the R-1b rule fixed before any run: zero unsafe (or fewest), ≥80% correct, p95 < 5 s over the 34 core requests that reach the LLM, 5 runs each. Numbers: `python -m vibe.agent.bench report`, <hardware, network, date> |
 ```
 
 **Replacement lines, once the row is agreed** (find them by their text):
 
-- `README.md`, planner LLM row: `**Proposed (D-020):** <winner> (free tier); <local model> as the offline fallback`.
-- `docs/ARCHITECTURE.md`, "Agent / planner": change `(candidate: Claude)` to `(D-020: <winner>, with <local model> offline)`, and drop `which LLM;` from the open list.
+- `README.md`, planner LLM row: `**Proposed (D-022):** <winner> (free tier); <local model> as the offline fallback`.
+- `docs/ARCHITECTURE.md`, "Agent / planner": change `(candidate: Claude)` to `(D-022: <winner>, with <local model> offline)`, and drop `which LLM;` from the open list.
 - `docs/ARCHITECTURE.md`, open questions: remove "Which LLM for the planner, and its cost per request?".
 
 **Risks and mitigations:**
@@ -456,7 +515,7 @@ A fill-in-the-blanks row for `docs/ARCHITECTURE.md`. D-019 is the renderer's, so
 - **Rate limits in production.** Groq's 8K tokens a minute is about 2 planner calls a minute per model, by the estimate above. That's enough for a demo, not for the whole team testing at once.
 - **Latency depends on where it runs.** Hosted numbers from a cloud container or home Wi-Fi aren't a demo laptop's, so label every run and compare within one setup.
 - **The guard's UX cost.** Number words ("the first ten seconds") aren't written times, so a correct LLM cut is still confirmed first. The report's cut-guard table shows how often that happens.
-- **The decision covers today's 8 tools only.** Descriptive targeting ("the guy in the red hoodie") is the hardest planning case, and it can't be scored until `check_attribute` exists. Keep the extras column in view.
+- **The decision covers `main`'s 12 tools as of Nov 17.** Descriptive targeting ("the guy in the red hoodie") is the hardest planning case. `main` now has a real tool for it (`find_by_description`, F-13), but the extras still score the eval-only `check_attribute`, and one core gold result predates the tool (see "Results so far"). Keep the extras column in view.
 - **Single requests only.** The planner takes no chat history, so follow-ups ("now do the same for him") aren't tested.
 - **The same person wrote the requests and the gold results.** Jean's review is the mitigation.
 - **Tool descriptions reach the LLM word for word,** so numbers only hold for the prompt hash they ran with.

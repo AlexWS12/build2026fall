@@ -18,7 +18,10 @@ production), ``DECISION_RUNS`` runs each:
 Only free and local candidates are decided between, and only ones that ran every one of those
 requests ``DECISION_RUNS`` times. Of the free hosted candidates that pass every gate, the one
 with the most correct wins, then the lowest p95 (all of them cost nothing per call). The local
-model that passes, or passes the most gates, becomes the offline fallback. Quality-only
+model that passes, or passes the most gates, becomes the offline fallback. If no free hosted
+candidate passes every gate, R-1b proposes no hosted LLM: the templates, with the offline fallback
+as the planner LLM where Ollama runs (added by paul on 2026-11-17, before any hosted candidate
+had a complete run). Quality-only
 candidates (an extra proxy hop) can't pass the latency gate. Extras (eval-only tools) are
 reported but don't decide anything.
 """
