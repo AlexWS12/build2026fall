@@ -343,7 +343,9 @@ class OllamaProvider:
         *,
         host: str | None = None,
         think: bool = False,
-        num_ctx: int = 8192,
+        # 4096 holds the planner prompt with room for a plan, and keeps qwen3.5:9b fully on an
+        # 8 GB card (at 8192 Ollama put ~12% of it on the CPU on an RTX 4060 Ti, Nov 17).
+        num_ctx: int = 4096,
     ) -> None:
         import httpx
 
