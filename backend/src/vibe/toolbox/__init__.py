@@ -4,18 +4,23 @@ The planner, the API and the UI's hand edits all go through ``call_tool``, so ev
 in the same op log and undo works the same way (docs/ARCHITECTURE.md, "Toolbox").
 """
 
-from vibe.toolbox.context import OpSink, ToolContext
-from vibe.toolbox.registry import TOOLS, call_tool
+from vibe.toolbox.context import Describer, DescriberError, OpSink, ToolContext, Verdict
+from vibe.toolbox.registry import HAND_TOOLS, TOOLS, UI_TOOLS, call_tool
 from vibe.toolbox.spec import Returns, ToolError, ToolKind, ToolSpec, describe_errors
 
 __all__ = [
+    "HAND_TOOLS",
     "TOOLS",
+    "UI_TOOLS",
+    "Describer",
+    "DescriberError",
     "OpSink",
     "Returns",
     "ToolContext",
     "ToolError",
     "ToolKind",
     "ToolSpec",
+    "Verdict",
     "call_tool",
     "describe_errors",
 ]

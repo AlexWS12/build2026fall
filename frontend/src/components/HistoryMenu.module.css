@@ -1,0 +1,122 @@
+.root {
+  position: relative;
+  display: inline-flex;
+}
+
+/* The button's shape comes from the parent (`buttonClassName`); this only marks it open. */
+.button[aria-expanded='true'] {
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+/* Grows with the list, then scrolls inside itself: the page behind never moves. */
+.panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  width: min(340px, 86vw);
+  max-height: min(70vh, 560px);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--sunken);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+  overflow: hidden;
+}
+
+.title {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.count {
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--faint);
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+/* Two lines per request: what was asked (and its badge), then the kinds of edits it made. */
+.list li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 14px;
+  font-size: 0.87rem;
+}
+
+.line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.kinds {
+  overflow: hidden;
+  font-size: 0.75rem;
+  color: var(--faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.undone .label,
+.forGood .label {
+  text-decoration: line-through;
+  color: var(--faint);
+}
+
+/* Redo can't bring these back: fainter than an undone request it still could. */
+.forGood {
+  opacity: 0.6;
+}
+
+.status,
+.next {
+  flex: none;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.status {
+  color: var(--faint);
+}
+
+.next {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgb(143 129 247 / 0.18);
+  color: var(--accent-text);
+}
+
+.empty {
+  margin: 0;
+  padding: 14px;
+  font-size: 0.87rem;
+  color: var(--muted);
+}

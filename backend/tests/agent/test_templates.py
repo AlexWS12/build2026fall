@@ -156,7 +156,11 @@ def test_and_inside_a_between_range_is_not_a_clause_split() -> None:
         "blur faces and make it nicer",
         "trim 0:10 to 0:20",
         "mute 0:10 and 0:20",
-        "blur the person in red",
+        "blur faces in red",
+        "blur faces except the person in red",
+        "blur everyone except me",
+        "blur the person in",
+        "blur the person on the left",
         "",
     ],
 )
@@ -373,3 +377,41 @@ def test_first_n_goes_through_resolve_time_like_last_n() -> None:
         {"step_id": "s1", "tool": "resolve_time", "args": {"phrase": "first 2 minutes"}},
         {"step_id": "s2", "tool": "cut_range", "args": {"time_range": {"$ref": "s1"}}},
     ]
+
+
+# --- undo / redo ------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "tool"),
+    [
+        ("undo", "undo"),
+        ("Undo.", "undo"),
+        ("undo that", "undo"),
+        ("please undo it", "undo"),
+        ("undo the last edit", "undo"),
+        ("undo my last change", "undo"),
+        ("redo", "redo"),
+        ("redo that", "redo"),
+        ("redo the last one", "redo"),
+    ],
+)
+def test_undo_and_redo_are_one_call_with_no_arguments(text: str, tool: str) -> None:
+    assert calls(text) == [{"step_id": "s1", "tool": tool, "args": {}}]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "undo the blur",  # undo is linear: the blur may not be the latest edit
+        "undo the mute at 0:10",
+        "undo twice",
+        "undo and blur faces",  # two requests in one
+        "undo, then mute 0:10 to 0:20",
+        "mute 0:10 to 0:20 and undo",
+        "undo and undo",
+        "redo everything",
+    ],
+)
+def test_undo_requests_that_are_not_plain_give_none(text: str) -> None:
+    assert parse(text) is None

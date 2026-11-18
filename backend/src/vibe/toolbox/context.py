@@ -1,11 +1,16 @@
 """What a tool call runs against: who asked, the timeline to write to, and the video's facts."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
-from vibe.contract import Op, TimelineState, Track
+from vibe.contract import History, Op, TimelineState, Track
 from vibe.contract.common import Source
+
+if TYPE_CHECKING:
+    # Type checkers only: importing the module loads media code (av, numpy), and planning
+    # shouldn't need that.
+    from vibe.modules.transcribe import Transcript
 
 
 class OpSink(Protocol):
@@ -13,13 +18,41 @@ class OpSink(Protocol):
     both fit: ``append`` validates the op against the whole log and raises before writing.
     ``append_many`` does the same for several ops as one unit, so a request that writes more
     than one op (``keep_range``) lands whole or not at all. ``state`` is the folded timeline,
-    for tools that check what's there first (``unmute``, ``keep_range``)."""
+    for tools that check what's there first (``unmute``, ``keep_range``). ``history`` says which
+    requests are in effect, for ``undo`` and ``redo``."""
 
     def append(self, op: Op) -> Op: ...
 
     def append_many(self, ops: Sequence[Op]) -> list[Op]: ...
 
     def state(self) -> TimelineState: ...
+
+    def history(self) -> History: ...
+
+
+Verdict = Literal["yes", "no", "unsure"]
+"""Whether a track matches a description. ``unsure`` is an answer: privacy edits mask it."""
+
+
+class DescriberError(Exception):
+    """A describer couldn't look (no judge, unreadable video, bad cache). The tool turns it into a
+    ``ToolError``: "unknown" never becomes "nobody matches". Defined here so the toolbox needs no
+    media or model code."""
+
+
+class Describer(Protocol):
+    """Looks at the video so a tool doesn't have to: does each track match ``description``
+    ("in red", "wearing a hat", "in grey with a bag")? ``scene`` is every track of the video,
+    for descriptions about other things ("with a bag").
+    ``vibe.modules.vision.describe.VideoDescriber`` fits. Returns a verdict per track id and
+    raises :class:`DescriberError` if it can't look."""
+
+    def ask(
+        self,
+        tracks: Sequence[Track],
+        description: str,
+        scene: Sequence[Track] | None = None,
+    ) -> Mapping[str, Verdict]: ...
 
 
 @dataclass(frozen=True)
@@ -34,3 +67,8 @@ class ToolContext:
     tracks: Sequence[Track] | None = None
     """Tracks from the analysis cache (stub: given by the caller; real: F-08 / F-10). ``None``
     means the video hasn't been analysed; ``[]`` means it was and nothing was found."""
+    transcript: "Transcript | None" = None
+    """The video's transcript (F-31), for ``find_speech``. ``None``: never transcribed."""
+    describer: Describer | None = None
+    """Answers ``find_by_description`` (F-13). ``None`` means nothing here can look at the
+    video, so a description request fails instead of guessing."""

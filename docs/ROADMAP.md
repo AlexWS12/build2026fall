@@ -31,7 +31,7 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
 | F-10 | Find and track people, faces, plates, named objects (cached per video) | Must | F-03, F-08 | in progress | Knight Hacks: EgoBlur + YOLOE; D-015 proposes RF-DETR + EgoBlur + ByteTrack (no AGPL). Pipeline, stub, cache and detector adapters on `luis/f10-detect-track`; model comparison next |
-| F-11 | Blur / pixelate / black-box targets | Must | F-04, F-10 | idea | |
+| F-11 | Blur / pixelate / black-box targets | Must | F-04, F-10 | in review (#29) | Mask audit: jonathan, `jonathan/f11-mask-effects`; cached tracks + export tests: christopher, `christopher/f11-track-loading` (merged into #29) |
 | F-12 | Time-bounded edits ("first half", "after 0:30") | Must | F-05 | in progress | `resolve_time` / `resolve_range` (jean/f12-time-bounded-edits) |
 | F-13 | Targeting by description ("the person in red", "everyone except me") | Must | F-10 | idea | VLM yes/no per track |
 | F-14 | Click / draw a box to target, tracked through the clip | Should | F-10 | idea | |
@@ -42,14 +42,14 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
 | F-20 | Cut / keep a time range | Must | F-04 | in progress | Source→output time mapping in the derived state |
-| F-21 | Cut by transcript ("cut where she talks about X") | Should | F-31 | idea | |
+| F-21 | Cut by transcript ("cut where she talks about X") | Should | F-31 | in progress | paul, `paul/f31-transcribe`: words only (`find_speech`, "cut / mute where he says X"); topics need the LLM. Applies once the plan executor exists |
 | F-22 | Cut by on-screen content ("cut the part with the dog") | Stretch | F-10 | idea | |
 
 ### Audio
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
 | F-30 | Mute a time range | Must | F-04 | in progress | eduardo, `eduardo/f30-mute` |
-| F-31 | Transcription with word timestamps | Should | F-03 | idea | Whisper family |
+| F-31 | Transcription with word timestamps | Should | F-03 | in progress | Whisper family. paul, `paul/f31-transcribe`: module (an F-08 `Analysis`, so stub / local / remote), CLI, `POST /api/projects/{id}/transcript` and the Transcript panel |
 | F-32 | Who spoke when (diarization) + mute a specific speaker | Should | F-31 | idea | Needs separation if speakers overlap |
 | F-33 | Background noise reduction | Must | F-03 | in progress | nickolas, `nickolas/f33-denoise` |
 | F-34 | Remove a specific sound ("the fan noise", "the music") | Stretch | F-33 | idea | |
@@ -57,10 +57,10 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 ### Human in the loop
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
-| F-40 | Agent reports what it did in plain words + raw tool calls | Must | F-05 | idea | |
-| F-41 | Review queue for low-confidence results | Must | F-02, F-07 | idea | Knight Hacks "Check" |
+| F-40 | Agent reports what it did in plain words + raw tool calls | Must | F-05 | in progress | alex, `alex/demo-wiring-redesign` |
+| F-41 | Review queue for low-confidence results | Must | F-02, F-07 | in progress | paulallain, `paulallain/f41-review-queue`; Knight Hacks "Check" |
 | F-42 | Hand fixes: select, change effect, remove, drag/correct box | Must | F-07, F-11 | idea | Through the same toolbox |
-| F-43 | Undo per request + version history | Must | F-02 | idea | |
+| F-43 | Undo per request + version history | Must | F-02 | in progress | alex, `alex/demo-wiring-redesign`: undo/redo done. jonathan, `jonathan/f43-history-list`: history list in the UI, ready for review |
 | F-44 | Preview-before-apply for heavy edits (inpainting, cuts) | Should | F-04 | idea | |
 
 ### Live mode (top-priority stretch)
@@ -218,16 +218,16 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 **Build**
 | Card | Owner | Branch | Exit check | Status |
 |---|---|---|---|---|
-| Plan executor: run the plan through `call_tool`, resolve `$ref`s, dry-run on an `OpLog` copy, reply `applied`. **Priority: first** | _open_ | | In the UI (`VITE_API_MODE=http`), "mute the first 5 seconds" is applied and shows in the timeline | planned |
-| Export route + source-video route + Export button in the UI. Shared file (API routes) | _open_ | | Upload → request → Export → the MP4 has the edit; route test in stub mode | planned |
+| Plan executor: run the plan through `call_tool`, resolve `$ref`s, dry-run on an `OpLog` copy, reply `applied`. **Priority: first** | alex | alex/demo-wiring-redesign | In the UI (`VITE_API_MODE=http`), "mute the first 5 seconds" is applied and shows in the timeline | in review |
+| Export route + source-video route + Export button in the UI. Shared file (API routes) | alex | alex/demo-wiring-redesign | Upload → request → Export → the MP4 has the edit; route test in stub mode | in review |
 | F-33b Renderer applies `audio_filters` (denoise) + pick the local/remote model | _open_ | | A test exports a clip with a denoise span, no GPU | planned |
-| F-09b Consented clips + labels in `clips.json` / `labels/` | _open_ | | `benchmark report` scores an F-10 run against real labels | planned |
+| F-09b Consented clips + labels in `clips.json` / `labels/` | eduardo | eduardo/f09b-pexels-clips | `benchmark report` scores an F-10 run against real labels | in progress |
 | F-10b Detector bake-off → decision row, then harden the winner (stitching, face↔person, fit under `run_analysis`) | _open_ | | Report table with hardware stated → decision row | planned |
-| F-13 Targeting by description ("the person in red", "everyone except me") | _open_ | | A request picks the right tracks on a labeled clip; unsure = masked | planned |
-| F-40 Agent reports what it did in plain words + raw tool calls | _open_ | | The chat shows a plain summary and the tool calls for each applied request | planned |
-| F-41 Review queue for low-confidence results (uses `RenderResult.issues` and the mask audit) | _open_ | | Low-confidence stretches show in a queue; confirming or fixing one writes an op | planned |
+| F-13 Targeting by description ("the person in red", "everyone except me") | luis | luis/f13-targeting-by-description | A request picks the right tracks on a labeled clip; unsure = masked | in progress |
+| F-40 Agent reports what it did in plain words + raw tool calls | alex | alex/demo-wiring-redesign | The chat shows a plain summary and the tool calls for each applied request | in review |
+| F-41 Review queue for low-confidence results (uses `RenderResult.issues` and the mask audit) | paulallain | paulallain/f41-review-queue | Low-confidence stretches show in a queue; confirming or fixing one writes an op | in review |
 | F-42 Hand fixes: select, change effect, remove, correct a box (through the toolbox) | _open_ | | A hand fix from the UI is an op in the timeline and can be undone | planned |
-| F-43 Undo per request + version history in the UI | _open_ | | Undo removes one whole request; history lists the requests | planned |
+| F-43 Undo per request + version history in the UI | alex, jonathan | alex/demo-wiring-redesign, jonathan/f43-history-list | Undo removes one whole request; history lists the requests | in progress (undo and redo work; the history list in the UI is ready for review on jonathan's branch) |
 
 **Risks / dependencies:**
 - The executor and the export route gate F-40–F-43 and the demo path. If they aren't merged by midweek, the HITL cards build against the CLI.

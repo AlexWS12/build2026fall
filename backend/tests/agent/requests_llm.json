@@ -241,7 +241,7 @@
       ]
     },
     {
-      "request": "undo that",
+      "request": "take back my last change",
       "route": "llm", "tools": "extras", "category": "history",
       "expect": "plan",
       "calls": [

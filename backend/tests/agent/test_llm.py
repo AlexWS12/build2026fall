@@ -74,7 +74,8 @@ def test_every_object_is_closed_and_requires_all_its_properties() -> None:
     assert objects
     for node in objects:
         assert node["additionalProperties"] is False
-        assert node["required"] == list(node["properties"])
+        # No "required" at all on an object with no properties (undo, redo): Groq refuses [].
+        assert node.get("required", []) == list(node["properties"])
 
 
 def test_a_tool_with_no_arguments_has_no_required_list() -> None:

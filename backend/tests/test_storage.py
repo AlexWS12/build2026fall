@@ -1,12 +1,13 @@
 """R-2: project storage. Uses a temporary data dir and small fake "video" files (bytes only)."""
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from vibe import config
 from vibe.contract import AddMask, ContractError, Effect, Keyframe, Track, Undo
-from vibe.storage import Storage, StorageError
+from vibe.storage import ChatRecord, Storage, StorageError
 
 
 @pytest.fixture
@@ -105,6 +106,14 @@ def test_appended_ops_survive_reopening(store: Storage, clip: Path) -> None:
     assert reopened.state().masks == {}
 
 
+def test_history_says_what_undo_and_redo_would_act_on(store: Storage, clip: Path) -> None:
+    project = store.create_project(clip)
+    project.append(blur("r_1"))
+    assert (project.history().can_undo, project.history().can_redo) == ("r_1", None)
+    project.append(Undo(request_id="r_2", source="user", undo_request_id="r_1"))
+    assert (project.history().can_undo, project.history().can_redo) == (None, "r_1")
+
+
 def test_a_rejected_op_writes_nothing(store: Storage, clip: Path) -> None:
     project = store.create_project(clip)
     project.append(blur("r_1"))
@@ -184,6 +193,65 @@ def test_user_tracks_round_trip(store: Storage, clip: Path) -> None:
     )
     project.save_user_tracks([track])
     assert store.open_project(project.id).user_tracks() == [track]
+
+
+# --- The chat -----------------------------------------------------------------------------
+
+
+def said(rid: str, text: str = "mute the audio", status: str = "applied") -> ChatRecord:
+    return ChatRecord(
+        request_id=rid,
+        text=text,
+        status=status,
+        reply="Muted the whole video.",
+        steps=[{"step_id": "s1", "tool": "mute", "args": {}, "result": {}, "ok": True}],
+        at=datetime(2026, 11, 14, 12, 0, tzinfo=UTC),
+    )
+
+
+def test_a_new_project_has_no_chat_and_no_chat_file(store: Storage, clip: Path) -> None:
+    project = store.create_project(clip)
+    assert project.chat() == []
+    assert not project.chat_path.exists()
+
+
+def test_chat_records_survive_reopening_in_order(store: Storage, clip: Path) -> None:
+    project = store.create_project(clip)
+    first, second = said("r_1"), said("r_2", "cut it", "clarify")
+
+    project.append_chat(first)
+    project.append_chat(second)
+
+    assert store.open_project(project.id).chat() == [first, second]
+    assert project.chat_path.read_text(encoding="utf-8").count("\n") == 2  # one line each
+
+
+def test_chat_keeps_text_as_typed(store: Storage, clip: Path) -> None:
+    project = store.create_project(clip)
+    record = said("r_1", "floute les visages \u00e9t\u00e9\nde 0:10 \u00e0 0:20")
+
+    project.append_chat(record)
+
+    assert project.chat() == [record]
+
+
+def test_an_incomplete_chat_line_is_skipped_and_the_next_one_still_lands(
+    store: Storage, clip: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    project = store.create_project(clip)
+    project.append_chat(said("r_1"))
+    with project.chat_path.open("a", encoding="utf-8") as f:
+        f.write('{"request_id": "r_2", "text": "mu')  # a crash mid-append
+
+    project.append_chat(said("r_3"))
+
+    assert [r.request_id for r in project.chat()] == ["r_1", "r_3"]
+    assert "skipped unreadable line 2" in caplog.text
+
+
+def test_a_chat_record_with_an_unknown_status_is_refused() -> None:
+    with pytest.raises(ValueError, match="status"):
+        said("r_1", status="done")
 
 
 # --- Analysis cache -----------------------------------------------------------------------

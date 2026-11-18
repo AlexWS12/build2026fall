@@ -7,6 +7,7 @@ import { TimelineView } from './TimelineView'
 const empty: TimelineState = {
   schema_version: 1,
   masks: {},
+  reviewed: {},
   cuts: [],
   mutes: [],
   audio_filters: [],

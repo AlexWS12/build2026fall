@@ -1,0 +1,279 @@
+[
+  {
+    "track_id": "trk_steady",
+    "label": "face",
+    "source": "detector",
+    "keyframes": [
+      {"t": 0.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 0.5, "box": [0.12, 0.1, 0.32, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 1.0, "box": [0.14, 0.1, 0.34, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 1.5, "box": [0.16, 0.1, 0.36, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 2.0, "box": [0.18, 0.1, 0.38, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 2.5, "box": [0.2, 0.1, 0.4, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 3.0, "box": [0.22, 0.1, 0.42, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 3.5, "box": [0.24, 0.1, 0.44, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 4.0, "box": [0.26, 0.1, 0.46, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 4.5, "box": [0.28, 0.1, 0.48, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 5.0, "box": [0.3, 0.1, 0.5, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 5.5, "box": [0.32, 0.1, 0.52, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 6.0, "box": [0.34, 0.1, 0.54, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 6.5, "box": [0.36, 0.1, 0.56, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 7.0, "box": [0.38, 0.1, 0.58, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 7.5, "box": [0.4, 0.1, 0.6, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 8.0, "box": [0.42, 0.1, 0.62, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 8.5, "box": [0.44, 0.1, 0.64, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 9.0, "box": [0.46, 0.1, 0.66, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 9.5, "box": [0.48, 0.1, 0.68, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 10.0, "box": [0.5, 0.1, 0.7, 0.4], "conf": 0.9, "state": "detected"}
+    ]
+  },
+  {
+    "track_id": "trk_edge",
+    "label": "face",
+    "source": "detector",
+    "keyframes": [
+      {"t": 0.0, "box": [0.0, 0.0, 0.2, 0.2], "conf": 0.9, "state": "detected"},
+      {"t": 0.5, "box": [0.0, 0.0, 0.2, 0.2], "conf": 0.9, "state": "detected"},
+      {"t": 1.0, "box": [0.0, 0.0, 0.2, 0.2], "conf": 0.9, "state": "detected"},
+      {"t": 1.5, "box": [0.0, 0.0, 0.2, 0.2], "conf": 0.9, "state": "detected"},
+      {"t": 2.0, "box": [0.0, 0.0, 0.2, 0.2], "conf": 0.9, "state": "detected"},
+      {"t": 2.5, "box": [0.0, 0.0, 0.2, 0.2], "conf": 0.9, "state": "detected"},
+      {"t": 3.0, "box": [0.0, 0.0, 0.2, 0.2], "conf": 0.9, "state": "detected"},
+      {"t": 3.5, "box": [0.0, 0.0, 0.2, 0.2], "conf": 0.9, "state": "detected"},
+      {"t": 4.0, "box": [0.0, 0.0, 0.2, 0.2], "conf": 0.9, "state": "detected"},
+      {"t": 4.5, "box": [0.0, 0.0, 0.2, 0.2], "conf": 0.9, "state": "detected"},
+      {"t": 5.0, "box": [0.0, 0.0, 0.2, 0.2], "conf": 0.9, "state": "detected"},
+      {"t": 5.5, "box": [0.8, 0.8, 1.0, 1.0], "conf": 0.9, "state": "detected"},
+      {"t": 6.0, "box": [0.8, 0.8, 1.0, 1.0], "conf": 0.9, "state": "detected"},
+      {"t": 6.5, "box": [0.8, 0.8, 1.0, 1.0], "conf": 0.9, "state": "detected"},
+      {"t": 7.0, "box": [0.8, 0.8, 1.0, 1.0], "conf": 0.9, "state": "detected"},
+      {"t": 7.5, "box": [0.8, 0.8, 1.0, 1.0], "conf": 0.9, "state": "detected"},
+      {"t": 8.0, "box": [0.8, 0.8, 1.0, 1.0], "conf": 0.9, "state": "detected"},
+      {"t": 8.5, "box": [0.8, 0.8, 1.0, 1.0], "conf": 0.9, "state": "detected"},
+      {"t": 9.0, "box": [0.8, 0.8, 1.0, 1.0], "conf": 0.9, "state": "detected"},
+      {"t": 9.5, "box": [0.8, 0.8, 1.0, 1.0], "conf": 0.9, "state": "detected"},
+      {"t": 10.0, "box": [0.8, 0.8, 1.0, 1.0], "conf": 0.9, "state": "detected"}
+    ]
+  },
+  {
+    "track_id": "trk_uncertain",
+    "label": "face",
+    "source": "detector",
+    "keyframes": [
+      {"t": 0.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 0.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 1.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 1.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 2.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 2.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 3.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.3, "state": "uncertain"},
+      {"t": 3.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 4.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 4.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 5.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 5.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 6.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 6.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 7.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 7.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 8.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 8.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 9.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 9.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 10.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"}
+    ]
+  },
+  {
+    "track_id": "trk_gap",
+    "label": "face",
+    "source": "detector",
+    "keyframes": [
+      {"t": 0.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 0.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 1.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 1.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 2.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 2.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 3.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 6.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 6.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 7.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 7.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 8.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 8.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 9.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 9.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 10.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"}
+    ]
+  },
+  {
+    "track_id": "trk_ends_early",
+    "label": "person",
+    "source": "detector",
+    "keyframes": [
+      {"t": 0.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 0.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 1.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 1.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 2.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 2.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 3.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 3.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 4.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"}
+    ]
+  },
+  {
+    "track_id": "trk_starts_late",
+    "label": "person",
+    "source": "detector",
+    "keyframes": [
+      {"t": 6.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 6.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 7.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 7.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 8.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 8.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 9.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 9.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 10.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"}
+    ]
+  },
+  {
+    "track_id": "trk_user_single",
+    "label": "license_plate",
+    "source": "user",
+    "keyframes": [
+      {"t": 5.0, "box": [0.7, 0.8, 0.78, 0.84], "conf": 1.0, "state": "user"}
+    ]
+  },
+  {
+    "track_id": "trk_shared",
+    "label": "face",
+    "source": "detector",
+    "keyframes": [
+      {"t": 0.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 0.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 1.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 1.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 2.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 2.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 3.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 3.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 4.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"}
+    ]
+  },
+  {
+    "track_id": "trk_shared",
+    "label": "face",
+    "source": "user",
+    "keyframes": [
+      {"t": 6.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 1.0, "state": "user"},
+      {"t": 6.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 1.0, "state": "user"},
+      {"t": 7.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 1.0, "state": "user"},
+      {"t": 7.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 1.0, "state": "user"},
+      {"t": 8.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 1.0, "state": "user"},
+      {"t": 8.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 1.0, "state": "user"},
+      {"t": 9.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 1.0, "state": "user"},
+      {"t": 9.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 1.0, "state": "user"},
+      {"t": 10.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 1.0, "state": "user"}
+    ]
+  },
+  {
+    "track_id": "trk_frag_a",
+    "label": "person",
+    "source": "detector",
+    "keyframes": [
+      {"t": 0.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 0.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 1.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 1.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 2.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 2.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 3.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"}
+    ]
+  },
+  {
+    "track_id": "trk_frag_b",
+    "label": "person",
+    "source": "detector",
+    "keyframes": [
+      {"t": 6.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 6.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 7.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 7.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 8.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 8.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 9.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 9.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 10.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"}
+    ]
+  },
+  {
+    "track_id": "trk_bounded",
+    "label": "face",
+    "source": "detector",
+    "keyframes": [
+      {"t": 0.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 0.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 1.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 1.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 2.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 2.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 3.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 3.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 4.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 4.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 5.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 5.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 6.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 6.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 7.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 7.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 8.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 8.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 9.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 9.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 10.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"}
+    ]
+  },
+  {
+    "track_id": "trk_open",
+    "label": "face",
+    "source": "detector",
+    "keyframes": [
+      {"t": 0.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 0.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 1.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 1.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 2.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 2.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 3.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 3.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 4.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 4.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 5.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 5.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 6.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 6.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 7.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 7.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 8.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 8.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 9.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 9.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 10.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"}
+    ]
+  },
+  {
+    "track_id": "trk_unmasked",
+    "label": "person",
+    "source": "detector",
+    "keyframes": [
+      {"t": 0.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 0.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 1.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 1.5, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"},
+      {"t": 2.0, "box": [0.1, 0.1, 0.3, 0.4], "conf": 0.9, "state": "detected"}
+    ]
+  }
+]

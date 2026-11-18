@@ -22,6 +22,17 @@ _TOOLS = (
         run=tools.find_objects,
     ),
     ToolSpec(
+        name="find_by_description",
+        kind="query",
+        description="Among the tracks with a label, find the ones matching a description "
+        "('in red', 'in grey with a bag'), or all but those. Unsure tracks are included, so "
+        "they get masked, unless the user asked for sure matches only.",
+        args=tools.FindByDescriptionArgs,
+        result=tools.FindByDescriptionResult,
+        returns="track_ids",
+        run=tools.find_by_description,
+    ),
+    ToolSpec(
         name="resolve_time",
         kind="query",
         description="Turn a phrase like 'first half' into a time range, using the duration.",
@@ -31,9 +42,19 @@ _TOOLS = (
         run=tools.resolve_time,
     ),
     ToolSpec(
+        name="find_speech",
+        kind="query",
+        description="Find when a word or phrase is said, from the video's transcript (F-31).",
+        args=tools.FindSpeechArgs,
+        result=tools.FindSpeechResult,
+        returns="time_range",
+        run=tools.find_speech,
+    ),
+    ToolSpec(
         name="add_mask",
         kind="edit",
-        description="Hide tracks with an effect (blur, pixelate, box) over a time range.",
+        description="Hide tracks with an effect (blur, pixelate, box) over a time range, or "
+        "each one only while it is tracked.",
         args=tools.AddMaskArgs,
         result=tools.EditResult,
         returns="none",
@@ -95,9 +116,48 @@ _TOOLS = (
         run=tools.denoise,
         ref_args={"time_range": "time_range"},
     ),
+    ToolSpec(
+        name="undo",
+        kind="edit",
+        description="Undo the latest request still in effect: every op it wrote, together.",
+        args=tools.UndoArgs,
+        result=tools.UndoResult,
+        returns="none",
+        run=tools.undo,
+    ),
+    ToolSpec(
+        name="redo",
+        kind="edit",
+        description="Bring back the most recently undone request. A new edit clears redo.",
+        args=tools.RedoArgs,
+        result=tools.RedoResult,
+        returns="none",
+        run=tools.redo,
+    ),
 )
 
 TOOLS: Mapping[str, ToolSpec] = MappingProxyType({t.name: t for t in _TOOLS})
+
+_HAND_TOOLS = (
+    ToolSpec(
+        name="confirm_mask",
+        kind="edit",
+        description=(
+            "Mark masked stretches as checked by a person, taking them off the review queue. "
+            "Hand edits only: it takes literal track ids, so the planner never gets it."
+        ),
+        args=tools.ConfirmMaskArgs,
+        result=tools.EditResult,
+        returns="none",
+        run=tools.confirm_mask,
+    ),
+)
+
+HAND_TOOLS: Mapping[str, ToolSpec] = MappingProxyType({t.name: t for t in _HAND_TOOLS})
+"""Tools only the UI calls: the agent's planner and LLM stay on ``TOOLS`` and never see these."""
+
+UI_TOOLS: Mapping[str, ToolSpec] = MappingProxyType({**TOOLS, **HAND_TOOLS})
+"""Everything a hand edit can call: ``TOOLS`` plus ``HAND_TOOLS``."""
 
 
 def call_tool(

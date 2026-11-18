@@ -235,6 +235,44 @@
       "title": "Rule",
       "type": "object"
     },
+    "Span": {
+      "additionalProperties": false,
+      "properties": {
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Null means until the end of the video.",
+          "title": "End"
+        },
+        "op_id": {
+          "title": "Op Id",
+          "type": "string"
+        },
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "op_id",
+        "request_id"
+      ],
+      "title": "Span",
+      "type": "object"
+    },
     "TimeRange": {
       "additionalProperties": false,
       "description": "A span of **source** time in seconds, start included, end excluded.\n\n``end`` is ``None`` for \"until the end of the video\". Times always refer to the original\nvideo, so a cut never shifts other edits (docs/ARCHITECTURE.md, \"The contract\").",
@@ -282,6 +320,17 @@
       },
       "description": "Per track id: when it's masked and how.",
       "title": "Masks",
+      "type": "object"
+    },
+    "reviewed": {
+      "additionalProperties": {
+        "items": {
+          "$ref": "#/$defs/Span"
+        },
+        "type": "array"
+      },
+      "description": "Per track id: the source-time spans a person confirmed (F-41 review queue). May cover time with no mask, so consumers intersect it with `masks`.",
+      "title": "Reviewed",
       "type": "object"
     },
     "cuts": {

@@ -332,7 +332,11 @@ class AlwaysAsks:
 
 
 def test_a_run_saves_every_reply_and_the_report_scores_it(tmp_path: Path) -> None:
-    cases = [BY_REQUEST["blur him"], BY_REQUEST["kill the audio"], BY_REQUEST["undo that"]]
+    cases = [
+        BY_REQUEST["blur him"],
+        BY_REQUEST["kill the audio"],
+        BY_REQUEST["take back my last change"],
+    ]
     candidate = Candidate("fake-asks", AlwaysAsks, "local")
 
     path = run_candidate(

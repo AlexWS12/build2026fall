@@ -23,8 +23,9 @@ from av.video.reformatter import ColorRange, Colorspace
 
 from vibe.contract import TimelineState, Track
 from vibe.render.audio import apply_audio_edits, check_audio
-from vibe.render.errors import RenderError
+from vibe.render.errors import NothingToRender, RenderError
 from vibe.render.frame import FrameRenderer, RenderIssue
+from vibe.render.mask_report import MaskAudit, audit_masks
 from vibe.video import AudioInfo, FrameIndex, VideoInfo, VideoReader, iter_audio_chunks, probe
 
 VIDEO_CODEC = "libx264"
@@ -53,6 +54,11 @@ class RenderResult:
     """Length of the output in seconds."""
     issues: tuple[RenderIssue, ...]
     """What the renderer masked more because of (see ``FrameRenderer.issues``)."""
+    audit: MaskAudit
+    """Every masked stretch, in continuous time, where ``issues`` is what frames actually hit.
+    ``audit.clean`` means no ``lost``/``no_track`` time, in continuous time, and no unchecked
+    rules, so it can be false with no issues: a lost stretch too short to reach a frame is here
+    but not in ``issues``. A rule never gets this far, so ``rules_not_audited`` is empty."""
 
 
 def export(
@@ -64,36 +70,43 @@ def export(
     """Render ``source`` with ``state`` and ``tracks`` into an MP4 at ``out_path``.
 
     Raises ``UnsupportedEdit`` before anything is written if the timeline has an edit this
-    renderer can't apply yet, ``RenderError`` if the output can't be made (e.g. the cuts remove
-    everything, or ``out_path`` is the source), and the video layer's errors for a source it
-    can't read.
+    renderer can't apply yet, ``RenderError`` if the output can't be made (``NothingToRender``
+    when the cuts remove everything; also when ``out_path`` is the source), and the video
+    layer's errors for a source it can't read.
     """
     source, out_path = Path(source), Path(out_path)
     if out_path.suffix.lower() != ".mp4":
         raise RenderError(f"exports are .mp4 files, got {out_path.name}")
     if source.exists() and out_path.exists() and out_path.samefile(source):
         raise RenderError(f"{out_path} is the source video: exporting there would overwrite it")
+    tracks = list(tracks)  # read twice below, and it may be a generator
     check_audio(state)
     renderer = FrameRenderer(state, tracks)
     info = probe(source)
+    index = FrameIndex.build(source)
+    audit = audit_masks(state, tracks, duration=index.end, frame_times=index.times.tolist())
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fd, name = tempfile.mkstemp(dir=out_path.parent, prefix=f".{out_path.stem}.", suffix=".mp4")
     os.close(fd)
     tmp = Path(name)
     try:
-        frames, duration = _write(source, info, state, renderer, tmp)
+        frames, duration = _write(source, info, index, state, renderer, tmp)
         os.replace(tmp, out_path)
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
-    return RenderResult(out_path, frames, duration, tuple(renderer.issues))
+    return RenderResult(out_path, frames, duration, tuple(renderer.issues), audit)
 
 
 def _write(
-    source: Path, info: VideoInfo, state: TimelineState, renderer: FrameRenderer, path: Path
+    source: Path,
+    info: VideoInfo,
+    index: FrameIndex,
+    state: TimelineState,
+    renderer: FrameRenderer,
+    path: Path,
 ) -> tuple[int, float]:
-    index = FrameIndex.build(source)
     # yuv420p stores colour at half resolution, so it needs an even width and height.
     width, height = info.width // 2 * 2, info.height // 2 * 2
     try:
@@ -130,7 +143,7 @@ def _write(
                 if sound is not None:
                     sound.write_until(output_time)
             if frames == 0:
-                raise RenderError("the cuts remove the whole clip: nothing to render")
+                raise NothingToRender("the cuts remove the whole clip: nothing to render")
             out.mux(video.encode())
             if sound is not None:
                 sound.finish()
