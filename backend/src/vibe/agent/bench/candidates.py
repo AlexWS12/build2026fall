@@ -52,6 +52,11 @@ GROQ_URL = "https://api.groq.com/openai/v1"
 GROQ_RPM = 2
 """Groq's free plan allows 30 RPM but only 8K tokens a minute. A call here is about 3.3K tokens
 (an estimate: the prompt and schema are 13.3K characters at ~4 per token), so 2 a minute."""
+GROQ_MAX_TOKENS = 512
+"""Groq checks each request's expected output against a per-minute output limit before running
+it: 1,000 tokens a minute for ``qwen/qwen3.8-27b`` on the free plan. It refused requests at
+``max_tokens`` 4096 ("Requested 1232") and at 1024 ("Requested 1024"), so it must stay well
+under 1,000. The largest Groq reply in the Nov 17 runs was 205 tokens, reasoning included."""
 OPENROUTER_URL = "https://openrouter.ai/api/v1"
 GEMINI_OPENAI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 """Gemini through its OpenAI-compatible endpoint rather than the google-genai SDK: the key goes
@@ -99,7 +104,12 @@ class Candidate:
 
 def _groq(model: str, **settings: Any) -> Provider:
     return OpenAIProvider(
-        model, base_url=GROQ_URL, api_key_env="GROQ_API_KEY", label="groq", **settings
+        model,
+        base_url=GROQ_URL,
+        api_key_env="GROQ_API_KEY",
+        label="groq",
+        max_tokens=GROQ_MAX_TOKENS,
+        **settings,
     )
 
 

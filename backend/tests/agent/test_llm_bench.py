@@ -11,7 +11,7 @@ import pytest
 from vibe.agent import Plan, plan_request, validate_plan
 from vibe.agent.bench import DECISION_RUNS
 from vibe.agent.bench import run as bench_run
-from vibe.agent.bench.candidates import CANDIDATES, Candidate
+from vibe.agent.bench.candidates import CANDIDATES, GROQ_MAX_TOKENS, Candidate
 from vibe.agent.bench.cases import Case, load_cases, registry_for
 from vibe.agent.bench.report import decision, load_records, report
 from vibe.agent.bench.run import PaidCandidate, run_candidate
@@ -453,6 +453,17 @@ def test_a_paid_candidate_never_runs_without_allow_paid(tmp_path: Path) -> None:
             out_dir=tmp_path,
         )
     assert not list(tmp_path.iterdir())
+
+
+def test_groq_candidates_ask_for_little_enough_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Groq refuses a request whose max_tokens exceeds the model's per-minute output limit."""
+    pytest.importorskip("openai")
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    groq = [c for c in CANDIDATES.values() if c.name.startswith("groq-")]
+
+    assert groq
+    for candidate in groq:
+        assert candidate.build().settings["max_tokens"] == GROQ_MAX_TOKENS
 
 
 def test_the_report_leaves_out_results_from_an_older_prompt(tmp_path: Path) -> None:
