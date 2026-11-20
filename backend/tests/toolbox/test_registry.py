@@ -19,6 +19,7 @@ def test_the_registry_has_the_planners_tools() -> None:
         "mute",
         "unmute",
         "denoise",
+        "isolate_voice",
         "undo",
         "redo",
     }
