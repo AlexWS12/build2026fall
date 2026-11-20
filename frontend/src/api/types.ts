@@ -83,7 +83,7 @@ export interface MuteSpan extends Span {
 }
 
 export interface AudioFilterSpan extends Span {
-  filter: 'denoise'
+  filter: 'denoise' | 'isolate_voice'
   strength: number | null
 }
 

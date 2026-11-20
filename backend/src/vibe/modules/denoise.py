@@ -252,6 +252,13 @@ def cached_noise_profile(
 # --- Pass 2: the gate ------------------------------------------------------------------------
 
 
+def gate_gain(mag: np.ndarray, noise: np.ndarray) -> np.ndarray:
+    """The gate's full-strength gain per bin, from the frame's magnitudes and the noise level
+    there: bins well above the noise are kept, the rest go down to ``MAX_ATTENUATION_DB``."""
+    floor = 10 ** (-MAX_ATTENUATION_DB / 20)
+    return np.clip(1 - _OVERSUBTRACT * noise / np.maximum(mag, _SILENT), floor, 1)
+
+
 class NoiseGate:
     """Pass 2: the spectral gate over a stream, one chunk at a time.
 
@@ -308,7 +315,6 @@ class _ChannelGate:
         self._size = size = profile.size
         self._hop = size // 4
         self._hann = np.hanning(size + 1)[:-1].astype(self._work)
-        self._floor = 10 ** (-MAX_ATTENUATION_DB / 20)
         self._base = 0  # padded position of _pending[0], always the next frame's start
         self._pending = np.zeros(size, dtype=self._work)
         self._tail = np.zeros(0, dtype=self._work)  # overlap sums past _base
@@ -342,8 +348,7 @@ class _ChannelGate:
             starts = self._base + (first + np.arange(len(batch))) * hop
             noise = self._profile.at(starts - size // 2, self._channel).astype(self._work)
             spec = np.fft.rfft(batch * self._hann, axis=1)
-            mag = np.abs(spec)
-            full = np.clip(1 - _OVERSUBTRACT * noise / np.maximum(mag, _SILENT), self._floor, 1)
+            full = gate_gain(np.abs(spec), noise)
             gain = 1 - self._strength * (1 - full)  # strength blends untouched (0) to full (1)
             out = (np.fft.irfft(spec * gain, n=size, axis=1) * self._hann).astype(self._work)
             out = out.reshape(len(batch), 4, hop)
