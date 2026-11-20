@@ -1,9 +1,25 @@
-"""F-33: noise reduction. The stub backend only: no GPU, no model, no video files."""
+"""F-33: noise reduction, and F-33b's streaming passes. The stub backend only: no GPU, no model,
+no video files (the cache test uses a WAV written here)."""
+
+import json
+import wave
+from pathlib import Path
 
 import numpy as np
 import pytest
 
-from vibe.modules.denoise import DenoiseError, DenoiseState, denoise, denoise_chunk
+from vibe.modules.cache import ModuleError, cached_keys
+from vibe.modules.denoise import (
+    DenoiseError,
+    DenoiseState,
+    NoiseGate,
+    NoiseProfile,
+    cached_noise_profile,
+    denoise,
+    denoise_chunk,
+    learn_noise,
+)
+from vibe.storage import Storage
 
 RATE = 16000
 
@@ -152,7 +168,7 @@ def test_float64_is_computed_in_float64() -> None:
     out = denoise(noisy, RATE, strength=1e-9, backend="stub")
 
     assert out.dtype == np.float64
-    assert np.max(np.abs(out - noisy)) < 1e-10  # float32 math would be off by ~1e-8
+    assert np.max(np.abs(out - noisy)) < 5e-10  # the effect itself is ~1e-10; float32 is ~1e-8
 
 
 def test_float16_comes_back_float16() -> None:
@@ -176,3 +192,134 @@ def test_per_chunk_denoise_checks_its_arguments_first() -> None:
         denoise_chunk(noise(RATE // 10), state, backend="stub")
     with pytest.raises(ValueError, match="floating"):
         denoise_chunk(np.zeros((160, 2), dtype=np.int16), state, backend="stub")
+
+
+# --- F-33b: the two streaming passes the renderer uses -----------------------------------
+
+
+def chunks_of(samples: np.ndarray, size: int) -> list[np.ndarray]:
+    return [samples[i : i + size] for i in range(0, len(samples), size)]
+
+
+def stream(gate: NoiseGate, samples: np.ndarray, size: int) -> np.ndarray:
+    parts = [gate.push(c) for c in chunks_of(samples, size)]
+    return np.concatenate([*parts, gate.finish()])
+
+
+@pytest.mark.parametrize("size", [1, 7, 333, 1600, 4800, 64000])
+def test_any_chunk_size_gives_the_whole_clip_result(size: int) -> None:
+    """No clicks at chunk edges and no drift: every chunking gives the same samples."""
+    noisy = tone_with_gaps()[0] + noise(4 * RATE)
+
+    out = stream(NoiseGate(learn_noise([noisy], RATE)), noisy, size)
+
+    assert len(out) == len(noisy)
+    np.testing.assert_allclose(out, denoise(noisy, RATE, backend="stub"), atol=1e-6)
+
+
+def test_streamed_stereo_matches_each_channel_alone() -> None:
+    clean, _ = tone_with_gaps()
+    stereo = np.stack([clean + noise(len(clean)), clean + noise(len(clean), seed=1)], axis=1)
+
+    out = stream(NoiseGate(learn_noise(chunks_of(stereo, 1600), RATE)), stereo, 1600)
+
+    assert out.shape == stereo.shape
+    np.testing.assert_allclose(out, denoise(stereo, RATE, backend="stub"), atol=1e-6)
+
+
+def test_the_gate_lines_its_output_up_with_its_input() -> None:
+    """At strength 0 the stream gives back its input, so nothing is shifted in time."""
+    noisy = tone_with_gaps()[0] + noise(4 * RATE)
+
+    out = stream(NoiseGate(learn_noise([noisy], RATE), strength=0), noisy, 1600)
+
+    np.testing.assert_allclose(out, noisy, atol=1e-6)
+
+
+def test_the_profile_doesnt_depend_on_chunk_size() -> None:
+    noisy = tone_with_gaps(seconds=25.0)[0] + noise(25 * RATE)
+
+    whole = learn_noise([noisy], RATE)
+    chunked = learn_noise(chunks_of(noisy, 1234), RATE)
+
+    np.testing.assert_array_equal(whole.windows, chunked.windows)
+    assert whole.windows.shape[0] == 3  # 10 s windows over 25 s
+
+
+def test_the_profile_follows_noise_that_changes_over_the_clip() -> None:
+    clean, on = tone_with_gaps(seconds=20.0)
+    louder = np.where(np.arange(len(clean)) < 10 * RATE, 1.0, 3.0).astype(np.float32)
+    noisy = clean + noise(len(clean)) * louder
+
+    profile = learn_noise([noisy], RATE)
+    out = denoise(noisy, RATE, backend="stub")
+
+    first, second = profile.windows[0, 0].mean(), profile.windows[1, 0].mean()
+    assert second > 2 * first
+    pauses = ~on & (np.arange(len(clean)) >= 10 * RATE)
+    assert db(out[pauses]) < db(noisy[pauses]) - 6  # the louder noise is still turned down
+
+
+def test_a_window_with_no_pauses_cant_learn_speech_as_noise() -> None:
+    """A window that's all tone is capped near the whole clip's profile, so the tone survives."""
+    clean, on = tone_with_gaps(seconds=30.0)
+    clean[10 * RATE : 20 * RATE] = 0.3 * np.sin(2 * np.pi * 440 * np.arange(10 * RATE) / RATE)
+    noisy = clean + noise(len(clean))
+
+    out = denoise(noisy, RATE, backend="stub")
+
+    middle = slice(11 * RATE, 19 * RATE)
+    assert db((out - clean)[middle]) < db(clean[middle]) - 20
+
+
+def test_a_profile_round_trips_through_json() -> None:
+    profile = learn_noise([tone_with_gaps()[0] + noise(4 * RATE)], RATE)
+
+    again = NoiseProfile.from_json(json.loads(json.dumps(profile.to_json())))
+
+    np.testing.assert_array_equal(again.windows, profile.windows)
+    assert (again.sample_rate, again.channels) == (profile.sample_rate, profile.channels)
+
+
+def test_a_malformed_profile_is_an_error() -> None:
+    with pytest.raises(ModuleError, match="malformed"):
+        NoiseProfile.from_json({"sample_rate": RATE, "windows": "not base64!"})
+
+
+def test_no_audio_at_all_gives_an_empty_profile() -> None:
+    profile = learn_noise([], RATE)
+
+    assert profile.windows.shape[0] == 1 and not profile.windows.any()
+
+
+def test_the_gate_refuses_chunks_that_dont_match_the_profile() -> None:
+    gate = NoiseGate(learn_noise([noise(RATE)], RATE))
+
+    with pytest.raises(ValueError, match="channels"):
+        gate.push(np.zeros((160, 2), dtype=np.float32))
+
+
+def write_wav(path: Path, samples: np.ndarray, rate: int) -> Path:
+    pcm = (np.clip(samples, -1, 1) * 32767).astype("<i2")
+    with wave.open(str(path), "wb") as f:
+        f.setnchannels(1)
+        f.setsampwidth(2)
+        f.setframerate(rate)
+        f.writeframes(pcm.tobytes())
+    return path
+
+
+def test_the_profile_is_cached_with_the_video(tmp_path: Path) -> None:
+    """Pass 1 runs once per video, on every backend (it's numpy, not a model)."""
+    storage = Storage(tmp_path / "data")
+    noisy = tone_with_gaps()[0] + noise(4 * RATE)
+    video = storage.add_video(write_wav(tmp_path / "clip.wav", noisy, RATE))
+
+    first = cached_noise_profile(storage, video, RATE, "mono")
+    keys = cached_keys(storage, video.sha256, "noise_profile")
+    storage.video_path(video).unlink()  # a second call must not need the video
+    second = cached_noise_profile(storage, video, RATE, "mono")
+
+    assert len(keys) == 1 and keys[0].startswith("noise_profile-")
+    np.testing.assert_array_equal(first.windows, second.windows)
+    assert first.channels == 1 and first.sample_rate == RATE

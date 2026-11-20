@@ -220,7 +220,7 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 |---|---|---|---|---|
 | Plan executor: run the plan through `call_tool`, resolve `$ref`s, dry-run on an `OpLog` copy, reply `applied`. **Priority: first** | alex | alex/demo-wiring-redesign | In the UI (`VITE_API_MODE=http`), "mute the first 5 seconds" is applied and shows in the timeline | done (#32) |
 | Export route + source-video route + Export button in the UI. Shared file (API routes) | alex | alex/demo-wiring-redesign | Upload → request → Export → the MP4 has the edit; route test in stub mode | done (#32) |
-| F-33b Renderer applies `audio_filters` (denoise) + pick the local/remote model | _open_ | | A test exports a clip with a denoise span, no GPU | planned |
+| F-33b Renderer applies `audio_filters` (denoise) + pick the local/remote model | nickolas | nickolas/f33b-render-audio-filters | A test exports a clip with a denoise span, no GPU | in progress (renderer part); the model pick is a follow-up |
 | F-09b Consented clips + labels in `clips.json` / `labels/` | eduardo | eduardo/f09b-pexels-clips | `benchmark report` scores an F-10 run against real labels | in progress (#35: 9 clips, 5 labelled) |
 | F-10b Detector bake-off → decision row, then harden the winner (stitching, face↔person, fit under `run_analysis`) | _open_ | | Report table with hardware stated → decision row | planned |
 | F-13 Targeting by description ("the person in red", "everyone except me") | luis | luis/f13-targeting-by-description | A request picks the right tracks on a labeled clip; unsure = masked | first cut done (#33); VLM judge (D-020) → Sprint 5 |
