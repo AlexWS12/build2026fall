@@ -226,6 +226,32 @@ def test_denoise_without_arguments_denoises_the_whole_clip_at_the_default_streng
     assert op.time_range is None and op.strength is None
 
 
+def test_isolate_voice_appends_an_audio_filter_op() -> None:
+    log = OpLog()
+
+    call_tool("isolate_voice", {"time_range": {"start": 5, "end": 9}, "strength": 0.8}, ctx(log))
+
+    (op,) = log.ops
+    assert isinstance(op, AddAudioFilter)
+    assert (op.filter, op.strength) == ("isolate_voice", 0.8)
+    (span,) = log.state().audio_filters
+    assert (span.filter, span.start, span.end) == ("isolate_voice", 5, 9)
+
+
+def test_isolate_voice_and_denoise_are_separate_filters() -> None:
+    log = OpLog()
+
+    call_tool("denoise", {}, ctx(log))
+    call_tool("isolate_voice", {"time_range": {"start": 2, "end": 4}}, ctx(log))
+
+    assert sorted(s.filter for s in log.state().audio_filters) == ["denoise", "isolate_voice"]
+
+
+def test_isolate_voice_rejects_a_bad_strength() -> None:
+    with pytest.raises(ToolError):
+        call_tool("isolate_voice", {"strength": 2}, ctx(OpLog()))
+
+
 def test_edit_tools_work_on_a_storage_project(tmp_path: Path) -> None:
     video = tmp_path / "clip.mp4"
     video.write_bytes(b"not really a video")

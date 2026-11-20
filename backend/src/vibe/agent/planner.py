@@ -12,7 +12,7 @@ from typing import Any, Protocol
 from pydantic import ValidationError
 
 from vibe.agent.plan import Clarify, Plan, PlannerResult
-from vibe.agent.templates import NOISE_WORDS, MixedTimeError, normalize, parse
+from vibe.agent.templates import NOISE_WORDS, VOICE_WORDS, MixedTimeError, normalize, parse
 from vibe.agent.timeparse import TimeParseError
 from vibe.agent.validate import validate_plan
 from vibe.toolbox import TOOLS, ToolSpec
@@ -130,6 +130,11 @@ def _question_for(text: str) -> str:
         return (
             "Should I reduce the noise in that part, or cut that part out? Say 'reduce the noise "
             "from 0:10 to 0:20' or 'cut 0:10 to 0:20'."
+        )
+    if not VOICE_WORDS.isdisjoint(words) and verb in ("isolate", "keep", "only", "just"):
+        return (
+            "When should I keep only the voices? Give a time range like 0:10 to 0:20, or say "
+            "'keep only the voices' for the whole video."
         )
     if noisy or verb in ("denoise", "reduce"):
         return (

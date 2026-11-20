@@ -22,14 +22,9 @@ from av.container import OutputContainer
 from av.video.reformatter import ColorRange, Colorspace
 
 from vibe.contract import TimelineState, Track
-from vibe.modules.denoise import (
-    DenoiseError,
-    NoiseProfile,
-    ProfileSource,
-    check_backend,
-    learn_noise_from_file,
-)
-from vibe.render.audio import DenoiseMix, apply_audio_edits, check_audio, denoise_spans
+from vibe.modules import denoise, isolate_voice
+from vibe.modules.denoise import NoiseProfile, ProfileSource, learn_noise_from_file
+from vibe.render.audio import FilterMix, apply_audio_edits, check_audio, filter_spans
 from vibe.render.errors import NothingToRender, RenderError
 from vibe.render.frame import FrameRenderer, RenderIssue
 from vibe.render.mask_report import MaskAudit, audit_masks
@@ -77,7 +72,7 @@ def export(
 ) -> RenderResult:
     """Render ``source`` with ``state`` and ``tracks`` into an MP4 at ``out_path``.
 
-    ``noise_profile(sample_rate, layout)`` gives the noise profile for denoise spans, e.g. from
+    ``noise_profile(sample_rate, layout)`` gives the noise profile for audio filters, e.g. from
     the analysis cache (``cached_noise_profile``). Without it, export learns one from ``source``
     first, which reads the sound twice.
 
@@ -115,14 +110,18 @@ def export(
 def _profile(
     source: Path, info: VideoInfo, state: TimelineState, given: ProfileSource | None
 ) -> NoiseProfile | None:
-    """Pass 1 of denoise, before anything is written: the profile at the output's rate and
-    layout, or None when there's nothing to denoise."""
-    if info.audio is None or not denoise_spans(state):
+    """Pass 1 of the audio filters, before anything is written: the profile at the output's
+    rate and layout, or None when there's nothing to filter."""
+    if info.audio is None or not filter_spans(state):
         return None
+    names = {f.filter for f in filter_spans(state)}
     try:
-        check_backend()
-    except DenoiseError as e:
-        raise RenderError(f"can't apply denoise: {e}") from e
+        if "denoise" in names:
+            denoise.check_backend()
+        if "isolate_voice" in names:
+            isolate_voice.check_backend()
+    except (denoise.DenoiseError, isolate_voice.IsolateVoiceError) as e:
+        raise RenderError(f"can't apply the audio filters: {e}") from e
     rate, layout = _audio_format(info.audio)
     profile = given(rate, layout) if given else learn_noise_from_file(source, rate, layout)
     channels = 1 if layout == "mono" else 2
@@ -234,12 +233,13 @@ class _AudioWriter:
         state: TimelineState,
         profile: NoiseProfile | None,
     ) -> Iterator[np.ndarray]:
-        """The sound up to ``last_sample`` (none past the last frame), denoised, muted and cut.
+        """The sound up to ``last_sample`` (none past the last frame), filtered, muted and cut.
 
-        Denoise hands back sound about one FFT frame behind what it's given; ``first`` counts
-        what comes out, so mutes and cuts still land on the right samples.
+        The filters hand back sound behind what they're given (an FFT frame, plus the voice
+        isolator's look-ahead); ``first`` counts what comes out, so mutes and cuts still land
+        on the right samples.
         """
-        mix: DenoiseMix | None = None
+        mix: FilterMix | None = None
         read = first = 0
         for chunk in iter_audio_chunks(
             source, AUDIO_CHUNK_SECONDS, self._rate, mono=False, layout=self._layout
@@ -249,7 +249,7 @@ class _AudioWriter:
             samples = chunk.samples[: last_sample - read]
             read += len(samples)
             if profile is not None:
-                mix = mix or DenoiseMix(profile, state, samples.dtype)
+                mix = mix or FilterMix(profile, state, samples.dtype)
                 samples = mix.push(samples)
             if len(samples):
                 yield apply_audio_edits(samples, self._rate, state, first_sample=first)
