@@ -19,6 +19,8 @@ dependencies = [
 [project.optional-dependencies]
 cpu = ["torch>=2.7", "torchvision>=0.22"]
 cu128 = ["torch>=2.7", "torchvision>=0.22"]
+# F-10b: what the app's Analyse button needs for YuNet faces on any machine (no GPU, no PyTorch).
+vision = ["opencv-python-headless>=4.9"]
 
 [dependency-groups]
 dev = [

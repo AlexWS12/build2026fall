@@ -7,6 +7,8 @@
 - ``detectors``: the models, by name (``DETECTORS``, ``make_detector``), with their licenses.
 - ``tracking``: trackers that link detections into tracks (``iou`` built in, ``bytetrack``).
 - ``analyze``: the pipeline over a video, and ``retrack`` from cached detections.
+- ``analysis``: ``VisionAnalysis``, the pipeline as an F-08 analysis (stub / local / remote), which
+  the app's Analyse button runs.
 - ``describe``: which tracks match a description ("in red"): yes / no / unsure (F-13).
 - ``cache``: reading and writing ``cache/<sha256>/{detections,tracks}/<key>.json``, the video's
   default tracks, and ``project_tracks`` for the toolbox's ``ToolContext.tracks``.
@@ -19,6 +21,7 @@ CI and CPU laptops run everything here on the stub. Adding them to ``pyproject.t
 optional group is a shared-file change for after the F-10 comparison (HANDOFF.md).
 """
 
+from vibe.modules.vision.analysis import VisionAnalysis
 from vibe.modules.vision.analyze import Analysis, analyze_frames, analyze_video, retrack
 from vibe.modules.vision.cache import (
     AmbiguousAnalysis,
@@ -46,6 +49,7 @@ __all__ = [
     "NotInstalled",
     "TrackerSettings",
     "VideoDescriber",
+    "VisionAnalysis",
     "analyze_frames",
     "analyze_video",
     "load_tracks",

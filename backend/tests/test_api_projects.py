@@ -20,6 +20,7 @@ from vibe.api.app import app
 from vibe.contract import Track, Undo
 from vibe.modules.transcribe import Segment, Transcript, TranscriptAnalysis, Word
 from vibe.modules.vision import save_tracks
+from vibe.modules.vision.cache import default_tracks_key
 from vibe.storage import Storage
 from vibe.toolbox import ToolContext, call_tool
 from vibe.video import extract_audio, probe
@@ -840,25 +841,100 @@ def test_analysis_replays_what_is_cached(
     assert response.json() == {"analysed": True, "tracks": 1}
 
 
-@pytest.mark.parametrize("backend", ["stub", "local", "remote"])
-def test_analysis_with_nothing_cached_is_503_not_an_empty_result(
+def _nothing_cached(storage: Storage, project_id: str) -> bool:
+    sha = storage.open_project(project_id).info.video.sha256
+    return not (storage.cache_dir / sha).exists()
+
+
+@pytest.mark.parametrize(
+    ("backend", "detail"),
+    [
+        # Stub only replays: say so, never "0 tracks".
+        ("stub", projects._NO_ANALYSIS),
+        # Local, but YuNet's weights aren't downloaded (and OpenCV may be missing): say how.
+        ("local", projects._NO_VISION),
+        # Remote, with no model server configured: the server log has the reason.
+        ("remote", projects._VISION_FAILED),
+    ],
+)
+def test_analysis_that_cant_run_is_503_not_an_empty_result(
     client: TestClient,
     storage: Storage,
     long_clip: Path,
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
     backend: str,
+    detail: str,
 ) -> None:
-    # No detector is connected to the API yet, whatever the backend: say so, never "0 tracks".
     monkeypatch.setenv("VIBE_BACKEND", backend)
+    monkeypatch.delenv("VIBE_VISION_DETECTORS", raising=False)
+    monkeypatch.setenv("VIBE_MODELS_DIR", str(tmp_path / "no-models"))
+    monkeypatch.delenv("VIBE_REMOTE_URL", raising=False)
     project_id = upload(client, long_clip)["project_id"]
 
     response = client.post(f"/api/projects/{project_id}/analysis")
 
     assert response.status_code == 503
-    assert response.json() == {"detail": projects._NO_ANALYSIS}
+    assert response.json() == {"detail": detail}
     assert get(client, project_id, "tracks")["analysed"] is False
-    assert not (storage.cache_dir / storage.open_project(project_id).info.video.sha256).exists()
+    assert _nothing_cached(storage, project_id)
     assert projects._busy == set()
+
+
+def test_a_bad_detector_spec_is_503(
+    client: TestClient, storage: Storage, long_clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VIBE_BACKEND", "local")
+    monkeypatch.setenv("VIBE_VISION_DETECTORS", "nope")
+    project_id = upload(client, long_clip)["project_id"]
+
+    response = client.post(f"/api/projects/{project_id}/analysis")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": projects._VISION_FAILED}
+    assert _nothing_cached(storage, project_id)
+
+
+@pytest.fixture(scope="module")
+def red_square_clip(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Two seconds, 64x48 at 10 fps: a red square drifting right, which the stub detector finds."""
+    path = tmp_path_factory.mktemp("clips") / "red square.mp4"
+    with av.open(str(path), "w") as out:
+        stream = out.add_stream("mpeg4", rate=10)
+        stream.width, stream.height, stream.pix_fmt = 64, 48, "yuv420p"
+        stream.bit_rate = 2_000_000
+        for i in range(20):
+            image = np.zeros((48, 64, 3), dtype=np.uint8)
+            image[12:28, 4 + i : 20 + i] = (255, 0, 0)
+            out.mux(stream.encode(av.VideoFrame.from_ndarray(image, format="rgb24")))
+        out.mux(stream.encode())
+    return path
+
+
+def test_analysis_runs_the_detectors_locally_then_blur_is_applied(
+    client: TestClient,
+    storage: Storage,
+    red_square_clip: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VIBE_BACKEND", "local")
+    monkeypatch.setenv("VIBE_VISION_DETECTORS", "stub:color=red,label=face")
+    project_id = upload(client, red_square_clip)["project_id"]
+    assert ask(client, project_id, "blur faces")["status"] == "not_applied"
+
+    response = client.post(f"/api/projects/{project_id}/analysis")
+
+    assert response.status_code == 200
+    assert response.json() == {"analysed": True, "tracks": 1}
+    sha = storage.open_project(project_id).info.video.sha256
+    assert default_tracks_key(storage, sha) is not None  # a later CLI run won't make it ambiguous
+    assert projects._busy == set()
+    reply = ask(client, project_id, "blur faces")
+    assert reply["status"] == "applied", reply
+    assert get(client, project_id, "state")["masks"]
+    # The stub backend now replays it: no detector runs a second time.
+    monkeypatch.setenv("VIBE_BACKEND", "stub")
+    assert client.post(f"/api/projects/{project_id}/analysis").json() == response.json()
 
 
 def test_an_analysis_that_cant_be_trusted_is_503_everywhere_it_matters(

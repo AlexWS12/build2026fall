@@ -42,6 +42,21 @@ def models_dir() -> Path:
     return Path(value) if value else data_dir() / "models"
 
 
+DEFAULT_VISION_DETECTORS = ("yunet:weights=@yunet",)
+"""YuNet faces: the one detector a CPU-only laptop (tier 0) runs. A starting point until the
+F-10b bake-off picks the default; it finds faces only, so "blur people" needs a person detector."""
+
+
+def vision_detectors() -> list[str]:
+    """Detector specs the app's Analyse button runs (``VIBE_VISION_DETECTORS``, ``;``-separated).
+
+    E.g. ``rfdetr-s;yunet:weights=@yunet``. See ``python -m vibe.modules.vision detectors``.
+    """
+    value = os.environ.get("VIBE_VISION_DETECTORS", "")
+    specs = [s.strip() for s in value.split(";") if s.strip()]
+    return specs or list(DEFAULT_VISION_DETECTORS)
+
+
 def remote_url() -> str | None:
     """The model server the ``remote`` backend calls, e.g. ``http://alex-5070:8765``."""
     return os.environ.get("VIBE_REMOTE_URL") or None

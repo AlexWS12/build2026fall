@@ -290,8 +290,10 @@ export interface paths {
          * Analyse
          * @description Make sure the video has a vision analysis (F-10). 503 when this server can't provide one.
          *
-         *     For now this only replays the shared cache: no detector is connected to the API yet, on any
-         *     backend, so a video nobody analysed gets 503 rather than an empty result.
+         *     A cached analysis is answered as it is. Otherwise the detectors in ``VIBE_VISION_DETECTORS``
+         *     run through F-08's backend: ``stub`` only replays the cache, ``local`` runs them here and
+         *     ``remote`` on the model server. Running them can take a while; the project is busy (409)
+         *     until it's done. A video that can't be analysed is 503, never an empty result.
          */
         post: operations["analyse_api_projects__project_id__analysis_post"];
         delete?: never;
