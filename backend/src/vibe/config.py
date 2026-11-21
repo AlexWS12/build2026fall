@@ -42,12 +42,14 @@ def models_dir() -> Path:
     return Path(value) if value else data_dir() / "models"
 
 
-DEFAULT_VISION_DETECTORS = ("tv-frcnn-mobile", "yunet:weights=@yunet,grow=2.6")
-"""People (torchvision's Faster R-CNN MobileNet, BSD-3) and faces (YuNet, MIT, boxes grown 2.6x to
-the whole face), with head boxes for faces YuNet misses (D-022, Proposed). On the three
-face-labelled clips this left 0 face boxes exposed; YuNet alone left 7/23 on one (hair). Needs
-PyTorch (`uv sync --extra cpu` or `cu128`) and OpenCV (`--extra vision`); set
-VIBE_VISION_DETECTORS="yunet:weights=@yunet,grow=2.6" to run faces only, without PyTorch."""
+DEFAULT_VISION_DETECTORS = ("tv-frcnn-mobile", "yunet:weights=@yunet,threshold=0.6,grow=2.2")
+"""People (torchvision's Faster R-CNN MobileNet, BSD-3) and faces (YuNet, MIT), with head boxes for
+faces YuNet misses (D-022, Proposed). YuNet's threshold is 0.6 and its boxes are grown 2.2x to the
+whole face: on the three face-labelled clips that left 0 face boxes exposed and masked the least
+of the settings that did (17-42% of the frame vs 20-58% at threshold 0.3 grow 2.6; 1.8x leaked one
+face). Needs PyTorch (`uv sync --extra cpu` or `cu128`) and OpenCV (`--extra vision`); set
+VIBE_VISION_DETECTORS="yunet:weights=@yunet,grow=2.6" to run faces only, without PyTorch (it then
+misses faces hidden by hair: 8/23 exposed on one clip)."""
 
 DEFAULT_VISION_EVERY = 3
 """Detect on every 3rd frame (the tracker carries boxes between): still 0 faces exposed on the

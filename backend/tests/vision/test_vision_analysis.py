@@ -127,7 +127,10 @@ def test_two_detectors_of_one_kind_run_side_by_side(square_clip: Path) -> None:
 
 def test_default_detectors_come_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("VIBE_VISION_DETECTORS", raising=False)
-    assert config.vision_detectors() == ["tv-frcnn-mobile", "yunet:weights=@yunet,grow=2.6"]
+    assert config.vision_detectors() == [
+        "tv-frcnn-mobile",
+        "yunet:weights=@yunet,threshold=0.6,grow=2.2",
+    ]
     monkeypatch.setenv("VIBE_VISION_DETECTORS", f" {RED_FACE} ; stub:color=blue ")
     assert config.vision_detectors() == [RED_FACE, "stub:color=blue"]
     assert VisionAnalysis.default().detectors == [RED_FACE, "stub:color=blue"]
@@ -214,5 +217,5 @@ def test_the_default_set_finds_people_so_it_adds_head_boxes(
 ) -> None:
     monkeypatch.delenv("VIBE_VISION_DETECTORS", raising=False)
     default = VisionAnalysis.default()
-    assert default.detectors == ["tv-frcnn-mobile", "yunet:weights=@yunet,grow=2.6"]
+    assert default.detectors == ["tv-frcnn-mobile", "yunet:weights=@yunet,threshold=0.6,grow=2.2"]
     assert default.stitch is not None and default.heads is not None

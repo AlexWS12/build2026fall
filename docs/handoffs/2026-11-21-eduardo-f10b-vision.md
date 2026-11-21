@@ -57,12 +57,23 @@ status: in progress
 - **All three labelled clips, current defaults** (`benchmark report`): YuNet grow 2.6 alone exposes 0/39, 7/23 and 0/42; with the person detector and head boxes, 0/39, 0/23 and 0/42. The only faces YuNet alone left visible were hidden by hair.
 
 ## Decisions made
-- **D-022 (Proposed, in use), the app's vision default:** `tv-frcnn-mobile` + YuNet `grow=2.6`, every 3rd frame, stitched, with head boxes (`config.py`: `VIBE_VISION_DETECTORS`, new `VIBE_VISION_EVERY`). Eduardo chose it for now from the three-clip face scores, to revisit when the team weighs in or a GPU bake-off (RF-DETR + EgoBlur, D-015) has numbers. It needs PyTorch: without it, Analyse is a 503 that says to install it, or to set YuNet only.
+- **D-022 (Proposed, in use), the app's vision default:** `tv-frcnn-mobile` + YuNet threshold 0.6 `grow=2.2`, every 3rd frame, stitched, with head boxes (`config.py`: `VIBE_VISION_DETECTORS`, new `VIBE_VISION_EVERY`). Eduardo chose it for now from the three-clip face scores, to revisit when the team weighs in or a GPU bake-off (RF-DETR + EgoBlur, D-015) has numbers. It needs PyTorch: without it, Analyse is a 503 that says to install it, or to set YuNet only.
 - **"Blur people" stays in the demo with a stated limit:** up to 21% of labelled person boxes exposed (pair-backpacks-behind 14/66). Mention it as a known blocker when showing it.
-- Head-box shape and YuNet `grow=2.6` are defaults in code (`HeadSettings`, `DEFAULT_VISION_DETECTORS`), covered by D-022.
+- Head-box shape and YuNet threshold 0.6 / `grow=2.2` are defaults in code (`HeadSettings`, `DEFAULT_VISION_DETECTORS`), covered by D-022.
 
 ## Next steps
-- **Over-masking on crowds, found while checking D-022 in the app:** on crowd-orange, "blur all faces" with the new default blurs most of the frame. 127 of 740 face boxes are over 5% of the frame. 75 of those are low-confidence YuNet detections (0.30–0.62) grown 2.6x, the biggest 44% of the frame; the rest are head boxes. Measure masked area per frame, and try YuNet threshold 0.6 with the head boxes covering the misses.
+- **Over-masking, measured** (new `masked` / `masked outside` columns in `benchmark report`: share of the frame inside a padded mask at the scored moments, on a 200x200 grid). With the first D-022 default (YuNet threshold 0.3, grow 2.6), crowd-orange had 57.5% of the frame masked, and the export blurred nearly all of it. Settings that keep 0 faces exposed on all three clips (people + head boxes, every 3, stitched):
+
+  | YuNet | trio-street-outfits | trio-sidewalk-totes | crowd-orange |
+  |---|---|---|---|
+  | threshold 0.3, grow 2.6 | 20.2% | 41.0% | 57.5% |
+  | threshold 0.45, grow 2.6 | 19.4% | 34.0% | 50.4% |
+  | threshold 0.6, grow 2.6 | 18.9% | 28.8% | 46.5% |
+  | **threshold 0.6, grow 2.2 (new default)** | **17.4%** | **27.6%** | **42.4%** |
+  | threshold 0.6, grow 1.8 | 16.4% | 26.1% | 39.5%, but 1/42 face exposed |
+
+  On crowd-orange, YuNet's faces and the head boxes each mask about a third of the frame on their own. Smaller head boxes (width 0.8 or height 0.25) leak 1–4 of the 21 trio-sidewalk-totes faces, so they stay full width, top 30%. In the app, the new default's export blurs the heads and leaves bodies and the street visible; before, nearly the whole frame was blurred.
+- **Masked share undercounts the export:** the renderer holds a lost track's last box over the whole range, which the metric doesn't see. A metric from the render's mask audit would be more honest.
 - Team review of D-022 (Proposed): is about 0.3 s/frame acceptable on laptops, or should tier 0 default to YuNet only?
 - People: exposure up to 21% with tv-frcnn-mobile at every 3. Try every 1 and a lower `min_conf` with `retrack` and `benchmark offline` before calling "blur people" safe.
 - GPU bake-off of D-015's RF-DETR + EgoBlur with `benchmark offline`, on the same labelled clips.
