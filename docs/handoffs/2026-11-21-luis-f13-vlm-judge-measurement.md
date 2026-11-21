@@ -80,6 +80,17 @@ Per case (right / wrong-no / wrong-yes / unsure): neon green jacket 2/0/0/1; ora
 - **Not tested:** Qwen3.5 (D-020's proposal: banned on HPG), Gemma 4 E4B, InternVL3.5-4B, anything on the 5070.
 - **Scale:** at ~5.3 s/track, 677 tracks would take about an hour. That is arithmetic on the measured mean, not a measured run. Stitching fragmented tracks (F-10b) or fewer judge calls would be needed for long videos.
 
+## Run in the real app (manual, 2026-11-21, one clip)
+Not a benchmark: one clip, a few requests, nothing repeated. It shows the whole path works and what breaks.
+
+**Setup:** backend with `VIBE_BACKEND=remote`, `VIBE_REMOTE_HOSTS=localhost`, `VIBE_VLM_MODEL=gemma3:12b` and the SSH tunnel to the L4 on HiPerGator; UI at `localhost:5173`. Clip: `pexels-8126705.mp4` (trio-street-outfits), uploaded through `POST /api/projects`. Tracks from `python -m vibe.modules.vision analyze ... -d tv-frcnn-mobile --tracker bytetrack --min-conf 0.7 --max-gap 2`, then `retrack ... --min-conf 0.85 --iou-match 0.2 --max-gap 3` (8 person tracks), marked as the clip's default. The laptop is an RTX 4050 6 GB (the detector ran on it, 30 ms per sampled frame).
+
+- **The path works end to end.** "blur the person in a neon green jacket" went chat → planner → `find_by_description` → VLM through the tunnel → `add_mask`, in about 20 s for 8 tracks, and showed in the UI. Export to MP4 worked (192 s and 235 s for an 11 s 1080p clip, two runs).
+- **The judge picks the right person with specific wording.** Asked with the real descriptions, the three long tracks each got exactly one `yes`: "in a neon green jacket" → trk_13, "in an orange jacket" → trk_14, "in a white denim jacket" → trk_15, and `no` (or `unsure` once) for the other two. I did not check by eye that trk_13 is the green jacket; the three tracks are the three people.
+- **Wording matters, and it matters most for "everyone except".** "in orange" said `yes` for two people (the orange jacket and the man in the white denim jacket, who also wears an orange beanie) and "wearing orange" said `yes` for all three. With `everyone except`, a `yes` that is too generous leaves someone unmasked. "in an orange jacket" gave the right split. This is the wrong-yes direction that D-020's criterion does not cover (see the caveats above).
+- **The export did not leave the orange-jacket man visible, and the judge is not why.** Five of the eight person tracks are fragments (1 keyframe, or under 2 s). Tracks 5, 6 and 7 are one-keyframe duplicates at t=0 with exactly the same boxes as tracks 13, 14 and 15. They are `unsure` (fewer than 3 crops), so they are masked, and the renderer keeps masking their last box for the whole video ("lost, so its nearest known box stays masked"). That box is where the man starts, so he stays covered. In a frame at 4 s of both exports he is still covered; with the literal "in orange" wording the denim-jacket man is the one left visible. "blur the person in a neon green jacket" blurred 7 of 8 tracks for the same reason.
+- **Per-track speed in the app** was in line with the measurement (about 20 s for 8 tracks, 3 of them real).
+
 ## Decisions made
 - **No default model.** `VIBE_VLM_MODEL` must be set; D-020 stays Proposed until someone measures the candidates.
 - **Strict parsing:** anything other than exactly yes/no/unsure becomes `unsure`.
@@ -93,6 +104,9 @@ Per case (right / wrong-no / wrong-yes / unsure): neon green jacket 2/0/0/1; ora
 - Run the same truth file on the D-020 candidates that are allowed where they run: Qwen3.5-4B locally or on the 5070 (not HPG), Gemma 4 E4B on HPG, and compare the counts side by side, with hardware stated.
 - Add more consented clips (the F-09b clips have `consent_cloud: false`, so they can't go to a third party) so the matching-track count is large enough to say something about a rate.
 - Decide how to cut judge calls on long videos (F-10b stitching, or one call per merged track).
+- **Fix the fragment problem before "everyone except" is usable in the app:** drop one-keyframe tracks (or the duplicates `bytetrack` makes at frame 0) before judging, or stitch tracks (F-10b). That is tracker territory (F-10), so tell its owner first. Until then `unsure` fragments blur large parts of the frame.
+- Try the same requests with several wordings and put the ones that work in the "what you can say" examples ("in an orange jacket", not "in orange").
+- Consider warning in the chat reply when a `yes` is broad (several people match, or `exclude` is on and more than one track says `yes`).
 - Document `VIBE_VLM_MODEL` / `VIBE_VLM_URL` in the README (not touched here).
 - Post the `config.py` heads-up to the team; ask whether to add the HiPerGator approval to the decisions log.
 
@@ -100,6 +114,9 @@ Per case (right / wrong-no / wrong-yes / unsure): neon green jacket 2/0/0/1; ora
 - **The clips are F-09b Pexels clips with `consent_cloud: false` (D-017).** `third-party` runs are refused by design. The videos and the `data/` store are gitignored and must be re-registered on each machine.
 - **Qwen/DeepSeek-type models are banned on HiPerGator** (UF policy, Fla. Stat. §288.860); Gemma, Llama, Mistral are allowed. That is why D-020's first choice couldn't be tested there.
 - **HPG workflow:** eduVPN, then an OOD Console job on `hpg-turin` (L4 23 GB, `gpu:1`), `ml ollama`, `ollama serve` (redirect is `> ollama.log 2>&1 &`), then `ssh -L 11434:localhost:11434` through the jump host. The node name changes every session. `ollama` only exists on the node, not on the laptop or in a fresh shell without `ml ollama`.
+- **The API only reads the analysis cache.** `POST /api/projects/{id}/analysis` has no detector behind it on any backend, so a video nobody analysed gets 503. To try the app on a clip, run `python -m vibe.modules.vision analyze` (and `default`) on it first. `VIBE_BACKEND` is one global switch: with `remote` the judge goes to `VIBE_VLM_URL` (through the tunnel), and a transcript request would try `VIBE_REMOTE_URL`.
+- **Windows path limit.** The repo lives under a long OneDrive path, and `retrack` with a longer cache file name failed with "No such file or directory" (over 260 characters). I used a short data dir (`VIBE_DATA_DIR=C:\Users\majit\vd`, or `--data-dir` on the vision CLI). Set the same dir for the backend and the CLI, or the app won't see the cache.
+- **Undo undoes the last action of anyone.** The history is shared by the UI and the API. An `undo` sent while someone was also clicking in the UI undid their last `confirm_mask`, not the edit I meant. Test on a fresh project.
 - **The raw results JSON** (`resultado-gemma3-12b.json`) lives outside the repo and is not committed; the numbers above are copied from it.
 - **Windows:** `test_writing_keeps_the_timeline_permissions` fails on Windows (POSIX chmod) with or without these changes.
 - Committed locally on `luis/f13-vlm-judge`; not pushed yet and no PR opened.
