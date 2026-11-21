@@ -992,6 +992,25 @@ def test_export_the_renderer_refuses_is_422_with_the_reason_and_no_file(
     assert projects._busy == set()
 
 
+@pytest.mark.parametrize("backend", ["local", "remote"])
+def test_denoise_export_on_a_backend_without_denoise_is_422_naming_it(
+    client: TestClient,
+    storage: Storage,
+    long_clip: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    backend: str,
+) -> None:
+    project_id = upload(client, long_clip)["project_id"]
+    assert ask(client, project_id, "reduce the noise")["status"] == "applied"
+    monkeypatch.setenv("VIBE_BACKEND", backend)
+
+    response = client.post(f"/api/projects/{project_id}/exports")
+
+    assert response.status_code == 422
+    assert "can't apply denoise" in response.json()["detail"]
+    assert list(storage.open_project(project_id).exports_dir.iterdir()) == []
+
+
 def test_a_render_that_breaks_is_a_500_with_a_fixed_message(
     client: TestClient, long_clip: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

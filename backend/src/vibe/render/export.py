@@ -30,7 +30,7 @@ from vibe.modules.denoise import (
     learn_noise_from_file,
 )
 from vibe.render.audio import DenoiseMix, apply_audio_edits, check_audio, denoise_spans
-from vibe.render.errors import NothingToRender, RenderError
+from vibe.render.errors import NothingToRender, RenderError, UnsupportedEdit
 from vibe.render.frame import FrameRenderer, RenderIssue
 from vibe.render.mask_report import MaskAudit, audit_masks
 from vibe.video import AudioInfo, FrameIndex, VideoInfo, VideoReader, iter_audio_chunks, probe
@@ -121,8 +121,8 @@ def _profile(
         return None
     try:
         check_backend()
-    except DenoiseError as e:
-        raise RenderError(f"can't apply denoise: {e}") from e
+    except DenoiseError as e:  # refused before anything is written, like any unsupported edit
+        raise UnsupportedEdit(f"can't apply denoise: {e}") from e
     rate, layout = _audio_format(info.audio)
     profile = given(rate, layout) if given else learn_noise_from_file(source, rate, layout)
     channels = 1 if layout == "mono" else 2

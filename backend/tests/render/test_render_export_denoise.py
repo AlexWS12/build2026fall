@@ -14,7 +14,7 @@ import pytest
 from vibe.contract import AddAudioFilter, Cut, Op, OpLog, TimelineState, TimeRange
 from vibe.modules.cache import cached_keys
 from vibe.modules.denoise import NoiseProfile, learn_noise_from_file
-from vibe.render import RenderError, export
+from vibe.render import RenderError, UnsupportedEdit, export
 from vibe.render.__main__ import main
 from vibe.storage import Storage
 from vibe.video import extract_audio
@@ -144,7 +144,7 @@ def test_a_backend_that_cant_denoise_fails_before_writing(
 ) -> None:
     monkeypatch.setenv("VIBE_BACKEND", backend)
 
-    with pytest.raises(RenderError, match="isn't built yet"):
+    with pytest.raises(UnsupportedEdit, match="isn't built yet"):
         export(noisy_clip, state_of(denoise()), [], tmp_path / "out.mp4")
     assert not list(tmp_path.iterdir())
 
