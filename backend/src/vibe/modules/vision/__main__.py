@@ -28,12 +28,17 @@ from vibe.modules.vision.analyze import analyze_video, retrack
 from vibe.modules.vision.describe import VideoDescriber, combine
 from vibe.modules.vision.detection import NotInstalled
 from vibe.modules.vision.detectors import DETECTORS, make_detector
+from vibe.modules.vision.stitch import HeadSettings, StitchSettings, post_settings, postprocess
 from vibe.modules.vision.tracking import TRACKERS, Tracker, TrackerSettings
 from vibe.storage import Storage, StorageError
 from vibe.video import VideoError
 
 
 def _tracker_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--stitch", action="store_true", help="join track fragments (F-10b)")
+    parser.add_argument(
+        "--heads", action="store_true", help="uncertain face boxes on heads no face box covers"
+    )
     defaults = TrackerSettings()
     parser.add_argument("--tracker", choices=sorted(TRACKERS), default="iou")
     for name, field in TrackerSettings.model_fields.items():
@@ -50,6 +55,10 @@ def _tracker(args: argparse.Namespace) -> Tracker:
         **{name: getattr(args, name) for name in TrackerSettings.model_fields}
     )
     return TRACKERS[args.tracker](settings)
+
+
+def _post(args: argparse.Namespace) -> tuple[StitchSettings | None, HeadSettings | None]:
+    return (StitchSettings() if args.stitch else None, HeadSettings() if args.heads else None)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -128,9 +137,13 @@ def _analyze(storage: Storage, args: argparse.Namespace) -> int:
     sha = cache.video_sha256(args.video)
     analysis = analyze_video(args.video, detectors, tracker, every=args.every)
     det_key = cache.detections_key(detectors, args.every)
-    trk_key = cache.tracks_key(det_key, tracker.name, tracker.settings)
+    stitch_with, heads = _post(args)
+    trk_key = cache.tracks_key(
+        det_key, tracker.name, tracker.settings, post_settings(stitch_with, heads)
+    )
     cache.save_detections(storage, sha, det_key, analysis.detections)
-    tracks = cache.save_tracks(storage, sha, trk_key, analysis.tracks)
+    tracks = postprocess(analysis.tracks, stitch_with, heads)
+    tracks = cache.save_tracks(storage, sha, trk_key, tracks)
     print(f"video:   {args.video.name} ({sha[:12]})")
     print(f"detections key: {det_key}")
     print(f"tracks key:     {trk_key}")
@@ -142,8 +155,11 @@ def _retrack(storage: Storage, args: argparse.Namespace) -> int:
     sha = cache.video_sha256(args.video)
     detections = cache.load_detections(storage, sha, args.key)
     tracker = _tracker(args)
-    tracks = retrack(detections, tracker)
-    trk_key = cache.tracks_key(args.key, tracker.name, tracker.settings)
+    stitch_with, heads = _post(args)
+    tracks = postprocess(retrack(detections, tracker), stitch_with, heads)
+    trk_key = cache.tracks_key(
+        args.key, tracker.name, tracker.settings, post_settings(stitch_with, heads)
+    )
     tracks = cache.save_tracks(storage, sha, trk_key, tracks)
     print(f"tracks key: {trk_key}")
     _summary(tracks, None, len(detections.frames))

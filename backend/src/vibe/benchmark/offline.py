@@ -30,6 +30,7 @@ from vibe.modules.vision import cache
 from vibe.modules.vision.analyze import analyze_video
 from vibe.modules.vision.detection import NotInstalled
 from vibe.modules.vision.detectors import make_detector
+from vibe.modules.vision.stitch import HeadSettings, StitchSettings, post_settings, postprocess
 from vibe.modules.vision.tracking import TRACKERS, TrackerSettings
 from vibe.storage import Storage
 
@@ -48,6 +49,7 @@ class RunRow(Model):
         default=None, description="The process's peak memory so far (it never goes down)."
     )
     tracks_key: str | None = None
+    post: list[str] = Field(default_factory=list, description='"stitch", "heads": after tracking.')
     tracks_by_label: dict[str, int] = Field(default_factory=dict)
 
 
@@ -68,6 +70,8 @@ def run_one(
     every: int,
     tracker: str = "iou",
     settings: TrackerSettings | None = None,
+    stitch: StitchSettings | None = None,
+    heads: HeadSettings | None = None,
 ) -> RunRow:
     row = RunRow(clip_id=entry.clip_id, detectors=list(specs), every=every, tracker=tracker,
                  status="skipped")  # fmt: skip
@@ -90,9 +94,10 @@ def run_one(
     except RuntimeError as e:  # e.g. a backend error from the model package
         return row.model_copy(update={"status": "failed", "detail": str(e).splitlines()[0]})
     det_key = cache.detections_key(detectors, every)
-    trk_key = cache.tracks_key(det_key, track.name, track.settings)
+    trk_key = cache.tracks_key(det_key, track.name, track.settings, post_settings(stitch, heads))
     cache.save_detections(storage, entry.video.sha256, det_key, result.detections)
-    tracks = cache.save_tracks(storage, entry.video.sha256, trk_key, result.tracks)
+    final = postprocess(result.tracks, stitch, heads)
+    tracks = cache.save_tracks(storage, entry.video.sha256, trk_key, final)
     return row.model_copy(
         update={
             "status": "ran",
@@ -101,6 +106,7 @@ def run_one(
             "seconds_per_frame": round(total / result.frames, 4) if result.frames else None,
             "peak_rss_mb": _peak_rss_mb(),
             "tracks_key": trk_key,
+            "post": [n for n, on in (("stitch", stitch), ("heads", heads)) if on is not None],
             "tracks_by_label": dict(Counter(t.label for t in tracks)),
         }
     )
@@ -113,12 +119,14 @@ def run_offline(
     everies: Sequence[int] = (1,),
     tracker: str = "iou",
     progress: bool = False,
+    stitch: StitchSettings | None = None,
+    heads: HeadSettings | None = None,
 ) -> OfflineReport:
     rows = []
     for entry in entries:
         for specs in sets:
             for every in everies:
-                row = run_one(entry, storage, specs, every, tracker)
+                row = run_one(entry, storage, specs, every, tracker, None, stitch, heads)
                 rows.append(row)
                 if progress:
                     took = f"{row.seconds.get('total', 0):.1f}s" if row.status == "ran" else ""
@@ -154,7 +162,7 @@ def render_markdown(report: OfflineReport, labels: dict[str, ClipLabels] | None 
         rows.append(
             [
                 row.clip_id,
-                " + ".join(row.detectors),
+                " + ".join(row.detectors) + "".join(f" [{p}]" for p in row.post),
                 str(row.every),
                 row.status + (f": {row.detail}" if row.detail else ""),
                 str(row.frames or "-"),

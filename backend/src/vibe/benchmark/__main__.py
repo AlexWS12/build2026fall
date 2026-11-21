@@ -30,6 +30,7 @@ from vibe.benchmark.manifest import (
     load_manifest,
 )
 from vibe.benchmark.report import build_report, render_markdown, render_text
+from vibe.modules.vision.stitch import HeadSettings, StitchSettings
 from vibe.storage import Storage, StorageError
 from vibe.video import VideoError
 
@@ -92,6 +93,8 @@ def main(argv: list[str] | None = None) -> int:
     off.add_argument("--tracker", default="iou")
     off.add_argument("--clip", action="append", help="clip id; repeatable (default: all)")
     off.add_argument("--out", type=Path, help="also write offline.json and offline.md here")
+    off.add_argument("--stitch", action="store_true", help="join track fragments (F-10b)")
+    off.add_argument("--heads", action="store_true", help="head boxes for missed faces (F-10b)")
 
     args = parser.parse_args(argv)
     try:
@@ -209,7 +212,14 @@ def _offline(args: argparse.Namespace) -> int:
     entries = [manifest.get(i) for i in ids]
     sets = [[s.strip() for s in group.split(";") if s.strip()] for group in args.sets]
     report = offline.run_offline(
-        entries, Storage(), sets, args.every or [1], args.tracker, progress=True
+        entries,
+        Storage(),
+        sets,
+        args.every or [1],
+        args.tracker,
+        progress=True,
+        stitch=StitchSettings() if args.stitch else None,
+        heads=HeadSettings() if args.heads else None,
     )
     labels = {
         e.clip_id: lab

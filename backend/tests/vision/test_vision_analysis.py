@@ -159,3 +159,39 @@ def test_remote_runs_vision_on_the_model_server_and_caches_here(
     assert result.source == "remote"
     assert load_tracks(laptop, video.sha256) == load_tracks(server, video.sha256)
     assert load_tracks(laptop, video.sha256)
+
+
+def test_stitch_and_heads_are_settings_only_when_on() -> None:
+    plain = VisionAnalysis([RED_FACE])
+    stitched = VisionAnalysis([RED_FACE], stitch={})
+    both = make_analysis(
+        "vision", VisionAnalysis([RED_FACE], stitch={"gap": 1.0}, heads={}).settings
+    )
+
+    assert "stitch" not in plain.settings and "heads" not in plain.settings
+    assert len({plain.key, stitched.key, both.key}) == 3
+    assert stitched.key.startswith("vision-stub-k1-iou-stitch-")
+    assert both.stitch is not None and both.stitch.gap == 1.0 and both.heads is not None
+
+
+def test_the_app_stitches_and_adds_heads_only_with_a_person_detector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VIBE_VISION_DETECTORS", RED_FACE)
+    faces_only = VisionAnalysis.default()
+    monkeypatch.setenv("VIBE_VISION_DETECTORS", f"{RED_FACE};stub:color=blue,label=person")
+    with_people = VisionAnalysis.default()
+
+    assert faces_only.stitch is not None and faces_only.heads is None
+    assert with_people.stitch is not None and with_people.heads is not None
+
+
+@pytest.mark.parametrize(
+    ("spec", "people"),
+    [("rfdetr-s", True), ("tv-frcnn-mobile", True), ("yunet:weights=@yunet", False),
+     ("egoblur-face", False), ("stub", True), (RED_FACE, False), ("nope", False)],
+)  # fmt: skip
+def test_finds_people(spec: str, people: bool) -> None:
+    from vibe.modules.vision.detectors import finds_people
+
+    assert finds_people(spec) is people

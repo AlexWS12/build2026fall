@@ -24,7 +24,14 @@ from vibe.modules.cache import ModuleError, cache_key
 from vibe.modules.vision.analyze import analyze_video
 from vibe.modules.vision.cache import namespaced
 from vibe.modules.vision.detection import NotInstalled
-from vibe.modules.vision.detectors import check_spec, make_detector, parse_spec, weights_refs
+from vibe.modules.vision.detectors import (
+    check_spec,
+    finds_people,
+    make_detector,
+    parse_spec,
+    weights_refs,
+)
+from vibe.modules.vision.stitch import HeadSettings, StitchSettings, postprocess
 from vibe.modules.vision.tracking import TRACKERS, TrackerSettings
 
 DEFAULT_EVERY = 1
@@ -54,6 +61,8 @@ class VisionAnalysis(Analysis):
         every: int = DEFAULT_EVERY,
         tracker: str = DEFAULT_TRACKER,
         tracker_settings: dict[str, object] | None = None,
+        stitch: dict[str, object] | None = None,
+        heads: dict[str, object] | None = None,
     ) -> None:
         detectors = [str(d).strip() for d in detectors if str(d).strip()]
         if not detectors:
@@ -65,11 +74,19 @@ class VisionAnalysis(Analysis):
         if tracker not in TRACKERS:
             raise ValueError(f"unknown tracker {tracker!r}; known: {', '.join(sorted(TRACKERS))}")
         settings = TrackerSettings(**(tracker_settings or {}))  # validates before any key exists
+        self.stitch = None if stitch is None else StitchSettings(**stitch)
+        self.heads = None if heads is None else HeadSettings(**heads)
+        post: dict[str, object] = {}  # only when on, so keys made without them stay the same
+        if self.stitch is not None:
+            post["stitch"] = self.stitch.model_dump()
+        if self.heads is not None:
+            post["heads"] = self.heads.model_dump()
         super().__init__(
             detectors=detectors,
             every=every,
             tracker=tracker,
             tracker_settings=settings.model_dump(),
+            **post,
         )
         self.detectors = detectors
         self.every = every
@@ -78,14 +95,19 @@ class VisionAnalysis(Analysis):
 
     @classmethod
     def default(cls) -> Self:
-        """What the app runs: ``VIBE_VISION_DETECTORS`` (YuNet faces unless set)."""
-        return cls(config.vision_detectors())
+        """What the app runs: ``VIBE_VISION_DETECTORS`` (YuNet faces unless set), with fragments
+        stitched, and head boxes for faces the face detector missed when a person detector runs.
+        """
+        specs = config.vision_detectors()
+        people = any(finds_people(spec) for spec in specs)
+        return cls(specs, stitch={}, heads={} if people else None)
 
     @property
     def name(self) -> str:
         """E.g. ``vision-yunet-k1-iou``: readable, the digest after it tells settings apart."""
         names = "_".join(parse_spec(d)[0] for d in self.detectors)
-        return f"vision-{names}-k{self.every}-{self.tracker}"
+        post = ("-stitch" if self.stitch else "") + ("-heads" if self.heads else "")
+        return f"vision-{names}-k{self.every}-{self.tracker}{post}"
 
     @property
     def key(self) -> str:
@@ -103,5 +125,5 @@ class VisionAnalysis(Analysis):
         except NotInstalled as e:  # a missing package or weights file: say how to get it
             raise VisionNotInstalled(f"vision can't run here: {e}") from e
         result = analyze_video(video_path, detectors, tracker, every=self.every)
-        tracks = namespaced(result.tracks, self.key)
+        tracks = namespaced(postprocess(result.tracks, self.stitch, self.heads), self.key)
         return [t.model_dump(mode="json", exclude_none=True) for t in tracks]

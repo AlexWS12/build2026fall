@@ -81,3 +81,13 @@ def test_markdown_states_hardware_and_tracks_per_labelled_target(
     (labels_dir / f"{entry.clip_id}.json").write_text(labels.model_dump_json())
     scored = build_report(manifest_path=manifest_path, labels_dir=labels_dir, storage=storage)
     assert [s.tracks_key for s in scored.scores] == [report.rows[0].tracks_key]
+
+
+def test_stitched_runs_get_their_own_key(entry: ClipEntry, storage: Storage) -> None:
+    from vibe.modules.vision.stitch import StitchSettings
+
+    plain = offline.run_one(entry, storage, [STUB], every=1)
+    stitched = offline.run_one(entry, storage, [STUB], every=1, stitch=StitchSettings())
+
+    assert stitched.status == "ran" and stitched.post == ["stitch"]
+    assert stitched.tracks_key != plain.tracks_key and stitched.tracks_key.split("-")[-2] == "post"

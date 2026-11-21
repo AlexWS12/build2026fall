@@ -73,16 +73,29 @@ def detections_key(detectors: Sequence[Detector], every: int) -> str:
     return _key(f"{'_'.join(names)}-k{every}", {"detectors": settings, "every": every})
 
 
-def tracks_key(detections_key: str, tracker: str, settings: TrackerSettings) -> str:
+def tracks_key(
+    detections_key: str,
+    tracker: str,
+    settings: TrackerSettings,
+    post: dict[str, object] | None = None,
+) -> str:
     """E.g. ``rfdetr-l_egoblur-face-k1-3f9a1c2e-iou-7b0d4e11``.
 
     The final hash covers the whole detections key, not only the tracker: it becomes the prefix of
     every track id (``namespaced``), so two detector runs must never share it, and a long key that
     gets cut to fit the 128 characters still ends in a hash that tells the runs apart.
+
+    ``post`` (stitching, head boxes: ``stitch.post_settings``) adds ``-post`` and joins the hash;
+    without it, keys are what they always were.
     """
+    if post is None:
+        return _key(
+            f"{detections_key}-{tracker}",
+            {"detections": detections_key, "tracker": tracker, **settings.model_dump()},
+        )
     return _key(
-        f"{detections_key}-{tracker}",
-        {"detections": detections_key, "tracker": tracker, **settings.model_dump()},
+        f"{detections_key}-{tracker}-post",
+        {"detections": detections_key, "tracker": tracker, **settings.model_dump(), "post": post},
     )
 
 

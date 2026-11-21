@@ -143,6 +143,18 @@ def resolve_options(name: str, raw: dict[str, str]) -> dict[str, object]:
     return {k: _convert(name, k, v, params[k].annotation) for k, v in raw.items()}
 
 
+def finds_people(spec: str) -> bool:
+    """Whether the detector can report ``person`` boxes (COCO or open-vocabulary models, or the
+    stub told to call its blocks people)."""
+    name, raw = parse_spec(spec)
+    info = DETECTORS.get(name)
+    if info is None:
+        return False
+    if name == "stub":
+        return raw.get("label", "person") == "person"
+    return info.finds.startswith(("COCO", "anything"))
+
+
 def check_spec(spec: str) -> None:
     """Raise ``ValueError`` for an unknown detector, a bad option or an unknown ``@`` model,
     without importing any model package."""
