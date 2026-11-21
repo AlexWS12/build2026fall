@@ -59,7 +59,7 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 |---|---|---|---|---|---|
 | F-40 | Agent reports what it did in plain words + raw tool calls | Must | F-05 | done | alex, `alex/demo-wiring-redesign` |
 | F-41 | Review queue for low-confidence results | Must | F-02, F-07 | done | paulallain, `paulallain/f41-review-queue`; Knight Hacks "Check" |
-| F-42 | Hand fixes: select, change effect, remove, drag/correct box | Must | F-07, F-11 | idea | Through the same toolbox |
+| F-42 | Hand fixes: select, change effect, remove, drag/correct box | Must | F-07, F-11 | in progress | Through the same toolbox. Remove a mask: eduardo, `eduardo/f10b-vision` (#44); change effect and correct a box still open |
 | F-43 | Undo per request + version history | Must | F-02 | done | alex, `alex/demo-wiring-redesign`: undo/redo done. jonathan, `jonathan/f43-history-list`: history list in the UI, ready for review |
 | F-44 | Preview-before-apply for heavy edits (inpainting, cuts) | Should | F-04 | idea | |
 
@@ -229,7 +229,8 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 | F-13 Targeting by description ("the person in red", "everyone except me") | luis | luis/f13-targeting-by-description | A request picks the right tracks on a labeled clip; unsure = masked | first cut done (#33); VLM judge (D-020) → Sprint 5 |
 | F-40 Agent reports what it did in plain words + raw tool calls | alex | alex/demo-wiring-redesign | The chat shows a plain summary and the tool calls for each applied request | done (#32) |
 | F-41 Review queue for low-confidence results (uses `RenderResult.issues` and the mask audit) | paulallain | paulallain/f41-review-queue | Low-confidence stretches show in a queue; confirming or fixing one writes an op | done (#36) |
-| F-42 Hand fixes: select, change effect, remove, correct a box (through the toolbox) | _open_ | | A hand fix from the UI is an op in the timeline and can be undone | planned |
+| F-42 (remove a mask) Click a mask in the player and remove it: hand-only `remove_mask` tool, `POST .../masks/remove` | eduardo | eduardo/f10b-vision | A hand fix from the UI is an op in the timeline and can be undone | in review (#44) |
+| F-42 (change effect, correct a box) The rest of the hand fixes, through the same toolbox | _open_ | | A hand fix from the UI is an op in the timeline and can be undone | planned |
 | F-43 Undo per request + version history in the UI | alex, jonathan | alex/demo-wiring-redesign, jonathan/f43-history-list | Undo removes one whole request; history lists the requests | done (#32, #37) |
 
 **Risks / dependencies:**
