@@ -30,7 +30,7 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 ### Visual edits
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
-| F-10 | Find and track people, faces, plates, named objects (cached per video) | Must | F-03, F-08 | in progress | Knight Hacks: EgoBlur + YOLOE; D-015 proposes RF-DETR + EgoBlur + ByteTrack (no AGPL). Pipeline, stub, cache and detector adapters on `luis/f10-detect-track`; model comparison next |
+| F-10 | Find and track people, faces, plates, named objects (cached per video) | Must | F-03, F-08 | in progress | Knight Hacks: EgoBlur + YOLOE; D-015 proposes RF-DETR + EgoBlur + ByteTrack (no AGPL). Pipeline, stub, cache and detector adapters on `luis/f10-detect-track`; model comparison next | F-10b (eduardo, `eduardo/f10b-vision`): the app's Analyse button runs it (stub / local / remote), stitching, head fallback, CPU bake-off
 | F-11 | Blur / pixelate / black-box targets | Must | F-04, F-10 | done | Mask audit: jonathan, `jonathan/f11-mask-effects`; cached tracks + export tests: christopher, `christopher/f11-track-loading` (merged into #29) |
 | F-12 | Time-bounded edits ("first half", "after 0:30") | Must | F-05 | done | `resolve_time` / `resolve_range` (jean/f12-time-bounded-edits) |
 | F-13 | Targeting by description ("the person in red", "everyone except me") | Must | F-10 | in progress | VLM yes/no per track |
@@ -222,7 +222,10 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 | Export route + source-video route + Export button in the UI. Shared file (API routes) | alex | alex/demo-wiring-redesign | Upload → request → Export → the MP4 has the edit; route test in stub mode | done (#32) |
 | F-33b Renderer applies `audio_filters` (denoise) + pick the local/remote model | nickolas | nickolas/f33b-render-audio-filters | A test exports a clip with a denoise span, no GPU | in progress (renderer part); the model pick is a follow-up |
 | F-09b Consented clips + labels in `clips.json` / `labels/` | eduardo | eduardo/f09b-pexels-clips | `benchmark report` scores an F-10 run against real labels | in progress (#35: 9 clips, 5 labelled) |
-| F-10b Detector bake-off → decision row, then harden the winner (stitching, face↔person, fit under `run_analysis`) | _open_ | | Report table with hardware stated → decision row | planned |
+| F-10b (wiring) Vision as an F-08 analysis: the Analyse button runs `VIBE_VISION_DETECTORS` through stub / local / remote, YuNet weights by name (`@yunet`), `vision` extra | eduardo | eduardo/f10b-vision | Upload → Analyse → "blur faces" applied with real tracks (`VIBE_BACKEND=local`); stub tests pass with no GPU | in progress |
+| F-10b (bake-off) `benchmark offline`: detector sets × strides, timed and cached for `report` → decision row | eduardo | eduardo/f10b-vision | Report tables with hardware stated → decision row (Proposed) | in progress (CPU numbers only: Apple M2, 8 GB) |
+| F-10b (hardening) Stitch track fragments; head boxes for faces the face detector missed (fail closed) | eduardo | eduardo/f10b-vision | Fewer tracks per labelled target in `benchmark offline`, exposure not worse in `report` | in progress |
+| F-09b (face labels) `label-frames` / `import-labels` helper, then face boxes on the clips that show faces | eduardo | eduardo/f10b-vision | `report` scores face tracks on the labelled clips | in progress (tool done; labelling to do) |
 | F-13 Targeting by description ("the person in red", "everyone except me") | luis | luis/f13-targeting-by-description | A request picks the right tracks on a labeled clip; unsure = masked | first cut done (#33); VLM judge (D-020) → Sprint 5 |
 | F-40 Agent reports what it did in plain words + raw tool calls | alex | alex/demo-wiring-redesign | The chat shows a plain summary and the tool calls for each applied request | done (#32) |
 | F-41 Review queue for low-confidence results (uses `RenderResult.issues` and the mask audit) | paulallain | paulallain/f41-review-queue | Low-confidence stretches show in a queue; confirming or fixing one writes an op | done (#36) |
