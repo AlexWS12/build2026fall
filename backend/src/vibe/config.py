@@ -42,9 +42,12 @@ def models_dir() -> Path:
     return Path(value) if value else data_dir() / "models"
 
 
-DEFAULT_VISION_DETECTORS = ("yunet:weights=@yunet",)
-"""YuNet faces: the one detector a CPU-only laptop (tier 0) runs. A starting point until the
-F-10b bake-off picks the default; it finds faces only, so "blur people" needs a person detector."""
+DEFAULT_VISION_DETECTORS = ("yunet:weights=@yunet,grow=2.6",)
+"""YuNet faces: the one detector a CPU-only laptop (tier 0) runs. Its boxes cover only the inner
+face, so they're grown 2.6x to cover the whole face: on the one face-labelled clip so far
+(trio-street-outfits, `benchmark report`, Apple M2) that took exposure from 39/39 to 0/39. A
+starting point until more clips are labelled; it finds faces only, so "blur people" needs a person
+detector."""
 
 
 def vision_detectors() -> list[str]:

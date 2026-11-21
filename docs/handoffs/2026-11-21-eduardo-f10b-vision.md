@@ -44,14 +44,18 @@ status: in progress
   - `2026-11-21-yunet-m2/offline.md`: YuNet at threshold 0.3 vs 0.6, every 1 vs 3, on all 9 clips. YuNet took 0.017–0.044 s/frame, with a peak of 383 MB. Track counts drop about 3–4× from 0.3 to 0.6, e.g. crowd-dark-coats every 1: 2551 → 700.
   - `2026-11-21-yunet-m2/stitch.md`: the same detections re-tracked with `--stitch` drop by about 30–70% (crowd-dark-coats 0.3/every 1: 2551 → 708; pair-backpacks-behind 118 → 59).
   - `2026-11-21-frcnn-yunet-m2/offline.md`: `tv-frcnn-mobile` (people) + YuNet 0.6, every 3, `--stitch --heads`. 0.27–0.37 s/frame, peak 1132 MB, all 9 clips ran. `benchmark report` (`2026-11-21-report-m2/report.md`, IoU ≥ 0.5, covered ≥ 90% after 0.15 padding) scores **people** on the 5 labelled clips: recall 80.7–100%, exposed 0–21.2% of labelled person boxes (pair-backpacks-behind 14/66 = 21.2%, trio-sidewalk-totes 3/27 = 11.1%, hikers-backpacks 5/57 = 8.8%), precision 21–97%. A person exposed means "blur people" would leave someone visible at that moment, so person masking is **not privacy-safe yet** on these settings. COCO also fires on many other labels (cars, handbags, traffic lights...); those don't affect face or person masks.
-- **No quality numbers yet.** The clips have person labels only, so `benchmark report` can't score faces until face labels exist. Fewer tracks doesn't prove better masks: a wrong stitch, or a higher threshold missing faces, only shows up as exposure in `report`.
+- **Faces, first labelled clip** (trio-street-outfits: 3 people, 39 face boxes drawn with `label-frames`, `benchmark report`, `data/bench/report-faces/`):
+  - YuNet as it was: **39/39 exposed (100%)** at every threshold, stride and with or without stitching. It finds the faces (confidence about 0.92), but its boxes cover only eyes to mouth, so a mask leaves forehead, cheeks and chin visible.
+  - New `grow` option on YuNet (scales each box around its centre): 1.5 → 25/39 exposed, 1.8 → 13/39, 2.2 → 2/39, **2.6 → 0/39** (threshold 0.3 or 0.6, every 1 or 3, stitched). Recall at IoU 0.5 drops to 5.1% at 2.6 because the boxes are much bigger than the label; for masking, exposure is what counts.
+  - tv-frcnn-mobile + YuNet 0.6 (no grow) + head boxes, every 3: 1/39 exposed.
+  - One clip and 39 boxes only. Label more clips before trusting it.
 
 ## Decisions made
-- None at architecture level. The default stays YuNet at threshold 0.3 (more masking, fails closed) until face labels can show whether 0.6 leaks faces. A decision row (tier-0 default, and what it means for D-015) waits for those scores, and will go to the team as Proposed.
+- The app's default is now `yunet:weights=@yunet,grow=2.6` (threshold stays 0.3, fails closed), from the trio-street-outfits scores above. It's a `config.py` default, not a decision row: one clip isn't enough for that. A decision row (tier-0 default, and what it means for D-015) waits for those scores, and will go to the team as Proposed.
 
 ## Next steps
 - People: exposure up to 21% with tv-frcnn-mobile at every 3. Try every 1, a lower `min_conf`, and stitching off, with `retrack` and `benchmark offline` on the same clips, before trusting "blur people".
-- Label faces with `label-frames`, starting with trio-street-outfits, trio-sidewalk-totes and crowd-orange. Then run `benchmark report` and pick a threshold, stride and stitching from exposure first.
+- Label faces with `label-frames` on trio-sidewalk-totes and crowd-orange (trio-street-outfits is done), then check `grow=2.6` still exposes nothing there. Then run `benchmark report` and pick a threshold, stride and stitching from exposure first.
 - Decision row (Proposed) with those numbers. Then set the `VIBE_VISION_DETECTORS` default.
 - Plates: no clip has any; add licensed clips with plates before claiming anything for them.
 - A background job for Analyse on long clips (today the request waits and the project is busy, 409).
