@@ -1,0 +1,65 @@
+---
+author: eduardo
+date: 2026-11-21
+branch: eduardo/f10b-vision
+features: [F-10b, F-09b]
+base: v0.4.0 + #40 @ 97dbb80
+head: df928f4
+status: in progress
+---
+
+# The Analyse button finds faces for real (YuNet on CPU), plus stitching, head boxes, a label helper and a CPU bake-off
+
+## What changed
+- **Vision is an F-08 analysis** (`modules/vision/analysis.py`, `VisionAnalysis`, registered as `vision`). `POST /api/projects/{id}/analysis` now runs the detectors in `VIBE_VISION_DETECTORS` (default `yunet:weights=@yunet`, faces only) through `run_analysis`.
+  - `stub` still only replays the cache (503 if nothing is cached).
+  - `local` runs the detectors here, and `remote` runs them on the model server (tested in-process only).
+  - The result becomes the video's default track set.
+  - A missing package or missing weights is a 503 that says what to install. A bad spec is a 503 that points to the server log.
+- **After a model comparison** left several track sets and no default, Analyse runs (or replays) the app's own set and marks it as the default, instead of a 503.
+- **Weights by name:** a detector option `weights=@yunet` resolves to the `models.json` entry's file. Every machine and the model server build the same key, and the key covers the pinned sha256. YuNet's sha256 is now pinned (the file is 232,589 bytes).
+- **New optional extra** `vision = ["opencv-python-headless>=4.9"]` (shared file: `pyproject.toml` / `uv.lock`). Install it with `uv sync --extra vision`.
+- **Hardening** (`modules/vision/stitch.py`):
+  - `stitch` joins same-label fragments when the next one starts ≤ 1.5 s later where the last was heading.
+  - `head_fallback` adds an `uncertain` face box on a tracked person's head wherever no face box covers it (fail closed).
+  - Both enter the tracks key only when on (`--stitch` / `--heads` on `analyze`, `retrack` and `benchmark offline`).
+  - The app stitches by default, and adds head boxes when a person detector is in the set.
+- **Label helper (F-09b):**
+  - `python -m vibe.benchmark label-frames CLIP_ID [--label face]` writes a self-contained `label.html` under `data/labels/<clip>/`: one frame a second plus the last, with the label's existing boxes to correct.
+  - `import-labels CLIP_ID FILE` turns the saved JSON into `user` tracks and checks them against the manifest.
+- **Bake-off runner:** `python -m vibe.benchmark offline --set SPECS [--every N] [--stitch] [--heads] [--out DIR]`.
+  - It caches under the CLI keys, so `report` scores the runs.
+  - It records wall time per stage, s/frame, peak memory and tracks per labelled target, with the hardware.
+  - A detector that can't load is a `skipped` row with the reason.
+- API docstring change → `openapi.json` and `frontend/src/api/generated/schema.ts` regenerated. No route arguments or responses changed. **No contract change.**
+
+## How to check it
+- Tests (no GPU): `npm test` → backend 1580+ passed, frontend 108 passed; `npm run lint` clean.
+- Real faces in the app (tier 0 is enough):
+  1. In `backend/`, run `uv sync --extra vision` and `uv run python -m vibe.modules download yunet`.
+  2. Start the backend with `VIBE_BACKEND=local`.
+  3. Open a project, click Analyse, then "blur all faces for the first half", then Export.
+  - Checked on `pair-backpacks-behind` (the rehearsal clip): 118 face tracks, the request was applied, and the MP4 was blurred.
+- Bake-off outputs (under `data/bench/`, gitignored), all from the commands above, on **Apple M2, 8 GB, CPU only. These are not GPU numbers**:
+  - `2026-11-21-yunet-m2/offline.md`: YuNet at threshold 0.3 vs 0.6, every 1 vs 3, on all 9 clips. YuNet took 0.017–0.044 s/frame, with a peak of 383 MB. Track counts drop about 3–4× from 0.3 to 0.6, e.g. crowd-dark-coats every 1: 2551 → 700.
+  - `2026-11-21-yunet-m2/stitch.md`: the same detections re-tracked with `--stitch` drop by about 30–70% (crowd-dark-coats 0.3/every 1: 2551 → 708; pair-backpacks-behind 118 → 59).
+  - `2026-11-21-frcnn-yunet-m2/offline.md`: `tv-frcnn-mobile` (people) + YuNet 0.6, every 3, `--stitch --heads`. 0.27–0.37 s/frame, peak 1132 MB, all 9 clips ran. `benchmark report` (`2026-11-21-report-m2/report.md`, IoU ≥ 0.5, covered ≥ 90% after 0.15 padding) scores **people** on the 5 labelled clips: recall 80.7–100%, exposed 0–21.2% of labelled person boxes (pair-backpacks-behind 14/66 = 21.2%, trio-sidewalk-totes 3/27 = 11.1%, hikers-backpacks 5/57 = 8.8%), precision 21–97%. A person exposed means "blur people" would leave someone visible at that moment, so person masking is **not privacy-safe yet** on these settings. COCO also fires on many other labels (cars, handbags, traffic lights...); those don't affect face or person masks.
+- **No quality numbers yet.** The clips have person labels only, so `benchmark report` can't score faces until face labels exist. Fewer tracks doesn't prove better masks: a wrong stitch, or a higher threshold missing faces, only shows up as exposure in `report`.
+
+## Decisions made
+- None at architecture level. The default stays YuNet at threshold 0.3 (more masking, fails closed) until face labels can show whether 0.6 leaks faces. A decision row (tier-0 default, and what it means for D-015) waits for those scores, and will go to the team as Proposed.
+
+## Next steps
+- People: exposure up to 21% with tv-frcnn-mobile at every 3. Try every 1, a lower `min_conf`, and stitching off, with `retrack` and `benchmark offline` on the same clips, before trusting "blur people".
+- Label faces with `label-frames`, starting with trio-street-outfits, trio-sidewalk-totes and crowd-orange. Then run `benchmark report` and pick a threshold, stride and stitching from exposure first.
+- Decision row (Proposed) with those numbers. Then set the `VIBE_VISION_DETECTORS` default.
+- Plates: no clip has any; add licensed clips with plates before claiming anything for them.
+- A background job for Analyse on long clips (today the request waits and the project is busy, 409).
+- The renderer holds a lost track's box over the whole requested range (fail closed). With many fragments, that piles up into large masked blocks (see the rehearsal export). Stitching helps; the F-50 handoff suggests an OpenCV blur for speed.
+
+## Gotchas
+- **OpenCV and PyAV both bundle `libavdevice` on macOS.** Importing both prints `objc: Class AVFFrameReceiver is implemented in both ...`. Exports and analysis worked here, but it's a known source of rare crashes. Watch for it.
+- **`uv sync` without `--extra vision` removes OpenCV,** and the Analyse button then answers 503 with the install hint.
+- **A bake-off adds track sets to the shared cache.** Analyse handles that now, but `GET .../tracks` and exports answer 503 ("several cached") on that clip until Analyse is pressed or `python -m vibe.modules.vision default` is set.
+- **An app-run analysis keeps only tracks, not raw detections,** so `retrack` works only on CLI or `benchmark offline` runs.
+- **`npm run dev` uses `--kill-others-on-fail`:** when the backend's reloader died during the branch switch, Vite went down with it.
