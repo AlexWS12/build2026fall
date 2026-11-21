@@ -239,6 +239,11 @@ def _mask(match: re.Match[str], steps: _Steps) -> Matched:
         targets, when, follow = described
     else:
         targets = steps.add("find_objects", {"label": _LABELS[noun]})
+        # Each found target is masked while it's tracked (plus the hold either side), not the
+        # whole clip: otherwise every track's last box stays on screen after it ends, and with
+        # one track per face fragment the picture fills with masks over nothing. The benchmark's
+        # exposure counts a target only while its track exists, so it measures exactly this.
+        follow = True
     args: dict[str, Any] = {
         "targets": ref(targets),
         "effect": {"type": _EFFECTS[verb.replace("black", "").strip()]},

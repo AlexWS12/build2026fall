@@ -59,7 +59,9 @@ def _sentence(plan: Plan, step: StepReport, steps: dict[str, StepReport]) -> str
             what = _counted(_label(plan, step, steps), len(args["targets"]))
             effect = args["effect"]["type"]
             tail = " with a black box" if effect == "box" else ""
-            return f"{_MASKED.get(effect, 'Hid')} {what}{tail} ({when})."
+            # A followed mask isn't on for the whole range: each target only while it's seen.
+            follow = ", each while on screen" if args.get("while_tracked") else ""
+            return f"{_MASKED.get(effect, 'Hid')} {what}{tail}{follow} ({when})."
         case "confirm_mask":
             what = _counted(_label(plan, step, steps), len(args["targets"]))
             return f"Marked {what} as checked ({when})."

@@ -247,7 +247,8 @@ class AddMaskArgs(Model):
         description="False: every target stays hidden for the whole range; where the tracker "
         "lost it, its last box is held. True: each target is hidden only while its track "
         "exists (plus at least half a second each side), so the mask follows it and doesn't stay "
-        "behind. For one described target, not for hiding everyone.",
+        "behind. The planner uses it for found targets (blur faces / people / plates) and one "
+        "described target, not for 'everyone except ...', which hides bystanders all along.",
     )
 
 
@@ -386,6 +387,13 @@ def _tracked_ranges(
 
 def add_mask(args: AddMaskArgs, ctx: ToolContext) -> EditResult:
     targets = list(dict.fromkeys(args.targets))  # drop repeats, keep order
+    if args.time_range is not None and ctx.duration is not None:
+        # The requested range first: "blur people after 2:00" on a 1-minute clip must say the
+        # time is past the end, not that nobody is on screen there.
+        try:
+            check_range(args.time_range, ctx.duration)
+        except TimeRangeError as exc:
+            raise TimeRangeError(f"add_mask: {exc}") from None
     if not args.while_tracked:
         ranges: dict[tuple[float, float] | None, list[str]] = {None: targets}
     else:

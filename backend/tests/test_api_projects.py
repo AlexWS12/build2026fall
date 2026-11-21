@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 from vibe.api import projects
 from vibe.api.app import app
-from vibe.contract import Track, Undo
+from vibe.contract import AddMask, Effect, Track, Undo
 from vibe.modules.transcribe import Segment, Transcript, TranscriptAnalysis, Word
 from vibe.modules.vision import save_tracks
 from vibe.modules.vision.cache import default_tracks_key
@@ -407,12 +407,16 @@ def test_blur_with_tracks_in_the_cache_is_applied(
     client: TestClient, storage: Storage, long_clip: Path
 ) -> None:
     project_id = upload(client, long_clip)["project_id"]
-    track_id = analysed(storage, project_id)
+    # A face on screen for the whole clip: "blur faces" follows each track (while_tracked).
+    kf = face().keyframes[0]
+    whole = face().model_copy(update={"keyframes": [kf, kf.model_copy(update={"t": 10})]})
+    sha = storage.open_project(project_id).info.video.sha256
+    track_id = save_tracks(storage, sha, "k-aaaa1111", [whole])[0].track_id
 
     reply = ask(client, project_id, "blur faces from 0:02 to 0:04")
 
     assert reply["status"] == "applied"
-    assert reply["reply"] == "Blurred 1 face (0:02–0:04)."
+    assert reply["reply"] == "Blurred 1 face, each while on screen (0:02–0:04)."
     (span,) = get(client, project_id, "state")["masks"][track_id]
     assert (span["start"], span["end"], span["effect"]["type"]) == (2, 4, "blur")
     assert span["request_id"] == reply["request_id"]
@@ -1022,7 +1026,16 @@ def test_export_masks_with_the_cached_tracks_and_reports_what_it_had_to_guess(
 ) -> None:
     project_id = upload(client, long_clip)["project_id"]
     track_id = analysed(storage, project_id)  # one keyframe at 0 s: lost for the rest
-    ask(client, project_id, "blur faces")
+    # A whole-clip mask (as "everyone except ..." writes): past its track, the box is held.
+    # "blur faces" follows the track instead, so it ends with it and holds nothing.
+    storage.open_project(project_id).append(
+        AddMask(
+            request_id="r_whole",
+            source="agent",
+            targets=[track_id],
+            effect=Effect(type="blur"),
+        )
+    )
     ask(client, project_id, "keep 0:00 to 0:02")
 
     made = export(client, project_id)

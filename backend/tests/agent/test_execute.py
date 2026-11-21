@@ -67,11 +67,14 @@ def test_refs_are_filled_with_the_earlier_steps_results() -> None:
 
     done = run("blur people for the first half", log)
 
-    (op,) = log.ops
-    assert isinstance(op, AddMask)
-    assert op.targets == PEOPLE and len(PEOPLE) > 0
-    assert op.time_range == TimeRange(start=0, end=30)
-    assert done.ok and done.ops == (op,)
+    # "blur people" follows each track, inside the resolved first half (0-30 s).
+    assert done.ok and done.ops == tuple(log.ops)
+    assert all(isinstance(op, AddMask) for op in log.ops)
+    assert sorted(t for op in log.ops for t in op.targets) == sorted(PEOPLE) and PEOPLE
+    for op in log.ops:
+        assert op.time_range is not None
+        assert 0 <= op.time_range.start and op.time_range.end is not None
+        assert op.time_range.end <= 30
 
 
 def test_step_reports_show_the_resolved_arguments_and_compact_results() -> None:
@@ -85,6 +88,7 @@ def test_step_reports_show_the_resolved_arguments_and_compact_results() -> None:
         "targets": PEOPLE,
         "effect": {"type": "blur"},
         "time_range": {"start": 0.0, "end": 30.0},
+        "while_tracked": True,
     }
     assert mask.result == {"op_ids": [done.ops[0].op_id]}
 
