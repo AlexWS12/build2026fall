@@ -74,7 +74,8 @@ def test_head_fallback_covers_heads_no_face_box_covers() -> None:
     person = track("p1", "person", [(0.0, (0.4, 0.2, 0.6, 0.9)), (1.0, (0.4, 0.2, 0.6, 0.9))])
     face_at_0 = track("f1", "face", [(0.0, (0.45, 0.2, 0.55, 0.35))])
 
-    out = head_fallback([person, face_at_0])
+    narrow = HeadSettings(height=0.25, width=0.6, covered=0.5)  # the box this test measures
+    out = head_fallback([person, face_at_0], narrow)
 
     added = [t for t in out if t.track_id == "p1_head"]
     assert len(added) == 1 and added[0].label == "face"
@@ -86,8 +87,23 @@ def test_head_fallback_covers_heads_no_face_box_covers() -> None:
 
 def test_no_head_track_when_every_face_was_found() -> None:
     person = track("p1", "person", [(0.0, (0.4, 0.2, 0.6, 0.9))])
-    face = track("f1", "face", [(0.0, (0.43, 0.18, 0.57, 0.4))])
+    face = track("f1", "face", [(0.0, (0.39, 0.18, 0.61, 0.42))])
     assert head_fallback([person, face]) == [person, face]
+
+
+def test_default_head_box_is_the_full_width_top_of_the_person() -> None:
+    # A wide person box (bag, neighbour): the head may be anywhere across its top.
+    person = track("p1", "person", [(0.0, (0.1, 0.2, 0.5, 1.0))])
+    (k,) = head_fallback([person])[1].keyframes
+    assert k.box == pytest.approx((0.1, 0.2, 0.5, 0.44))
+
+
+def test_a_neighbours_face_doesnt_count_as_covering_the_head() -> None:
+    # Half the head region is someone else's face: the head still gets its own box.
+    person = track("p1", "person", [(0.0, (0.1, 0.2, 0.5, 1.0))])
+    neighbour = track("f9", "face", [(0.0, (0.3, 0.2, 0.5, 0.44))])
+    out = head_fallback([person, neighbour])
+    assert [t.track_id for t in out] == ["p1", "f9", "p1_head"]
 
 
 def test_head_settings_move_the_box() -> None:

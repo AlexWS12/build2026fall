@@ -37,13 +37,20 @@ class StitchSettings(Model):
 
 
 class HeadSettings(Model):
-    """Where a person's head is assumed to be, as fractions of the person box."""
+    """Where a person's head is assumed to be, as fractions of the person box.
+
+    Wide and strict on purpose (fail closed): person boxes often take in a bag or a neighbour, so
+    a centred guess can miss the head, and a neighbour's face box must not count as covering it.
+    On the two face-labelled clips (trio-street-outfits, trio-sidewalk-totes; `benchmark report`
+    scorer), these defaults left 0/39 and 0/21 face boxes exposed with tv-frcnn-mobile + YuNet
+    grow 2.6, where width 0.6, height 0.25, covered 0.5 left 0/39 and 7/21.
+    """
 
     top: float = Field(default=0.0, ge=0, lt=1, description="From the box top.")
-    height: float = Field(default=0.25, gt=0, le=1)
-    width: float = Field(default=0.6, gt=0, le=1, description="Centred.")
+    height: float = Field(default=0.3, gt=0, le=1)
+    width: float = Field(default=1.0, gt=0, le=1, description="Centred.")
     covered: float = Field(
-        default=0.5, gt=0, le=1, description="A face box covering this much of the head counts."
+        default=0.9, gt=0, le=1, description="A face box covering this much of the head counts."
     )
 
 

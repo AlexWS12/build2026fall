@@ -48,14 +48,19 @@ status: in progress
   - YuNet as it was: **39/39 exposed (100%)** at every threshold, stride and with or without stitching. It finds the faces (confidence about 0.92), but its boxes cover only eyes to mouth, so a mask leaves forehead, cheeks and chin visible.
   - New `grow` option on YuNet (scales each box around its centre): 1.5 → 25/39 exposed, 1.8 → 13/39, 2.2 → 2/39, **2.6 → 0/39** (threshold 0.3 or 0.6, every 1 or 3, stitched). Recall at IoU 0.5 drops to 5.1% at 2.6 because the boxes are much bigger than the label; for masking, exposure is what counts.
   - tv-frcnn-mobile + YuNet 0.6 (no grow) + head boxes, every 3: 1/39 exposed.
-  - One clip and 39 boxes only. Label more clips before trusting it.
+- **Faces, second labelled clip** (trio-sidewalk-totes: 3 people, 21 face boxes; two people have hair across the face):
+  - YuNet grow 2.6 alone: **7/23 exposed** (every 1). Person 1 is exposed 5 of 8 times: YuNet doesn't detect their face for most of 0–4 s (0–7 of 12–23 frames around each label), so no box size helps.
+  - tv-frcnn-mobile + YuNet grow 2.6 + head boxes as first written (centred 60% of the top 25%, skipped when any face covers half of it): still 7/23. The person box was about 0.37 of the frame wide (bag or neighbour), so the head guess missed, and a neighbour's face counted as "covered".
+  - Head boxes now default to the **full width of the top 30%**, skipped only when a face box covers **90%** of it: **0/23** (every 1 and 3) here, and still **0/39** on trio-street-outfits (`vision retrack --stitch --heads` on the cached detections, then `benchmark report`).
+  - So: YuNet alone can't protect faces it doesn't see (hair, turned heads). Only the person detector's head boxes cover those, at about 0.3 s/frame on the M2. Two clips and 60 face boxes only; the cost (how much more gets blurred) isn't measured.
 
 ## Decisions made
 - The app's default is now `yunet:weights=@yunet,grow=2.6` (threshold stays 0.3, fails closed), from the trio-street-outfits scores above. It's a `config.py` default, not a decision row: one clip isn't enough for that. A decision row (tier-0 default, and what it means for D-015) waits for those scores, and will go to the team as Proposed.
 
 ## Next steps
 - People: exposure up to 21% with tv-frcnn-mobile at every 3. Try every 1, a lower `min_conf`, and stitching off, with `retrack` and `benchmark offline` on the same clips, before trusting "blur people".
-- Label faces with `label-frames` on trio-sidewalk-totes and crowd-orange (trio-street-outfits is done), then check `grow=2.6` still exposes nothing there. Then run `benchmark report` and pick a threshold, stride and stitching from exposure first.
+- Label faces on crowd-orange (trio-street-outfits and trio-sidewalk-totes are done), and measure how much the wider head boxes over-mask.
+- Decide whether the app default should include a person detector (`tv-frcnn-mobile`): it's what covers faces YuNet misses, at about 10x the CPU time. Then run `benchmark report` and pick a threshold, stride and stitching from exposure first.
 - Decision row (Proposed) with those numbers. Then set the `VIBE_VISION_DETECTORS` default.
 - Plates: no clip has any; add licensed clips with plates before claiming anything for them.
 - A background job for Analyse on long clips (today the request waits and the project is busy, 409).
