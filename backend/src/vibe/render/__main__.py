@@ -3,7 +3,8 @@
 ``--tracks`` adds a tracks .json (the contract's format). ``--project <id>`` renders a project
 in ``VIBE_DATA_DIR`` instead: its video and timeline, with the tracks cached for the video (F-10)
 and the ones drawn by hand, into a new file in its ``exports/`` folder each time. ``--analysis
-<key>`` says which cached tracks, when the video has several sets. Prints what it wrote as JSON.
+<key>`` says which cached tracks, when the video has several sets. Its denoise noise profile is
+cached with the video, so the next export skips that pass. Prints what it wrote as JSON.
 """
 
 import argparse
@@ -15,6 +16,8 @@ from pathlib import Path
 from pydantic import TypeAdapter, ValidationError
 
 from vibe.contract import OpLog, TimelineState, Track, new_id
+from vibe.modules.cache import ModuleError
+from vibe.modules.denoise import cached_noise_profile
 from vibe.modules.vision import cache
 from vibe.render.errors import RenderError
 from vibe.render.export import RenderResult, export
@@ -110,14 +113,21 @@ def _run(args: argparse.Namespace) -> RenderResult:
     except (StorageError, ValueError) as exc:
         raise CliError(str(exc)) from None
     output = args.output or project.exports_dir / f"{new_id('export')}.mp4"
-    return export(storage.video_path(project.info.video), state, tracks, output)
+    video = project.info.video
+    return export(
+        storage.video_path(video),
+        state,
+        tracks,
+        output,
+        noise_profile=lambda rate, layout: cached_noise_profile(storage, video, rate, layout),
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         result = _run(args)
-    except (CliError, cache.CacheError, RenderError, VideoError, OSError) as exc:
+    except (CliError, cache.CacheError, RenderError, VideoError, ModuleError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     summary = {

@@ -58,6 +58,7 @@ from vibe.agent.describe import clock, describe, explain_failure
 from vibe.contract import Redo, TimelineState, Track, Undo, new_id
 from vibe.contract.common import Model, Source
 from vibe.modules import ModuleError
+from vibe.modules.denoise import cached_noise_profile
 from vibe.modules.transcribe import Transcript, transcribe_video
 from vibe.modules.vision import CacheError, load_tracks
 from vibe.render import (
@@ -543,11 +544,14 @@ def create_export(project_id: str, storage: StorageDep) -> ExportReply:
                 project.state(),
                 tracks,
                 project.exports_dir / name,
+                noise_profile=lambda rate, layout: cached_noise_profile(
+                    storage, project.info.video, rate, layout
+                ),
             )
         except (UnsupportedEdit, NothingToRender) as e:
             # These two only name edits (rule ids, speakers, filters), never files.
             raise HTTPException(status_code=422, detail=f"can't export this timeline: {e}") from e
-        except (RenderError, VideoError, OSError, ValueError) as e:
+        except (RenderError, VideoError, ModuleError, OSError, ValueError) as e:
             logger.exception("exporting project %s failed", project.id)
             raise HTTPException(status_code=500, detail="couldn't render this project") from e
         return ExportReply(
