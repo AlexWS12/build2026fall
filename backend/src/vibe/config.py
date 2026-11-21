@@ -42,12 +42,16 @@ def models_dir() -> Path:
     return Path(value) if value else data_dir() / "models"
 
 
-DEFAULT_VISION_DETECTORS = ("yunet:weights=@yunet,grow=2.6",)
-"""YuNet faces: the one detector a CPU-only laptop (tier 0) runs. Its boxes cover only the inner
-face, so they're grown 2.6x to cover the whole face: on the one face-labelled clip so far
-(trio-street-outfits, `benchmark report`, Apple M2) that took exposure from 39/39 to 0/39. A
-starting point until more clips are labelled; it finds faces only, so "blur people" needs a person
-detector."""
+DEFAULT_VISION_DETECTORS = ("tv-frcnn-mobile", "yunet:weights=@yunet,grow=2.6")
+"""People (torchvision's Faster R-CNN MobileNet, BSD-3) and faces (YuNet, MIT, boxes grown 2.6x to
+the whole face), with head boxes for faces YuNet misses (D-022, Proposed). On the three
+face-labelled clips this left 0 face boxes exposed; YuNet alone left 7/23 on one (hair). Needs
+PyTorch (`uv sync --extra cpu` or `cu128`) and OpenCV (`--extra vision`); set
+VIBE_VISION_DETECTORS="yunet:weights=@yunet,grow=2.6" to run faces only, without PyTorch."""
+
+DEFAULT_VISION_EVERY = 3
+"""Detect on every 3rd frame (the tracker carries boxes between): still 0 faces exposed on the
+labelled clips, at a third of the time (D-022)."""
 
 
 def vision_detectors() -> list[str]:
@@ -58,6 +62,20 @@ def vision_detectors() -> list[str]:
     value = os.environ.get("VIBE_VISION_DETECTORS", "")
     specs = [s.strip() for s in value.split(";") if s.strip()]
     return specs or list(DEFAULT_VISION_DETECTORS)
+
+
+def vision_every() -> int:
+    """Detect on every Nth frame in the app's analysis (``VIBE_VISION_EVERY``, default 3)."""
+    value = os.environ.get("VIBE_VISION_EVERY", "").strip()
+    if not value:
+        return DEFAULT_VISION_EVERY
+    try:
+        every = int(value)
+    except ValueError:
+        raise ValueError(f"VIBE_VISION_EVERY must be a whole number, got {value!r}") from None
+    if every < 1:
+        raise ValueError(f"VIBE_VISION_EVERY must be at least 1, got {every}")
+    return every
 
 
 def remote_url() -> str | None:

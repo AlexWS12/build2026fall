@@ -35,7 +35,7 @@ from vibe.modules.vision.stitch import HeadSettings, StitchSettings, postprocess
 from vibe.modules.vision.tracking import TRACKERS, TrackerSettings
 
 DEFAULT_EVERY = 1
-"""Detect on every frame. Starting point until the F-10b bake-off picks a stride."""
+"""Detect on every frame unless told otherwise. The app's stride is ``config.vision_every()``."""
 DEFAULT_TRACKER = "iou"
 """Built in, so it needs no package. ``bytetrack`` needs Roboflow's ``trackers``."""
 
@@ -95,12 +95,13 @@ class VisionAnalysis(Analysis):
 
     @classmethod
     def default(cls) -> Self:
-        """What the app runs: ``VIBE_VISION_DETECTORS`` (YuNet faces unless set), with fragments
-        stitched, and head boxes for faces the face detector missed when a person detector runs.
+        """What the app runs (D-022): ``VIBE_VISION_DETECTORS`` every ``VIBE_VISION_EVERY`` frames,
+        with fragments stitched, and head boxes for faces the face detector missed when a person
+        detector runs.
         """
         specs = config.vision_detectors()
         people = any(finds_people(spec) for spec in specs)
-        return cls(specs, stitch={}, heads={} if people else None)
+        return cls(specs, every=config.vision_every(), stitch={}, heads={} if people else None)
 
     @property
     def name(self) -> str:

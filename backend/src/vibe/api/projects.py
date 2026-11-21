@@ -114,8 +114,10 @@ _NO_ANALYSIS = (
 )
 _NO_VISION = (
     "this server can't analyse videos yet: a detector's package or weights are missing. In "
-    "backend/, run `uv sync --extra vision` and `uv run python -m vibe.modules download yunet` "
-    "(the server log names what's missing)."
+    "backend/, run `uv sync --extra cpu --extra vision` (or `--extra cu128` on an NVIDIA GPU) and "
+    "`uv run python -m vibe.modules download yunet`, or set "
+    'VIBE_VISION_DETECTORS="yunet:weights=@yunet,grow=2.6" for faces only. The server log names '
+    "what's missing."
 )
 _VISION_FAILED = "analysing this video failed on this server; the server log says why."
 _BAD_ANALYSIS = (

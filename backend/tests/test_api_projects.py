@@ -867,7 +867,8 @@ def test_analysis_that_cant_run_is_503_not_an_empty_result(
     detail: str,
 ) -> None:
     monkeypatch.setenv("VIBE_BACKEND", backend)
-    monkeypatch.delenv("VIBE_VISION_DETECTORS", raising=False)
+    # Faces only: building tv-frcnn-mobile would download its weights where PyTorch is installed.
+    monkeypatch.setenv("VIBE_VISION_DETECTORS", "yunet:weights=@yunet,grow=2.6")
     monkeypatch.setenv("VIBE_MODELS_DIR", str(tmp_path / "no-models"))
     monkeypatch.delenv("VIBE_REMOTE_URL", raising=False)
     project_id = upload(client, long_clip)["project_id"]

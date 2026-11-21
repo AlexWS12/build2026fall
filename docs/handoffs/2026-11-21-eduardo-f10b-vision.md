@@ -57,16 +57,18 @@ status: in progress
 - **All three labelled clips, current defaults** (`benchmark report`): YuNet grow 2.6 alone exposes 0/39, 7/23 and 0/42; with the person detector and head boxes, 0/39, 0/23 and 0/42. The only faces YuNet alone left visible were hidden by hair.
 
 ## Decisions made
-- The app's default is now `yunet:weights=@yunet,grow=2.6` (threshold stays 0.3, fails closed), from the trio-street-outfits scores above. It's a `config.py` default, not a decision row: one clip isn't enough for that. A decision row (tier-0 default, and what it means for D-015) waits for those scores, and will go to the team as Proposed.
+- **D-022 (Proposed, in use), the app's vision default:** `tv-frcnn-mobile` + YuNet `grow=2.6`, every 3rd frame, stitched, with head boxes (`config.py`: `VIBE_VISION_DETECTORS`, new `VIBE_VISION_EVERY`). Eduardo chose it for now from the three-clip face scores, to revisit when the team weighs in or a GPU bake-off (RF-DETR + EgoBlur, D-015) has numbers. It needs PyTorch: without it, Analyse is a 503 that says to install it, or to set YuNet only.
+- **"Blur people" stays in the demo with a stated limit:** up to 21% of labelled person boxes exposed (pair-backpacks-behind 14/66). Mention it as a known blocker when showing it.
+- Head-box shape and YuNet `grow=2.6` are defaults in code (`HeadSettings`, `DEFAULT_VISION_DETECTORS`), covered by D-022.
 
 ## Next steps
-- People: exposure up to 21% with tv-frcnn-mobile at every 3. Try every 1, a lower `min_conf`, and stitching off, with `retrack` and `benchmark offline` on the same clips, before trusting "blur people".
-- Measure how much the wider head boxes and grown face boxes over-mask (blurred area outside any labelled face).
-- Decide whether the app default should include a person detector (`tv-frcnn-mobile`): it's what covers faces YuNet misses, at about 10x the CPU time. Then run `benchmark report` and pick a threshold, stride and stitching from exposure first.
-- Decision row (Proposed) with those numbers. Then set the `VIBE_VISION_DETECTORS` default.
+- **Over-masking on crowds, found while checking D-022 in the app:** on crowd-orange, "blur all faces" with the new default blurs most of the frame. 127 of 740 face boxes are over 5% of the frame. 75 of those are low-confidence YuNet detections (0.30–0.62) grown 2.6x, the biggest 44% of the frame; the rest are head boxes. Measure masked area per frame, and try YuNet threshold 0.6 with the head boxes covering the misses.
+- Team review of D-022 (Proposed): is about 0.3 s/frame acceptable on laptops, or should tier 0 default to YuNet only?
+- People: exposure up to 21% with tv-frcnn-mobile at every 3. Try every 1 and a lower `min_conf` with `retrack` and `benchmark offline` before calling "blur people" safe.
+- GPU bake-off of D-015's RF-DETR + EgoBlur with `benchmark offline`, on the same labelled clips.
 - Plates: no clip has any; add licensed clips with plates before claiming anything for them.
 - A background job for Analyse on long clips (today the request waits and the project is busy, 409).
-- The renderer holds a lost track's box over the whole requested range (fail closed). With many fragments, that piles up into large masked blocks (see the rehearsal export). Stitching helps; the F-50 handoff suggests an OpenCV blur for speed.
+- The renderer holds a lost track's box over the whole requested range (fail closed). With many fragments that piles up into large masked blocks. Stitching helps; the F-50 handoff suggests an OpenCV blur for speed.
 
 ## Gotchas
 - **OpenCV and PyAV both bundle `libavdevice` on macOS.** Importing both prints `objc: Class AVFFrameReceiver is implemented in both ...`. Exports and analysis worked here, but it's a known source of rare crashes. Watch for it.
