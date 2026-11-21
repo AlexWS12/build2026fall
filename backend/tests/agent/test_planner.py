@@ -59,6 +59,8 @@ def test_request_set_covers_both_outcomes() -> None:
         ("keep the noise down", "reduce the noise"),
         ("keep only the voices for a bit", "keep only the voices"),
         ("isolate the voices somewhere", "keep only the voices"),
+        ("keep only the dialogue from 0:30 to 1:00", "or keep only that part"),
+        ("keep the speaker from 0:10 to 0:20", "Which part should I keep"),
         ("cut the tapping from 0:10 to 0:20", "or cut that part out"),
         ("keep everything except 0:10 to 0:20", "cut 0:10 to 0:20"),
         ("keep all but the first 10 seconds", "cut 0:10 to 0:20"),

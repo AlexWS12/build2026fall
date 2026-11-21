@@ -131,7 +131,13 @@ def _question_for(text: str) -> str:
             "Should I reduce the noise in that part, or cut that part out? Say 'reduce the noise "
             "from 0:10 to 0:20' or 'cut 0:10 to 0:20'."
         )
-    if not VOICE_WORDS.isdisjoint(words) and verb in ("isolate", "keep", "only", "just"):
+    if not VOICE_WORDS.isdisjoint(words) and verb in ("keep", "only", "just"):
+        return (
+            "Should I keep only the voices in that part, or keep only that part of the video? "
+            "Say 'isolate the voices from 0:10 to 0:20' (or 'keep only the voices' for the "
+            "whole video), or 'keep only 0:10 to 0:20' to cut everything around it."
+        )
+    if not VOICE_WORDS.isdisjoint(words) and verb == "isolate":
         return (
             "When should I keep only the voices? Give a time range like 0:10 to 0:20, or say "
             "'keep only the voices' for the whole video."

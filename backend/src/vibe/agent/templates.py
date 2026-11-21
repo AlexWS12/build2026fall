@@ -63,7 +63,7 @@ CLICK_WORDS = frozenset(
 """Short sounds (and "background sounds", which may be anything): ``denoise`` doesn't touch
 them, so they plan ``isolate_voice`` (F-34), which keeps the voices and turns the rest down."""
 NOISE_WORDS = STEADY_NOISE_WORDS | CLICK_WORDS
-VOICE_WORDS = frozenset("voice voices speech talking speaker speakers dialogue".split())
+VOICE_WORDS = frozenset("voice voices speech talking speakers dialogue".split())
 
 _SOUND_KIND = (
     r"(?:(?:background|computer|laptop|pc|finger|desk|table|keyboard|mouse|pen|annoying|loud"
@@ -85,11 +85,14 @@ _SOUNDS = re.compile(
 """A list of unwanted sounds ("the finger tapping and the computer fans"). Steady ones only plan
 ``denoise``; any short one plans ``isolate_voice``. Before ``_DENOISE`` and ``_CUT``."""
 _ISOLATE = re.compile(
-    r"(?:(?:isolate|(?:(?:only|just)\s+)?keep(?:\s+(?:only|just))?)\s+(?:the\s+)?"
-    r"(?:voices?|speech|talking|speakers?|dialogue|people\s+talking)(?:\s+only)?"
-    r"|clean\s+up\s+(?:the\s+)?(?:audio|sound))\b(.*)"
+    r"(?:(?:(isolate)|(?:(?:only|just)\s+)?keep(?:\s+(?:only|just))?)\s+(?:the\s+)?"
+    r"(?:voices?|speech|talking|speakers|dialogue|people\s+talking)(?:\s+only)?"
+    r"|(clean\s+up)\s+(?:the\s+)?(?:audio|sound))\b(.*)"
 )
-"""Before ``_KEEP``: "keep only the voices" filters the sound, it doesn't keep a time range."""
+"""Before ``_KEEP``: "keep only the voices" filters the sound, it doesn't keep a time range.
+
+With a time, "keep" is asked about (see ``_isolate``). No singular "speaker": "keep the speaker"
+suggests only the main one, and phase A keeps every voice."""
 _CUT = re.compile(r"(?:cut|remove|delete)(?:\s+out)?\b(.*)")
 _KEEP = re.compile(r"(?:(?:only|just)\s+)?keep(?:\s+(?:only|just))?\b(.*)")
 """Keep only a range: the toolbox cuts everything around it."""
@@ -371,9 +374,12 @@ def _sounds(match: re.Match[str], steps: _Steps) -> Matched:
 
 
 def _isolate(match: re.Match[str], steps: _Steps) -> Matched:
-    when = _time(match.group(1))
+    said_keep = match.group(1) is None and match.group(2) is None
+    when = _time(match.group(3))
     if when is None:
         return None
+    if said_keep and when is not _NO_TIME and when != WHOLE_CLIP:
+        return None  # "keep only the dialogue from 0:30 to 1:00" may mean keep only that part
     steps.add_filter("isolate_voice", _time_args(when, steps))
     return _scope(when)
 

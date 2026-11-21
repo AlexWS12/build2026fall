@@ -161,8 +161,15 @@ def test_isolate_voice_with_a_time_filters_only_that_range() -> None:
     assert call["args"] == {"time_range": {"start": 10.0, "end": 20.0}}
 
 
+@pytest.mark.parametrize(
+    "text", ["isolate the voices from 0:10 to 0:20", "keep only the voices for the whole video"]
+)
+def test_isolate_or_keep_for_the_whole_video_still_plans(text: str) -> None:
+    assert [c["tool"] for c in calls(text)] == ["isolate_voice"]
+
+
 def test_a_filter_over_another_range_isnt_merged() -> None:
-    result = calls("reduce the noise from 0:00 to 0:10 and keep only the voices from 0:10 to 0:20")
+    result = calls("reduce the noise from 0:00 to 0:10 and isolate the voices from 0:10 to 0:20")
 
     assert [c["tool"] for c in result] == ["denoise", "isolate_voice"]
     assert len({c["step_id"] for c in result}) == 2
@@ -175,6 +182,13 @@ def test_a_filter_over_another_range_isnt_merged() -> None:
         "remove the sound",  # mute?
         "cut the tapping from 0:10 to 0:20",  # cut that part out, or filter it?
         "keep the voices down",
+        # Keep only the voices there, or keep only that part? Asked, not guessed.
+        "keep only the dialogue from 0:30 to 1:00",
+        "keep the voices for the first half",
+        "just keep the speech from 0:10 to 0:20",
+        # Singular: only the main speaker, which phase A can't do.
+        "keep the speaker from 0:10 to 0:20",
+        "isolate the speaker",
     ],
 )
 def test_unclear_sound_requests_are_asked_not_guessed(text: str) -> None:
