@@ -97,3 +97,14 @@ def remote_hosts() -> frozenset[str]:
 def remote_token() -> str | None:
     """Shared secret between the ``remote`` backend and the model server (``.env``, never git)."""
     return os.environ.get("VIBE_REMOTE_TOKEN") or None
+
+
+def planner_llm() -> str | None:
+    """Which LLM plans requests no template reads (``VIBE_PLANNER_LLM``): ``claude``, or unset
+    for templates only (the default). See ``vibe.agent.llm``."""
+    value = os.environ.get("VIBE_PLANNER_LLM", "").strip().lower()
+    if value in ("", "none", "off"):
+        return None
+    if value != "claude":
+        raise ValueError(f"VIBE_PLANNER_LLM must be 'claude' or unset, got {value!r}")
+    return value

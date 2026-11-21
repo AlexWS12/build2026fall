@@ -43,9 +43,11 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import Field, ValidationError
 
+from vibe import config
 from vibe.agent import (
     Clarify,
     LlmError,
+    LlmPlanner,
     Plan,
     PlanError,
     StepReport,
@@ -55,6 +57,7 @@ from vibe.agent import (
     plan_request,
 )
 from vibe.agent.describe import clock, describe, explain_failure
+from vibe.agent.llm import ClaudePlanner
 from vibe.contract import Redo, TimelineState, Track, Undo, new_id
 from vibe.contract.common import Model, Source
 from vibe.modules import ModuleError, NoAnalysis, run_analysis
@@ -397,7 +400,7 @@ def send_request(project_id: str, body: ChatRequest, storage: StorageDep) -> Cha
     with _one_request_at_a_time(project.id):
         request_id = new_id("r")
         try:
-            result = plan_request(body.text)
+            result = plan_request(body.text, llm=_planner_llm())
         except LlmError as e:
             logger.warning("planner LLM failed for %s: %s", request_id, e)
             raise HTTPException(
@@ -591,6 +594,27 @@ def analyse(project_id: str, storage: StorageDep) -> AnalysisReply:
             _run_vision(storage, project)
         analysed, tracks = _tracks(storage, project)
         return AnalysisReply(analysed=analysed, tracks=len(tracks))
+
+
+@functools.cache
+def _llm_for(choice: str | None) -> LlmPlanner | None:
+    """One planner per setting, kept for the process (its client holds a connection pool)."""
+    if choice is None:
+        return None
+    try:
+        return ClaudePlanner()
+    except LlmError as e:  # the llm extra isn't installed: plan with templates only
+        logger.warning("VIBE_PLANNER_LLM=%s, but %s; planning with templates only", choice, e)
+        return None
+
+
+def _planner_llm() -> LlmPlanner | None:
+    """The LLM for requests no template reads (``VIBE_PLANNER_LLM``), or None: templates only."""
+    try:
+        return _llm_for(config.planner_llm())
+    except ValueError as e:  # a bad setting must not break chat
+        logger.warning("%s; planning with templates only", e)
+        return None
 
 
 def _run_vision(storage: Storage, project: Project) -> None:

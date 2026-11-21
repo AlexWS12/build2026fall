@@ -2,7 +2,7 @@
 author: eduardo
 date: 2026-11-21
 branch: eduardo/f10b-vision
-features: [F-10b, F-09b, F-09, F-42]
+features: [F-10b, F-09b, F-09, F-42, R-1b]
 base: v0.4.0 + #40 @ 97dbb80
 head: b4b7832
 status: ready for review
@@ -15,6 +15,7 @@ status: ready for review
 > - **Settings and dependencies:** `config.py` (`VIBE_VISION_DETECTORS`, `VIBE_VISION_EVERY`), the new optional `vision` extra in `pyproject.toml` / `uv.lock`, and the YuNet hash in `models.json`.
 > - **Generated files:** `openapi.json` and `frontend/src/api/generated/schema.ts` are regenerated.
 > - **Toolbox and API (F-42):** a new hand-only tool `remove_mask` (`registry.py`, `tools.py`; the planner never gets it) and a new route `POST /api/projects/{id}/masks/remove`, plus `removeMasks` in `frontend/src/api/`.
+> - **Dependencies (D-023):** a new optional `llm` extra (`anthropic`) in `pyproject.toml` / `uv.lock`, and `VIBE_PLANNER_LLM` in `config.py`.
 > - **Benchmark (Jean's F-09):** two masked-area columns in `score.py` / `report.py`.
 > - **No contract or toolbox change.**
 > - **After merging, everyone runs** `uv sync --extra cpu --extra vision` (or `cu128`) **and** `uv run python -m vibe.modules download yunet`. PR #44.
@@ -37,10 +38,12 @@ status: ready for review
   - `benchmark report`: new `masked` / `masked outside` columns, the share of the frame inside padded masks at the scored moments (200×200 grid).
 - **Click a mask to remove it (F-42, the remove part):** in the player's preview, clicking selects the smallest mask under the pointer. **Remove blur** or Delete removes that target's whole mask as a hand edit (`remove_mask`, `source: user`), Esc cancels, and Undo brings it back. Typing in the chat never triggers Delete. Added because the default over-blurs, so a person can take off a wrong mask.
 - **Timeline lanes scroll** in a box capped at min(220px, 32vh), so one lane per tracked face no longer pushes the player off the screen.
+- **Claude as the planner LLM (R-1b, D-023 Proposed, opt-in):** `agent/llm.py` `ClaudePlanner` fills `plan_request`'s existing LLM slot for requests no template reads. Opt in with `VIBE_PLANNER_LLM=claude`, `uv sync --extra llm` and `ANTHROPIC_API_KEY`; off by default. It sends only the request text and tool descriptions, uses structured output, and asks a question (new `{"question": ...}` answer) when no tool fits. Tests use a fake client; nothing calls the network in CI.
+- **Found targets follow their tracks:** "blur faces / people / plates" set `while_tracked`, so ended tracks don't leave boxes behind (32 → 9–21 on screen on trio-street-outfits).
 - **Face labels** for trio-street-outfits (3 people, 39 boxes), trio-sidewalk-totes (3, 21) and crowd-orange (16, 42), drawn by Eduardo. In crowd-orange, one track the page had joined across two people is split into tracks 6 and 16.
 
 ## How to check it
-- `npm test`: backend 1637 passed, frontend 116 passed. `npm run lint` and `python -m vibe.api --check` are clean. Run on macOS, 2026-11-21.
+- `npm test`: backend 1656 passed, frontend 116 passed. `npm run lint` and `python -m vibe.api --check` are clean. Run on macOS, 2026-11-21.
 - In the app:
   1. In `backend/`, run `uv sync --extra cpu --extra vision` and `uv run python -m vibe.modules download yunet`.
   2. Start the backend with `VIBE_BACKEND=local`.

@@ -35,7 +35,8 @@ class LlmError(RuntimeError):
 
 
 class LlmPlanner(Protocol):
-    """Writes a whole plan as JSON in one call. ``error`` is set on the retry.
+    """Writes a whole plan as JSON in one call, or ``{"question": "..."}`` to ask the user
+    instead. ``error`` is set on the retry.
 
     Raise ``LlmError`` for provider failures.
     """
@@ -81,6 +82,10 @@ def _plan_with_llm(text: str, registry: Mapping[str, ToolSpec], llm: LlmPlanner)
                 f"{EXAMPLES}.",
                 reason="LLM call failed",
             )
+        question = raw.get("question") if isinstance(raw, Mapping) else None
+        if isinstance(question, str) and question.strip() and not raw.get("calls"):
+            # No tool does what was asked, or it's ambiguous: the LLM asks, like a template would.
+            return Clarify(question=question.strip(), reason="the LLM asked")
         try:
             plan = Plan.model_validate(raw)
         except ValidationError as exc:
