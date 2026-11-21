@@ -4,7 +4,7 @@ date: 2026-11-21
 branch: luis/f13-vlm-judge
 features: [F-13]
 base: v0.4.0 @ 6491308
-head: uncommitted (nothing committed yet)
+head: 980f7ce
 status: in progress (judge and measurement script work; first measured numbers for one model; truth file still a draft)
 ---
 
@@ -102,4 +102,4 @@ Per case (right / wrong-no / wrong-yes / unsure): neon green jacket 2/0/0/1; ora
 - **HPG workflow:** eduVPN, then an OOD Console job on `hpg-turin` (L4 23 GB, `gpu:1`), `ml ollama`, `ollama serve` (redirect is `> ollama.log 2>&1 &`), then `ssh -L 11434:localhost:11434` through the jump host. The node name changes every session. `ollama` only exists on the node, not on the laptop or in a fresh shell without `ml ollama`.
 - **The raw results JSON** (`resultado-gemma3-12b.json`) lives outside the repo and is not committed; the numbers above are copied from it.
 - **Windows:** `test_writing_keeps_the_timeline_permissions` fails on Windows (POSIX chmod) with or without these changes.
-- Nothing is committed or pushed yet.
+- Committed locally on `luis/f13-vlm-judge`; not pushed yet and no PR opened.
