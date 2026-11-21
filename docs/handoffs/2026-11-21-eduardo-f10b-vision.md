@@ -53,13 +53,15 @@ status: in progress
   - tv-frcnn-mobile + YuNet grow 2.6 + head boxes as first written (centred 60% of the top 25%, skipped when any face covers half of it): still 7/23. The person box was about 0.37 of the frame wide (bag or neighbour), so the head guess missed, and a neighbour's face counted as "covered".
   - Head boxes now default to the **full width of the top 30%**, skipped only when a face box covers **90%** of it: **0/23** (every 1 and 3) here, and still **0/39** on trio-street-outfits (`vision retrack --stitch --heads` on the cached detections, then `benchmark report`).
   - So: YuNet alone can't protect faces it doesn't see (hair, turned heads). Only the person detector's head boxes cover those, at about 0.3 s/frame on the M2. Two clips and 60 face boxes only; the cost (how much more gets blurred) isn't measured.
+- **Faces, third labelled clip** (crowd-orange, 4 s crowd: 16 people, 42 face boxes; I split one track the page had joined across two people, the original export is unchanged): **0/42 exposed** with YuNet grow 2.6 alone and with tv-frcnn-mobile + YuNet grow 2.6 + head boxes, every 1 and every 3.
+- **All three labelled clips, current defaults** (`benchmark report`): YuNet grow 2.6 alone exposes 0/39, 7/23 and 0/42; with the person detector and head boxes, 0/39, 0/23 and 0/42. The only faces YuNet alone left visible were hidden by hair.
 
 ## Decisions made
 - The app's default is now `yunet:weights=@yunet,grow=2.6` (threshold stays 0.3, fails closed), from the trio-street-outfits scores above. It's a `config.py` default, not a decision row: one clip isn't enough for that. A decision row (tier-0 default, and what it means for D-015) waits for those scores, and will go to the team as Proposed.
 
 ## Next steps
 - People: exposure up to 21% with tv-frcnn-mobile at every 3. Try every 1, a lower `min_conf`, and stitching off, with `retrack` and `benchmark offline` on the same clips, before trusting "blur people".
-- Label faces on crowd-orange (trio-street-outfits and trio-sidewalk-totes are done), and measure how much the wider head boxes over-mask.
+- Measure how much the wider head boxes and grown face boxes over-mask (blurred area outside any labelled face).
 - Decide whether the app default should include a person detector (`tv-frcnn-mobile`): it's what covers faces YuNet misses, at about 10x the CPU time. Then run `benchmark report` and pick a threshold, stride and stitching from exposure first.
 - Decision row (Proposed) with those numbers. Then set the `VIBE_VISION_DETECTORS` default.
 - Plates: no clip has any; add licensed clips with plates before claiming anything for them.
