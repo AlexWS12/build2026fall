@@ -55,7 +55,9 @@ from vibe.agent import (
     plan_request,
 )
 from vibe.agent.describe import clock, describe, explain_failure
-from vibe.contract import Redo, TimelineState, Track, Undo, new_id
+from vibe.agent.heavy import needs_preview
+from vibe.api.previews import PreviewReply, PreviewSummary, candidate_state, summarise
+from vibe.contract import Redo, TimelineState, Track, Undo, fold, new_id
 from vibe.contract.common import Model, Source
 from vibe.modules import ModuleError
 from vibe.modules.denoise import cached_noise_profile
@@ -69,7 +71,7 @@ from vibe.render import (
     export,
     review_queue,
 )
-from vibe.storage import ChatRecord, Project, ProjectInfo, Storage, StorageError
+from vibe.storage import ChatRecord, PendingPreview, Project, ProjectInfo, Storage, StorageError
 from vibe.toolbox import UI_TOOLS
 from vibe.video import FrameIndex, NoAudioStream, VideoError, VideoInfo, probe
 
@@ -121,7 +123,7 @@ class ChatRequest(Model):
     text: str = Field(min_length=1, pattern=r"\S", description="The user's chat message.")
 
 
-ReplyStatus = Literal["applied", "clarify", "not_applied"]
+ReplyStatus = Literal["applied", "clarify", "not_applied", "preview"]
 
 
 class ChatReply(Model):
@@ -130,13 +132,18 @@ class ChatReply(Model):
         description=(
             "applied: the plan ran and its ops are in the timeline. "
             "clarify: the reply is a question; nothing was written. "
-            "not_applied: a tool refused, so nothing was written; the reply says why."
+            "not_applied: a tool refused, so nothing was written; the reply says why. "
+            "preview: a cut or keep is proposed and waits for accept or reject (F-44); "
+            "nothing was written yet."
         )
     )
     reply: str = Field(description="Shown to the user in the chat.")
     steps: list[StepReport] = Field(
         default_factory=list,
         description="The tool calls that ran, in order, up to and including one that failed.",
+    )
+    preview: PreviewSummary | None = Field(
+        default=None, description="What a proposed edit does to the length. Only for `preview`."
     )
 
 
@@ -372,6 +379,7 @@ def send_request(project_id: str, body: ChatRequest, storage: StorageDep) -> Cha
     """
     project = _open(storage, project_id)
     with _one_request_at_a_time(project.id):
+        _refuse_while_waiting(project, "before the next request")
         request_id = new_id("r")
         try:
             result = plan_request(body.text)
@@ -388,6 +396,8 @@ def send_request(project_id: str, body: ChatRequest, storage: StorageDep) -> Cha
             ) from e
         if isinstance(result, Clarify):
             reply = ChatReply(request_id=request_id, status="clarify", reply=result.question)
+        elif needs_preview(result):
+            reply = _propose(storage, project, result, request_id, body.text)
         else:
             reply = _run(storage, project, result, request_id)
         _remember(project, body.text, reply)
@@ -398,7 +408,9 @@ def send_request(project_id: str, body: ChatRequest, storage: StorageDep) -> Cha
 def get_messages(project_id: str, storage: StorageDep) -> list[ChatMessage]:
     """The chat so far, oldest first, so a reload restores the conversation."""
     project = _open(storage, project_id)
-    return [ChatMessage.model_validate(record.model_dump()) for record in project.chat()]
+    # A request that was proposed and then settled has two records: the latest one wins.
+    latest = {record.request_id: record for record in project.chat()}
+    return [ChatMessage.model_validate(record.model_dump()) for record in latest.values()]
 
 
 @router.get("/{project_id}/state")
@@ -476,6 +488,7 @@ def act_on_review_item(
     """
     project = _open(storage, project_id)
     with _one_request_at_a_time(project.id):
+        _refuse_while_waiting(project, "before reviewing")
         analysed, tracks = _tracks(storage, project)
         index = _frame_index(storage, project)
         queue = _review(project, analysed, tracks, index)
@@ -579,6 +592,76 @@ def get_export(project_id: str, name: str, storage: StorageDep) -> FileResponse:
     return FileResponse(project.exports_dir / name, media_type="video/mp4")
 
 
+# --- Preview before apply (F-44) -------------------------------------------------------------
+
+
+@router.get("/{project_id}/preview")
+def get_preview(project_id: str, storage: StorageDep) -> PreviewReply:
+    """The edit waiting for a go-ahead, shown as the state it would make. 404 if none waits.
+
+    Worked out again from the current timeline each time, so it never shows a stale picture.
+    An edit that can't run any more (the timeline changed, or the saved plan is no good) is
+    still answered, with ``problem`` set, so it can be seen and discarded.
+    """
+    project = _open(storage, project_id)
+    pending = _pending_or_404(project)
+    duration = _probe(storage, project).duration
+    log = project.log()
+    before = fold(log.ops)
+    try:
+        done, plan = _dry_run(storage, project, pending)
+    except PreviewProblem as e:
+        return _problem_reply(pending, before, duration, str(e), [])
+    if not done.ok:  # the timeline moved on: say why, show it as it is, allow only a discard
+        why = explain_failure(plan, done)
+        return _problem_reply(pending, before, duration, why, list(done.steps))
+    after = candidate_state(log, done.ops)
+    return PreviewReply(
+        request_id=pending.request_id,
+        text=pending.text,
+        reply=describe(plan, done),
+        steps=list(done.steps),
+        state=after,
+        preview=summarise(before, after, duration),
+    )
+
+
+@router.post("/{project_id}/preview/accept")
+def accept_preview(project_id: str, storage: StorageDep) -> ChatReply:
+    """Apply the waiting edit. It is checked again against the timeline as it is now, so a
+    timeline that changed meanwhile can still refuse it (``not_applied``, nothing written)."""
+    project = _open(storage, project_id)
+    with _one_request_at_a_time(project.id):
+        pending = _pending_or_404(project)
+        try:
+            plan = _plan_of(pending)
+        except PreviewProblem as e:  # the saved plan is no good: settle it, write nothing
+            reply = ChatReply(
+                request_id=pending.request_id,
+                status="not_applied",
+                reply=f"I couldn't apply this preview: {e} Nothing was changed.",
+            )
+        else:
+            reply = _run(storage, project, plan, pending.request_id)
+        _settle(project, pending, reply)
+        return reply
+
+
+@router.post("/{project_id}/preview/reject")
+def reject_preview(project_id: str, storage: StorageDep) -> ChatReply:
+    """Throw the waiting edit away. Nothing is written."""
+    project = _open(storage, project_id)
+    with _one_request_at_a_time(project.id):
+        pending = _pending_or_404(project)
+        reply = ChatReply(
+            request_id=pending.request_id,
+            status="not_applied",
+            reply="Discarded the preview. Nothing was changed.",
+        )
+        _settle(project, pending, reply)
+        return reply
+
+
 # --- Helpers --------------------------------------------------------------------------------
 
 
@@ -656,6 +739,145 @@ def _run(storage: Storage, project: Project, plan: Plan, request_id: str) -> Cha
     return ChatReply(request_id=request_id, status=status, reply=text, steps=list(done.steps))
 
 
+class PreviewProblem(Exception):
+    """A saved plan that can't be run at all (unknown tool, wrong shape): not a server fault,
+    and not something to retry. The message says why, for the user."""
+
+
+def _waiting(project: Project) -> PendingPreview | None:
+    """The preview waiting for a go-ahead, or None.
+
+    A saved preview whose request already wrote its ops was applied; only the cleanup after it
+    didn't finish (a crash, a full disk). It is not waiting, so it is cleared and never applied
+    a second time.
+    """
+    pending = project.pending()
+    if pending is None:
+        return None
+    if any(op.request_id == pending.request_id for op in project.log()):
+        try:
+            project.clear_pending()
+        except OSError:
+            logger.exception("clearing the applied preview of project %s failed", project.id)
+        return None
+    return pending
+
+
+def _refuse_while_waiting(project: Project, what: str) -> None:
+    """409 while a cut or keep waits: its preview was made on the timeline as it is now."""
+    if _waiting(project) is not None:
+        raise HTTPException(
+            status_code=409, detail=f"a preview is waiting: apply it or discard it {what}"
+        )
+
+
+def _pending_or_404(project: Project) -> PendingPreview:
+    pending = _waiting(project)
+    if pending is None:
+        raise HTTPException(status_code=404, detail="no preview is waiting")
+    return pending
+
+
+def _plan_of(pending: PendingPreview) -> Plan:
+    try:
+        return Plan.model_validate(pending.plan)
+    except ValidationError as e:
+        logger.warning("the saved plan of %s is not a plan: %s", pending.request_id, e)
+        raise PreviewProblem("the saved plan is damaged.") from e
+
+
+def _dry_run(storage: Storage, project: Project, pending: PendingPreview):
+    plan = _plan_of(pending)
+    try:
+        return execute_request(storage, project, plan, pending.request_id, commit=False), plan
+    except PlanError as e:  # e.g. a tool the toolbox no longer has
+        logger.warning("the saved plan of %s is not valid now: %s", pending.request_id, e)
+        raise PreviewProblem("the saved plan is no longer valid.") from e
+    except (VideoError, OSError, ValueError) as e:
+        logger.exception("previewing %s on project %s failed", pending.request_id, project.id)
+        raise HTTPException(
+            status_code=500, detail="couldn't preview this request: the project's files fail"
+        ) from e
+
+
+def _problem_reply(
+    pending: PendingPreview,
+    now: TimelineState,
+    duration: float,
+    why: str,
+    steps: list[StepReport],
+) -> PreviewReply:
+    """A preview that can't be applied: the timeline as it is, and why. Only a discard is left."""
+    return PreviewReply(
+        request_id=pending.request_id,
+        text=pending.text,
+        reply=why,
+        steps=steps,
+        state=now,
+        preview=summarise(now, now, duration),
+        problem=why,
+    )
+
+
+def _propose(
+    storage: Storage, project: Project, plan: Plan, request_id: str, text: str
+) -> ChatReply:
+    """Dry-run a heavy plan and keep it for a go-ahead. A plan a tool refuses is reported as
+    ``not_applied`` right away, like any other, and leaves nothing waiting."""
+    pending = PendingPreview(
+        request_id=request_id, text=text, plan=plan.model_dump(mode="json"), at=datetime.now(UTC)
+    )
+    try:
+        done, _ = _dry_run(storage, project, pending)
+    except PreviewProblem as e:  # a plan the planner just made: a bug, not the user's fault
+        logger.exception("proposing %s failed: %s", request_id, e)
+        raise HTTPException(
+            status_code=500, detail="couldn't plan this request. Nothing was changed."
+        ) from e
+    if not done.ok:
+        return ChatReply(
+            request_id=request_id,
+            status="not_applied",
+            reply=explain_failure(plan, done),
+            steps=list(done.steps),
+        )
+    log = project.log()
+    before, after = fold(log.ops), candidate_state(log, done.ops)
+    if before == after:  # e.g. cutting what is already cut: nothing to look at or apply
+        return ChatReply(
+            request_id=request_id,
+            status="not_applied",
+            reply="That's already in place, so nothing would change. Nothing was changed.",
+            steps=list(done.steps),
+        )
+    try:
+        project.set_pending(pending)
+    except OSError as e:
+        logger.exception("saving the preview of project %s failed", project.id)
+        raise HTTPException(
+            status_code=500, detail="couldn't keep this preview. Nothing was changed."
+        ) from e
+    summary = summarise(before, after, _probe(storage, project).duration)
+    return ChatReply(
+        request_id=request_id,
+        status="preview",
+        reply=f"{describe(plan, done)} Nothing is changed until you apply it.",
+        steps=list(done.steps),
+        preview=summary,
+    )
+
+
+def _settle(project: Project, pending: PendingPreview, reply: ChatReply) -> None:
+    """The preview is answered: forget it, and let the chat show how it ended."""
+    try:
+        project.clear_pending()
+    except OSError:
+        # The edit (or its refusal) is done; a leftover file is recognised as settled later
+        # (`_waiting`), so this must not turn a success into an error.
+        logger.exception("clearing the preview of project %s failed", project.id)
+    _remember(project, pending.text, reply)
+
+
 def _remember(project: Project, text: str, reply: ChatReply) -> None:
     """Add the request and its reply to the project's chat. The edit is already written (or
     refused) by now, so a chat that can't be saved is logged and doesn't fail the request."""
@@ -705,6 +927,7 @@ def _undo_or_redo(storage: Storage, project_id: str, tool: Literal["undo", "redo
     """A hand edit: through the toolbox like the agent's, as the user, with its own request id."""
     project = _open(storage, project_id)
     with _one_request_at_a_time(project.id):
+        _refuse_while_waiting(project, f"before {tool}")
         plan = Plan(calls=(ToolCall(step_id="s1", tool=tool),))
         try:
             done = execute_plan(plan, project, request_id=new_id("r"), source="user")

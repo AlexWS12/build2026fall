@@ -750,6 +750,135 @@
         }
       }
     },
+    "/api/projects/{project_id}/preview": {
+      "get": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Get Preview",
+        "description": "The edit waiting for a go-ahead, shown as the state it would make. 404 if none waits.\n\nWorked out again from the current timeline each time, so it never shows a stale picture.\nAn edit that can't run any more (the timeline changed, or the saved plan is no good) is\nstill answered, with ``problem`` set, so it can be seen and discarded.",
+        "operationId": "get_preview_api_projects__project_id__preview_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewReply"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/preview/accept": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Accept Preview",
+        "description": "Apply the waiting edit. It is checked again against the timeline as it is now, so a\ntimeline that changed meanwhile can still refuse it (``not_applied``, nothing written).",
+        "operationId": "accept_preview_api_projects__project_id__preview_accept_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatReply"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/preview/reject": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Reject Preview",
+        "description": "Throw the waiting edit away. Nothing is written.",
+        "operationId": "reject_preview_api_projects__project_id__preview_reject_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatReply"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "Health",
@@ -874,7 +1003,8 @@
             "enum": [
               "applied",
               "clarify",
-              "not_applied"
+              "not_applied",
+              "preview"
             ],
             "title": "Status"
           },
@@ -919,10 +1049,11 @@
             "enum": [
               "applied",
               "clarify",
-              "not_applied"
+              "not_applied",
+              "preview"
             ],
             "title": "Status",
-            "description": "applied: the plan ran and its ops are in the timeline. clarify: the reply is a question; nothing was written. not_applied: a tool refused, so nothing was written; the reply says why."
+            "description": "applied: the plan ran and its ops are in the timeline. clarify: the reply is a question; nothing was written. not_applied: a tool refused, so nothing was written; the reply says why. preview: a cut or keep is proposed and waits for accept or reject (F-44); nothing was written yet."
           },
           "reply": {
             "type": "string",
@@ -936,6 +1067,17 @@
             "type": "array",
             "title": "Steps",
             "description": "The tool calls that ran, in order, up to and including one that failed."
+          },
+          "preview": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreviewSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What a proposed edit does to the length. Only for `preview`."
           }
         },
         "additionalProperties": false,
@@ -1317,6 +1459,93 @@
           "speaker"
         ],
         "title": "MuteSpan"
+      },
+      "PreviewReply": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "What the user asked."
+          },
+          "reply": {
+            "type": "string",
+            "title": "Reply",
+            "description": "What the edit would do, in plain words."
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/StepReport"
+            },
+            "type": "array",
+            "title": "Steps"
+          },
+          "state": {
+            "$ref": "#/components/schemas/TimelineState",
+            "description": "The timeline as it would be if accepted."
+          },
+          "preview": {
+            "$ref": "#/components/schemas/PreviewSummary"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem",
+            "description": "Set when the edit no longer applies to the timeline as it is now: why. The state is then the current one, and the edit can only be discarded."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "request_id",
+          "text",
+          "reply",
+          "steps",
+          "state",
+          "preview"
+        ],
+        "title": "PreviewReply",
+        "description": "A proposed edit waiting for accept or reject (``GET /api/projects/{id}/preview``)."
+      },
+      "PreviewSummary": {
+        "properties": {
+          "duration_before": {
+            "type": "number",
+            "title": "Duration Before",
+            "description": "Seconds the export lasts now."
+          },
+          "duration_after": {
+            "type": "number",
+            "title": "Duration After",
+            "description": "Seconds it would last if the edit is accepted."
+          },
+          "removed": {
+            "items": {
+              "$ref": "#/components/schemas/TimeRange"
+            },
+            "type": "array",
+            "title": "Removed",
+            "description": "The cuts the edit would add, in source time."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "duration_before",
+          "duration_after",
+          "removed"
+        ],
+        "title": "PreviewSummary",
+        "description": "What a proposed edit does to the video's length."
       },
       "ProjectDetail": {
         "properties": {

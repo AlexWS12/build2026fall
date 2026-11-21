@@ -4,6 +4,7 @@ import type {
   ExportReply,
   HistoryEntry,
   HistoryReply,
+  PreviewReply,
   ProjectDetail,
   ReviewReply,
   StepReport,
@@ -53,6 +54,9 @@ export type Activity =
   | { kind: 'transcribing' }
   | { kind: 'exporting' }
   | { kind: 'reviewing' }
+  /** Applying or discarding the waiting cut or keep (F-44). */
+  | { kind: 'accepting' }
+  | { kind: 'rejecting' }
 
 export type ExportState =
   | { kind: 'none' }
@@ -69,8 +73,13 @@ export interface ReviewData {
   reviewError: string | null
 }
 
+/** The cut or keep waiting for a go-ahead, as the server holds it (F-44); null when none. */
+export interface PendingData {
+  pending: PreviewReply | null
+}
+
 /** What the server knows about a project, fetched together when it opens. */
-export interface Snapshot extends ReviewData {
+export interface Snapshot extends ReviewData, PendingData {
   detail: ProjectDetail
   videoUrl: string
   timeline: TimelineState
@@ -80,7 +89,7 @@ export interface Snapshot extends ReviewData {
   messages: ChatRecord[]
 }
 
-export interface OpenProject extends ReviewData {
+export interface OpenProject extends ReviewData, PendingData {
   detail: ProjectDetail
   videoUrl: string
   timeline: TimelineState
@@ -101,7 +110,7 @@ export type Session =
   | { status: 'open'; project: OpenProject; error: string | null }
 
 /** The timeline, its history and the review queue travel together, so they can't drift apart. */
-export interface Sync extends ReviewData {
+export interface Sync extends ReviewData, PendingData {
   timeline: TimelineState
   history: HistoryReply
 }
@@ -122,6 +131,10 @@ export type SessionEvent =
   | { type: 'transcript_settled'; transcript: Transcript }
   | { type: 'export_started' }
   | { type: 'export_settled'; result: ExportReply }
+  | { type: 'accept_started' }
+  | { type: 'reject_started' }
+  /** The waiting edit was applied or discarded; `reply` says which, in the chat's words. */
+  | { type: 'preview_settled'; reply: ChatReply; sync: Sync }
   | { type: 'review_started' }
   | { type: 'review_settled'; sync: Sync; gone: boolean }
   /** The activity in flight failed. `sync`, when the server could still be read, is the truth. */
@@ -168,7 +181,7 @@ function projectTransition(project: OpenProject, event: ProjectEvent): OpenProje
   const idle = activity.kind === 'idle'
   switch (event.type) {
     case 'request_started':
-      if (!idle) return project
+      if (!idle || project.pending) return project
       return {
         ...project,
         activity: { kind: 'requesting', text: event.text },
@@ -197,10 +210,10 @@ function projectTransition(project: OpenProject, event: ProjectEvent): OpenProje
       )
     }
     case 'undo_started':
-      if (!idle || !project.history.can_undo) return project
+      if (!idle || project.pending || !project.history.can_undo) return project
       return { ...project, activity: { kind: 'undoing' } }
     case 'redo_started':
-      if (!idle || !project.history.can_redo) return project
+      if (!idle || project.pending || !project.history.can_redo) return project
       return { ...project, activity: { kind: 'redoing' } }
     case 'history_settled': {
       if (activity.kind !== 'undoing' && activity.kind !== 'redoing') return project
@@ -217,7 +230,7 @@ function projectTransition(project: OpenProject, event: ProjectEvent): OpenProje
       )
     }
     case 'analysis_started':
-      if (!idle) return project
+      if (!idle || project.pending) return project
       return { ...project, activity: { kind: 'analysing' } }
     case 'analysis_settled': {
       if (activity.kind !== 'analysing') return project
@@ -251,8 +264,36 @@ function projectTransition(project: OpenProject, event: ProjectEvent): OpenProje
         activity: IDLE,
         export: { kind: 'ready', result: event.result, stale: false },
       }
+    case 'accept_started':
+      // A proposal the timeline no longer allows can't be applied, only discarded.
+      if (!idle || !project.pending || project.pending.problem) return project
+      return { ...project, activity: { kind: 'accepting' } }
+    case 'reject_started':
+      if (!idle || !project.pending) return project
+      return { ...project, activity: { kind: 'rejecting' } }
+    case 'preview_settled': {
+      if (activity.kind !== 'accepting' && activity.kind !== 'rejecting') return project
+      const { reply } = event
+      const settled: ChatEntry = {
+        kind: 'agent',
+        id: '',
+        requestId: reply.request_id,
+        status: reply.status,
+        text: reply.reply,
+        steps: reply.steps ?? [],
+      }
+      // The proposal's own chat entry becomes its outcome; there is one line per request.
+      const index = project.chat.findLastIndex(
+        (entry) => entry.kind === 'agent' && entry.requestId === reply.request_id,
+      )
+      const chat =
+        index < 0
+          ? [...project.chat, { ...settled, id: nextId(project) }]
+          : project.chat.map((entry, i) => (i === index ? { ...settled, id: entry.id } : entry))
+      return synced({ ...project, activity: IDLE, chat }, event.sync)
+    }
     case 'review_started':
-      if (!idle) return project
+      if (!idle || project.pending) return project
       return { ...project, activity: { kind: 'reviewing' } }
     case 'review_settled':
       if (activity.kind !== 'reviewing') return project
@@ -312,6 +353,7 @@ function fromSnapshot(snapshot: Snapshot): OpenProject {
     analysed: snapshot.analysed,
     review: snapshot.review,
     reviewError: snapshot.reviewError,
+    pending: snapshot.pending,
     transcript: null,
     chat,
     activity: IDLE,
@@ -335,6 +377,7 @@ function synced(project: OpenProject, sync: Sync): OpenProject {
     history: sync.history,
     review: sync.review,
     reviewError: sync.reviewError,
+    pending: sync.pending,
     export: exported,
   }
 }
@@ -360,6 +403,8 @@ function failureText(activity: Activity, message: string): string {
     analysing: 'Analysis failed',
     transcribing: 'Transcription failed',
     reviewing: 'Review failed',
+    accepting: 'Applying the preview failed',
+    rejecting: 'Discarding the preview failed',
   }
   const label = activity.kind === 'idle' || activity.kind === 'exporting' ? '' : what[activity.kind]
   return `${label}: ${message}`
@@ -378,9 +423,17 @@ export const isBusy = (session: Session): boolean =>
 const idleProject = (session: Session): OpenProject | null =>
   session.status === 'open' && session.project.activity.kind === 'idle' ? session.project : null
 
-export const canSend = (session: Session): boolean => idleProject(session) !== null
-export const canUndo = (session: Session): boolean => !!idleProject(session)?.history.can_undo
-export const canRedo = (session: Session): boolean => !!idleProject(session)?.history.can_redo
+/** A new request, an undo or a redo waits while a cut or keep waits for its go-ahead (F-44). */
+const idleAndSettled = (session: Session): OpenProject | null => {
+  const project = idleProject(session)
+  return project && !project.pending ? project : null
+}
+
+export const canSend = (session: Session): boolean => idleAndSettled(session) !== null
+export const canUndo = (session: Session): boolean => !!idleAndSettled(session)?.history.can_undo
+export const canRedo = (session: Session): boolean => !!idleAndSettled(session)?.history.can_redo
+/** True when a waiting cut or keep can be accepted or discarded right now. */
+export const canDecide = (session: Session): boolean => !!idleProject(session)?.pending
 export const canExport = (session: Session): boolean => idleProject(session) !== null
 export const canOpen = (session: Session): boolean => !isBusy(session)
 
@@ -393,6 +446,8 @@ const ACTIVITY_LABEL: Record<Activity['kind'], string | null> = {
   transcribing: 'Waiting for the transcript…',
   exporting: 'Rendering the export…',
   reviewing: 'Applying review…',
+  accepting: 'Applying the preview…',
+  rejecting: 'Discarding the preview…',
 }
 
 /** One line saying what's in flight, or null when idle. */

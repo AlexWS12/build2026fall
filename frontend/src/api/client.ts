@@ -6,6 +6,7 @@ import type {
   Health,
   HistoryReply,
   ProjectDetail,
+  PreviewReply,
   ProjectInfo,
   ReviewAction,
   ReviewReply,
@@ -29,6 +30,12 @@ export interface ApiClient {
   videoUrl(projectId: string): string
   /** Send a chat request; the agent plans it and the server applies it to the timeline. */
   sendRequest(projectId: string, text: string): Promise<ChatReply>
+  /** The cut or keep waiting for a go-ahead, or null when none waits (F-44). */
+  getPreview(projectId: string): Promise<PreviewReply | null>
+  /** Apply the waiting edit. */
+  acceptPreview(projectId: string): Promise<ChatReply>
+  /** Discard the waiting edit; nothing is written. */
+  rejectPreview(projectId: string): Promise<ChatReply>
   getState(projectId: string): Promise<TimelineState>
   getHistory(projectId: string): Promise<HistoryReply>
   getMessages(projectId: string): Promise<ChatRecord[]>
@@ -109,6 +116,16 @@ export const httpClient: ApiClient = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
     }),
+  getPreview: async (projectId) => {
+    try {
+      return await call<PreviewReply>(project(projectId, '/preview'))
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return null // nothing is waiting
+      throw error
+    }
+  },
+  acceptPreview: (projectId) => post(project(projectId, '/preview/accept')),
+  rejectPreview: (projectId) => post(project(projectId, '/preview/reject')),
   getState: (projectId) => call(project(projectId, '/state')),
   getHistory: (projectId) => call(project(projectId, '/history')),
   getMessages: (projectId) => call(project(projectId, '/messages')),

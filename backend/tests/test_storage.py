@@ -7,7 +7,7 @@ import pytest
 
 from vibe import config
 from vibe.contract import AddMask, ContractError, Effect, Keyframe, Track, Undo
-from vibe.storage import ChatRecord, Storage, StorageError
+from vibe.storage import ChatRecord, PendingPreview, Storage, StorageError
 
 
 @pytest.fixture
@@ -275,3 +275,66 @@ def test_cache_path_layout(store: Storage, clip: Path) -> None:
 def test_cache_path_rejects_unsafe_parts(store: Storage, sha: str, kind: str, key: str) -> None:
     with pytest.raises((StorageError, ValueError)):
         store.cache_path(sha, kind, key)
+
+
+# --- A proposed edit waiting for a go-ahead (F-44) ---------------------------------------------
+
+
+def waiting(request_id: str = "r_1") -> PendingPreview:
+    return PendingPreview(
+        request_id=request_id,
+        text="cut 0:02 to 0:04",
+        plan={"calls": [{"step_id": "s1", "tool": "cut_range", "args": {}}]},
+        at=datetime(2026, 11, 21, 12, 0, tzinfo=UTC),
+    )
+
+
+def test_a_new_project_has_nothing_waiting(store: Storage, clip: Path) -> None:
+    project = store.create_project(clip)
+    assert project.pending() is None
+    assert not project.pending_path.exists()
+
+
+def test_a_waiting_edit_survives_reopening_and_clearing_forgets_it(
+    store: Storage, clip: Path
+) -> None:
+    project = store.create_project(clip)
+
+    project.set_pending(waiting())
+
+    assert store.open_project(project.id).pending() == waiting()
+    project.clear_pending()
+    assert store.open_project(project.id).pending() is None
+    project.clear_pending()  # clearing nothing is fine
+
+
+def test_a_newer_proposal_replaces_the_older_one(store: Storage, clip: Path) -> None:
+    project = store.create_project(clip)
+    project.set_pending(waiting("r_1"))
+    project.set_pending(waiting("r_2"))
+    assert project.pending() == waiting("r_2")
+
+
+@pytest.mark.parametrize("content", ["{not json", "", '{"request_id": "r_1"}', "[]"])
+def test_an_unreadable_pending_file_counts_as_nothing_waiting(
+    store: Storage, clip: Path, content: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    project = store.create_project(clip)
+    project.pending_path.write_text(content)
+
+    assert project.pending() is None
+    assert "unreadable pending preview" in caplog.text
+
+
+def test_a_pending_file_that_cant_be_written_raises_and_leaves_the_old_one(
+    store: Storage, clip: Path
+) -> None:
+    project = store.create_project(clip)
+    project.set_pending(waiting("r_1"))
+    project.dir.chmod(0o500)  # read-only folder: the atomic write can't make its temp file
+    try:
+        with pytest.raises(OSError):
+            project.set_pending(waiting("r_2"))
+    finally:
+        project.dir.chmod(0o700)
+    assert project.pending() == waiting("r_1")

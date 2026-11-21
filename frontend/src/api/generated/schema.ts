@@ -341,6 +341,71 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Preview
+         * @description The edit waiting for a go-ahead, shown as the state it would make. 404 if none waits.
+         *
+         *     Worked out again from the current timeline each time, so it never shows a stale picture.
+         *     An edit that can't run any more (the timeline changed, or the saved plan is no good) is
+         *     still answered, with ``problem`` set, so it can be seen and discarded.
+         */
+        get: operations["get_preview_api_projects__project_id__preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/preview/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Preview
+         * @description Apply the waiting edit. It is checked again against the timeline as it is now, so a
+         *     timeline that changed meanwhile can still refuse it (``not_applied``, nothing written).
+         */
+        post: operations["accept_preview_api_projects__project_id__preview_accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/preview/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject Preview
+         * @description Throw the waiting edit away. Nothing is written.
+         */
+        post: operations["reject_preview_api_projects__project_id__preview_reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -411,7 +476,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "applied" | "clarify" | "not_applied";
+            status: "applied" | "clarify" | "not_applied" | "preview";
             /** Reply */
             reply: string;
             /** Steps */
@@ -431,10 +496,10 @@ export interface components {
             request_id: string;
             /**
              * Status
-             * @description applied: the plan ran and its ops are in the timeline. clarify: the reply is a question; nothing was written. not_applied: a tool refused, so nothing was written; the reply says why.
+             * @description applied: the plan ran and its ops are in the timeline. clarify: the reply is a question; nothing was written. not_applied: a tool refused, so nothing was written; the reply says why. preview: a cut or keep is proposed and waits for accept or reject (F-44); nothing was written yet.
              * @enum {string}
              */
-            status: "applied" | "clarify" | "not_applied";
+            status: "applied" | "clarify" | "not_applied" | "preview";
             /**
              * Reply
              * @description Shown to the user in the chat.
@@ -445,6 +510,8 @@ export interface components {
              * @description The tool calls that ran, in order, up to and including one that failed.
              */
             steps?: components["schemas"]["StepReport"][];
+            /** @description What a proposed edit does to the length. Only for `preview`. */
+            preview?: components["schemas"]["PreviewSummary"] | null;
         };
         /** ChatRequest */
         ChatRequest: {
@@ -608,6 +675,55 @@ export interface components {
              * @description Null = all audio.
              */
             speaker: string | null;
+        };
+        /**
+         * PreviewReply
+         * @description A proposed edit waiting for accept or reject (``GET /api/projects/{id}/preview``).
+         */
+        PreviewReply: {
+            /** Request Id */
+            request_id: string;
+            /**
+             * Text
+             * @description What the user asked.
+             */
+            text: string;
+            /**
+             * Reply
+             * @description What the edit would do, in plain words.
+             */
+            reply: string;
+            /** Steps */
+            steps: components["schemas"]["StepReport"][];
+            /** @description The timeline as it would be if accepted. */
+            state: components["schemas"]["TimelineState"];
+            preview: components["schemas"]["PreviewSummary"];
+            /**
+             * Problem
+             * @description Set when the edit no longer applies to the timeline as it is now: why. The state is then the current one, and the edit can only be discarded.
+             */
+            problem?: string | null;
+        };
+        /**
+         * PreviewSummary
+         * @description What a proposed edit does to the video's length.
+         */
+        PreviewSummary: {
+            /**
+             * Duration Before
+             * @description Seconds the export lasts now.
+             */
+            duration_before: number;
+            /**
+             * Duration After
+             * @description Seconds it would last if the edit is accepted.
+             */
+            duration_after: number;
+            /**
+             * Removed
+             * @description The cuts the edit would add, in source time.
+             */
+            removed: components["schemas"]["TimeRange"][];
         };
         /** ProjectDetail */
         ProjectDetail: {
@@ -1453,6 +1569,99 @@ export interface operations {
                 };
                 content: {
                     "video/mp4": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_preview_api_projects__project_id__preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    accept_preview_api_projects__project_id__preview_accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_preview_api_projects__project_id__preview_reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatReply"];
                 };
             };
             /** @description Validation Error */

@@ -447,3 +447,36 @@ def test_a_missing_video_propagates(storage: Storage, clip: Path) -> None:
         execute_request(storage, project, from_text("mute the audio"), "r_1")
 
     assert len(project.log()) == 0
+
+
+# --- commit=False: the dry run behind a preview (F-44) ----------------------------------------
+
+
+def test_a_dry_run_reports_the_ops_and_writes_nothing() -> None:
+    timeline = RecordingTimeline()
+
+    done = run("cut 0:02 to 0:04", timeline, commit=False)
+
+    assert done.ok
+    assert [op.kind for op in done.ops] == ["cut"]
+    assert timeline.batches == []
+    assert len(timeline.stored) == 0
+
+
+def test_a_dry_run_then_the_real_run_write_the_same_ops() -> None:
+    timeline = RecordingTimeline()
+    dry = run("cut 0:02 to 0:04", timeline, request_id="r_9", commit=False)
+
+    real = run("cut 0:02 to 0:04", timeline, request_id="r_9")
+
+    assert [op.model_dump(exclude={"op_id"}) for op in dry.ops] == [
+        op.model_dump(exclude={"op_id"}) for op in real.ops
+    ]
+    assert len(timeline.stored) == len(real.ops)
+
+
+def test_a_dry_run_still_refuses_what_the_toolbox_refuses() -> None:
+    done = run("cut 0:50 to 1:10", RecordingTimeline(), duration=60.0, commit=False)
+
+    assert not done.ok
+    assert done.ops == ()

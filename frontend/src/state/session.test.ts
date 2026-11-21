@@ -1,7 +1,14 @@
 import { describe, expect, test } from 'vitest'
-import type { ChatReply, HistoryReply, ReviewReply, TimelineState } from '../api/types'
+import type {
+  ChatReply,
+  HistoryReply,
+  PreviewReply,
+  ReviewReply,
+  TimelineState,
+} from '../api/types'
 import {
   busyLabel,
+  canDecide,
   canExport,
   canOpen,
   canRedo,
@@ -77,7 +84,7 @@ const applied: ChatReply = {
   steps: [{ step_id: 's1', tool: 'mute', args: {}, result: { ops: 1 }, ok: true }],
 }
 
-const noReview = { review: null, reviewError: null }
+const noReview = { review: null, reviewError: null, pending: null }
 
 const afterMute: Sync = { timeline: muted, history: history('applied'), ...noReview }
 
@@ -388,5 +395,141 @@ describe('the review queue', () => {
       opened(),
     )
     expect(project(analysed).review).toEqual(queue)
+  })
+})
+
+describe('a cut waiting for a go-ahead (F-44)', () => {
+  const cutTimeline: TimelineState = {
+    ...emptyTimeline,
+    cuts: [{ start: 2, end: 4 }],
+  }
+  const proposed: ChatReply = {
+    request_id: 'r_cut',
+    status: 'preview',
+    reply: 'Cut 0:02–0:04. Nothing is changed until you apply it.',
+    steps: [],
+    preview: { duration_before: 20, duration_after: 18, removed: [{ start: 2, end: 4 }] },
+  }
+  const pending: PreviewReply = {
+    request_id: 'r_cut',
+    text: 'cut 0:02 to 0:04',
+    reply: 'Cut 0:02–0:04.',
+    steps: [],
+    state: cutTimeline,
+    preview: proposed.preview!,
+    problem: null,
+  }
+  const waiting = () =>
+    play(
+      [
+        { type: 'request_started', text: 'cut 0:02 to 0:04' },
+        {
+          type: 'request_settled',
+          reply: proposed,
+          sync: { timeline: emptyTimeline, history: noHistory, ...noReview, pending },
+        },
+      ],
+      opened(),
+    )
+
+  test('a proposal keeps the real timeline and holds the candidate beside it', () => {
+    const state = project(waiting())
+    expect(state.timeline).toEqual(emptyTimeline)
+    expect(state.pending).toEqual(pending)
+    expect(state.chat.at(-1)).toMatchObject({ kind: 'agent', status: 'preview' })
+  })
+
+  test('while it waits, only accept or reject can start', () => {
+    const session = waiting()
+    expect(canSend(session)).toBe(false)
+    expect(canUndo(session)).toBe(false)
+    expect(canRedo(session)).toBe(false)
+    expect(canDecide(session)).toBe(true)
+    expect(transition(session, { type: 'request_started', text: 'mute it' })).toBe(session)
+    expect(transition(session, { type: 'undo_started' })).toBe(session)
+    expect(transition(session, { type: 'review_started' })).toBe(session)
+  })
+
+  test('nothing waiting: nothing to decide', () => {
+    expect(canDecide(opened())).toBe(false)
+    expect(transition(opened(), { type: 'accept_started' })).toEqual(opened())
+  })
+
+  test('accepting settles the same chat entry and clears the proposal', () => {
+    const accepted: ChatReply = { ...proposed, status: 'applied', reply: 'Cut 0:02–0:04.' }
+    const session = play(
+      [
+        { type: 'accept_started' },
+        {
+          type: 'preview_settled',
+          reply: accepted,
+          sync: { timeline: cutTimeline, history: history('applied'), ...noReview },
+        },
+      ],
+      waiting(),
+    )
+    const state = project(session)
+    expect(state.pending).toBeNull()
+    expect(state.timeline).toEqual(cutTimeline)
+    expect(state.chat.filter((entry) => entry.kind === 'agent')).toHaveLength(1)
+    expect(state.chat.at(-1)).toMatchObject({ status: 'applied', text: 'Cut 0:02–0:04.' })
+    expect(canSend(session)).toBe(true)
+  })
+
+  test('rejecting leaves the timeline alone and says nothing changed', () => {
+    const rejected: ChatReply = {
+      request_id: 'r_cut',
+      status: 'not_applied',
+      reply: 'Discarded the preview. Nothing was changed.',
+      steps: [],
+    }
+    const session = play(
+      [
+        { type: 'reject_started' },
+        {
+          type: 'preview_settled',
+          reply: rejected,
+          sync: { timeline: emptyTimeline, history: noHistory, ...noReview },
+        },
+      ],
+      waiting(),
+    )
+    expect(project(session).timeline).toEqual(emptyTimeline)
+    expect(project(session).pending).toBeNull()
+    expect(project(session).chat.at(-1)).toMatchObject({ status: 'not_applied' })
+  })
+
+  test('a failed accept resyncs: the server says whether it is still waiting', () => {
+    const session = play(
+      [
+        { type: 'accept_started' },
+        {
+          type: 'activity_failed',
+          message: 'disk full',
+          sync: { timeline: emptyTimeline, history: noHistory, ...noReview, pending },
+        },
+      ],
+      waiting(),
+    )
+    expect(project(session).pending).toEqual(pending)
+    expect(canDecide(session)).toBe(true)
+    expect(project(session).chat.at(-1)).toMatchObject({
+      kind: 'error',
+      text: 'Applying the preview failed: disk full',
+    })
+  })
+
+  test('a reload brings the waiting proposal back', () => {
+    const session = opened({ pending })
+    expect(project(session).pending).toEqual(pending)
+    expect(canDecide(session)).toBe(true)
+  })
+
+  test('a proposal the timeline no longer allows can only be discarded', () => {
+    const stale = { ...pending, problem: 'cut_range: changed' }
+    const session = opened({ pending: stale })
+    expect(canDecide(session)).toBe(true)
+    expect(transition(session, { type: 'accept_started' })).toBe(session)
+    expect(transition(session, { type: 'reject_started' })).not.toBe(session)
   })
 })
