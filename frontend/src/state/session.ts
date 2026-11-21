@@ -53,6 +53,8 @@ export type Activity =
   | { kind: 'transcribing' }
   | { kind: 'exporting' }
   | { kind: 'reviewing' }
+  /** A hand edit from the player: removing the masks a person clicked (F-42). */
+  | { kind: 'removing'; label: string }
 
 export type ExportState =
   | { kind: 'none' }
@@ -116,6 +118,8 @@ export type SessionEvent =
   | { type: 'undo_started' }
   | { type: 'redo_started' }
   | { type: 'history_settled'; sync: Sync }
+  | { type: 'remove_started'; label: string }
+  | { type: 'remove_settled'; sync: Sync }
   | { type: 'analysis_started' }
   | ({ type: 'analysis_settled'; analysed: boolean; tracks: Track[] } & ReviewData)
   | { type: 'transcript_started' }
@@ -207,6 +211,21 @@ function projectTransition(project: OpenProject, event: ProjectEvent): OpenProje
       const verb = activity.kind === 'undoing' ? 'Undid' : 'Redid'
       const what = changedRequest(project.history, event.sync.history)
       const text = what ? `${verb}: ${what}` : `${verb} the last request.`
+      return synced(
+        {
+          ...project,
+          activity: IDLE,
+          chat: [...project.chat, { kind: 'note', id: nextId(project), text }],
+        },
+        event.sync,
+      )
+    }
+    case 'remove_started':
+      if (!idle) return project
+      return { ...project, activity: { kind: 'removing', label: event.label } }
+    case 'remove_settled': {
+      if (activity.kind !== 'removing') return project
+      const text = `Removed the blur on ${activity.label}. Undo brings it back.`
       return synced(
         {
           ...project,
@@ -360,6 +379,7 @@ function failureText(activity: Activity, message: string): string {
     analysing: 'Analysis failed',
     transcribing: 'Transcription failed',
     reviewing: 'Review failed',
+    removing: 'Removing the blur failed',
   }
   const label = activity.kind === 'idle' || activity.kind === 'exporting' ? '' : what[activity.kind]
   return `${label}: ${message}`
@@ -382,6 +402,7 @@ export const canSend = (session: Session): boolean => idleProject(session) !== n
 export const canUndo = (session: Session): boolean => !!idleProject(session)?.history.can_undo
 export const canRedo = (session: Session): boolean => !!idleProject(session)?.history.can_redo
 export const canExport = (session: Session): boolean => idleProject(session) !== null
+export const canEditByHand = (session: Session): boolean => idleProject(session) !== null
 export const canOpen = (session: Session): boolean => !isBusy(session)
 
 const ACTIVITY_LABEL: Record<Activity['kind'], string | null> = {
@@ -393,6 +414,7 @@ const ACTIVITY_LABEL: Record<Activity['kind'], string | null> = {
   transcribing: 'Waiting for the transcript…',
   exporting: 'Rendering the export…',
   reviewing: 'Applying review…',
+  removing: 'Removing the blur…',
 }
 
 /** One line saying what's in flight, or null when idle. */

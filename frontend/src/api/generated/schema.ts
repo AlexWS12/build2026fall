@@ -214,6 +214,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/masks/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Masks
+         * @description Stop masking the given targets over the whole clip, as a hand edit (F-42: a person clicked
+         *     a box in the player and removed it). Undo brings them back. 400 if a target isn't masked.
+         */
+        post: operations["remove_masks_api_projects__project_id__masks_remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/tracks": {
         parameters: {
             query?: never;
@@ -641,6 +662,14 @@ export interface components {
              */
             created_at: string;
             video: components["schemas"]["VideoRef"];
+        };
+        /** RemoveMasksBody */
+        RemoveMasksBody: {
+            /**
+             * Targets
+             * @description Track ids whose masks to remove over the whole clip.
+             */
+            targets: string[];
         };
         /** ReviewAction */
         ReviewAction: {
@@ -1258,6 +1287,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_masks_api_projects__project_id__masks_remove_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoveMasksBody"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

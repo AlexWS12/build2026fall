@@ -226,6 +226,12 @@ class ReviewReply(Model):
     )
 
 
+class RemoveMasksBody(Model):
+    targets: list[str] = Field(
+        min_length=1, description="Track ids whose masks to remove over the whole clip."
+    )
+
+
 class ReviewAction(Model):
     action: Literal["confirm", "cut"] = Field(
         description="confirm: mark the stretch as checked. cut: cut the stretch out of the video."
@@ -465,6 +471,34 @@ def undo(project_id: str, storage: StorageDep) -> HistoryReply:
 def redo(project_id: str, storage: StorageDep) -> HistoryReply:
     """Bring back the most recently undone request. 400 if there is nothing to redo."""
     return _undo_or_redo(storage, project_id, "redo")
+
+
+@router.post("/{project_id}/masks/remove")
+def remove_masks(project_id: str, body: RemoveMasksBody, storage: StorageDep) -> HistoryReply:
+    """Stop masking the given targets over the whole clip, as a hand edit (F-42: a person clicked
+    a box in the player and removed it). Undo brings them back. 400 if a target isn't masked.
+    """
+    project = _open(storage, project_id)
+    with _one_request_at_a_time(project.id):
+        call = ToolCall(step_id="s1", tool="remove_mask", args={"targets": body.targets})
+        try:
+            done = execute_plan(
+                Plan(calls=(call,)),
+                project,
+                request_id=new_id("r"),
+                source="user",
+                registry=UI_TOOLS,
+            )
+        except (OSError, ValueError) as e:  # an unreadable timeline, or a write that failed
+            logger.exception("removing masks on project %s failed", project.id)
+            raise HTTPException(
+                status_code=500,
+                detail="couldn't remove the mask: the project's files can't be read or written.",
+            ) from e
+        if not done.ok:
+            reason = (done.error or "the edit was refused").removeprefix("remove_mask: ")
+            raise HTTPException(status_code=400, detail=reason)
+        return _history(project)
 
 
 @router.get("/{project_id}/tracks")

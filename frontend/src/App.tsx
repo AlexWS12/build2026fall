@@ -14,6 +14,7 @@ import { Toolbar } from './components/Toolbar'
 import { TranscriptPanel } from './components/TranscriptPanel'
 import {
   busyLabel,
+  canEditByHand,
   canExport,
   canOpen,
   canRedo,
@@ -151,6 +152,8 @@ function App({ api = defaultClient }: { api?: ApiClient }) {
           handle={player}
           onTime={(seconds) => setPosition({ url: videoUrl, seconds })}
           onDuration={(seconds) => setMeasured({ url: videoUrl, seconds })}
+          onRemoveMasks={(ids, label) => void commands.removeMasks(ids, label)}
+          editable={canEditByHand(session)}
         />
         <div className={styles.side}>
           <ChatPanel

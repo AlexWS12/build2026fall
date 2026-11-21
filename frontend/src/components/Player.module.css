@@ -61,6 +61,63 @@
   background: #000;
 }
 
+/* F-42: masks a viewer can click to select (and then remove). The overlay itself lets clicks
+   through to the video's controls; only the boxes catch them. */
+.pickable {
+  padding: 0;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.pickable:hover {
+  border-color: rgb(167 155 250);
+}
+
+.selected,
+.selected:hover {
+  border: 2px solid #f3c969;
+  box-shadow: 0 0 0 2px rgb(243 201 105 / 0.35);
+}
+
+.selection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 10px;
+  border: 1px solid rgb(243 201 105 / 0.45);
+  border-radius: 10px;
+  background: var(--sunken);
+  font-size: 0.87rem;
+}
+
+.selection button {
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 7px;
+  background: #f3c969;
+  color: #1a1622;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.selection button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.selection .quiet {
+  background: var(--border);
+  color: var(--text);
+  font-weight: 400;
+}
+
+.hint {
+  margin-left: auto;
+  color: var(--faint);
+  font-size: 0.8rem;
+}
+
 .bar {
   display: flex;
   flex-wrap: wrap;

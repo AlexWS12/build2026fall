@@ -1327,3 +1327,49 @@ def test_analysis_after_a_model_comparison_runs_the_apps_detectors_and_makes_the
     assert response.json() == {"analysed": True, "tracks": 1}
     assert default_tracks_key(storage, sha) not in (None, "k-aaaa1111", "k-bbbb2222")
     assert get(client, project_id, "tracks")["analysed"] is True
+
+
+# --- POST /api/projects/{id}/masks/remove (F-42) -------------------------------------------
+
+
+def test_removing_a_mask_by_hand_unmasks_it_and_undo_brings_it_back(
+    client: TestClient, storage: Storage, long_clip: Path
+) -> None:
+    project_id = upload(client, long_clip)["project_id"]
+    track_id = analysed(storage, project_id)
+    assert ask(client, project_id, "blur faces")["status"] == "applied"
+    assert track_id in get(client, project_id, "state")["masks"]
+    base = f"/api/projects/{project_id}"
+
+    response = client.post(f"{base}/masks/remove", json={"targets": [track_id]})
+
+    assert response.status_code == 200
+    history = response.json()
+    assert history["requests"][-1]["source"] == "user"
+    assert history["requests"][-1]["kinds"] == ["remove_mask"]
+    assert get(client, project_id, "state")["masks"].get(track_id, []) == []
+    assert client.post(f"{base}/undo").status_code == 200
+    assert get(client, project_id, "state")["masks"][track_id]
+    assert projects._busy == set()
+
+
+def test_removing_a_mask_that_isnt_there_is_400_and_writes_nothing(
+    client: TestClient, storage: Storage, long_clip: Path
+) -> None:
+    project_id = upload(client, long_clip)["project_id"]
+    track_id = analysed(storage, project_id)
+    before = log_bytes(storage, project_id)
+
+    response = client.post(f"/api/projects/{project_id}/masks/remove", json={"targets": [track_id]})
+
+    assert response.status_code == 400
+    assert "isn't masked" in response.json()["detail"]
+    assert log_bytes(storage, project_id) == before
+
+
+def test_removing_masks_needs_at_least_one_target(
+    client: TestClient, storage: Storage, long_clip: Path
+) -> None:
+    project_id = upload(client, long_clip)["project_id"]
+    response = client.post(f"/api/projects/{project_id}/masks/remove", json={"targets": []})
+    assert response.status_code == 422
