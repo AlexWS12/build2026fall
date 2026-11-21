@@ -946,14 +946,14 @@ def test_an_analysis_that_cant_be_trusted_is_503_everywhere_it_matters(
         save_tracks(storage, sha, key, [face()])
     base = f"/api/projects/{project_id}"
 
-    responses = [
-        client.get(f"{base}/tracks"),
-        client.post(f"{base}/analysis"),
-        client.post(f"{base}/exports"),
-    ]
+    responses = [client.get(f"{base}/tracks"), client.post(f"{base}/exports")]
+    # Analyse doesn't guess between them: it runs the app's own detectors, which the stub
+    # backend can't, so it says that instead.
+    analyse = client.post(f"{base}/analysis")
 
-    assert [r.status_code for r in responses] == [503] * 3
+    assert [r.status_code for r in responses] == [503] * 2
     assert {r.json()["detail"] for r in responses} == {projects._BAD_ANALYSIS}
+    assert (analyse.status_code, analyse.json()["detail"]) == (503, projects._NO_ANALYSIS)
     assert get(client, project_id, "")["analysed"] is False
     blur = ask(client, project_id, "blur faces")
     assert blur["status"] == "not_applied" and "analysis can't be used" in blur["reply"]
@@ -1305,3 +1305,24 @@ def test_a_request_by_what_is_said_needs_a_transcript(
     assert reply["status"] == "not_applied"
     assert "no transcript yet" in reply["reply"]
     assert log_bytes(storage, project_id) == before
+
+
+def test_analysis_after_a_model_comparison_runs_the_apps_detectors_and_makes_them_default(
+    client: TestClient,
+    storage: Storage,
+    red_square_clip: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VIBE_BACKEND", "local")
+    monkeypatch.setenv("VIBE_VISION_DETECTORS", "stub:color=red,label=face")
+    project_id = upload(client, red_square_clip)["project_id"]
+    sha = storage.open_project(project_id).info.video.sha256
+    for key in ("k-aaaa1111", "k-bbbb2222"):  # a bake-off left two sets and no default
+        save_tracks(storage, sha, key, [face()])
+
+    response = client.post(f"/api/projects/{project_id}/analysis")
+
+    assert response.status_code == 200
+    assert response.json() == {"analysed": True, "tracks": 1}
+    assert default_tracks_key(storage, sha) not in (None, "k-aaaa1111", "k-bbbb2222")
+    assert get(client, project_id, "tracks")["analysed"] is True

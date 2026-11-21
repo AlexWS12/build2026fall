@@ -6,6 +6,7 @@
     new-labels CLIP_ID                       start an empty labels file for a clip
     label-frames CLIP_ID [--label face]      write a page to draw boxes on (under data/)
     import-labels CLIP_ID FILE               put the boxes saved from that page in the labels
+    offline --set SPECS [--every N] ...      run detector sets on the clips, time and cache them
 
 Exit status 1 means something needs fixing; the output says what.
 """
@@ -18,7 +19,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from vibe.benchmark import labels as labels_mod
-from vibe.benchmark import labeltool
+from vibe.benchmark import labeltool, offline
 from vibe.benchmark import manifest as manifest_mod
 from vibe.benchmark.labels import write_labels_template
 from vibe.benchmark.manifest import (
@@ -77,6 +78,21 @@ def main(argv: list[str] | None = None) -> int:
     imported.add_argument("clip_id")
     imported.add_argument("file", type=Path)
 
+    off = commands.add_parser(
+        "offline", help="run detector sets over the clips, time them and cache their tracks"
+    )
+    off.add_argument(
+        "--set",
+        dest="sets",
+        action="append",
+        required=True,
+        help='";"-separated detector specs run together, e.g. "rfdetr-n;yunet:weights=@yunet"',
+    )
+    off.add_argument("--every", action="append", type=int, help="stride; repeatable (default 1)")
+    off.add_argument("--tracker", default="iou")
+    off.add_argument("--clip", action="append", help="clip id; repeatable (default: all)")
+    off.add_argument("--out", type=Path, help="also write offline.json and offline.md here")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "report":
@@ -87,6 +103,8 @@ def main(argv: list[str] | None = None) -> int:
             return _label_frames(args)
         if args.command == "import-labels":
             return _import_labels(args)
+        if args.command == "offline":
+            return _offline(args)
         return _new_labels(args)
     except (BenchmarkError, VideoError, FileNotFoundError, ValidationError, StorageError) as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -179,6 +197,31 @@ def _import_labels(args: argparse.Namespace) -> int:
     tracks = [t for t in merged.tracks if t.label == label]
     keyframes = sum(len(t.keyframes) for t in tracks)
     print(f"wrote {path}: {len(tracks)} {label} tracks, {keyframes} keyframes. Commit it.")
+    return 0
+
+
+def _offline(args: argparse.Namespace) -> int:
+    manifest = load_manifest(manifest_mod.MANIFEST_PATH)
+    ids = args.clip or [e.clip_id for e in manifest.clips]
+    missing = [i for i in ids if manifest.get(i) is None]
+    if missing:
+        raise BenchmarkError(f"not in the manifest: {', '.join(missing)}")
+    entries = [manifest.get(i) for i in ids]
+    sets = [[s.strip() for s in group.split(";") if s.strip()] for group in args.sets]
+    report = offline.run_offline(
+        entries, Storage(), sets, args.every or [1], args.tracker, progress=True
+    )
+    labels = {
+        e.clip_id: lab
+        for e in entries
+        if (lab := labels_mod.load_labels(e.clip_id, labels_mod.LABELS_DIR)) is not None
+    }
+    text = offline.render_markdown(report, labels)
+    print(text, end="")
+    if args.out:
+        atomic_write(args.out / "offline.json", report.model_dump_json(indent=2) + "\n")
+        atomic_write(args.out / "offline.md", text)
+        print(f"wrote {args.out / 'offline.json'} and {args.out / 'offline.md'}", file=sys.stderr)
     return 0
 
 

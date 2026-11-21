@@ -294,6 +294,9 @@ export interface paths {
          *     run through F-08's backend: ``stub`` only replays the cache, ``local`` runs them here and
          *     ``remote`` on the model server. Running them can take a while; the project is busy (409)
          *     until it's done. A video that can't be analysed is 503, never an empty result.
+         *
+         *     When a model comparison left several track sets and none is the default, this runs (or
+         *     replays) the app's own detectors and makes that set the default, instead of guessing.
          */
         post: operations["analyse_api_projects__project_id__analysis_post"];
         delete?: never;

@@ -60,7 +60,13 @@ from vibe.contract.common import Model, Source
 from vibe.modules import ModuleError, NoAnalysis, run_analysis
 from vibe.modules.denoise import cached_noise_profile
 from vibe.modules.transcribe import Transcript, transcribe_video
-from vibe.modules.vision import CacheError, VisionAnalysis, load_tracks, set_default_tracks
+from vibe.modules.vision import (
+    AmbiguousAnalysis,
+    CacheError,
+    VisionAnalysis,
+    load_tracks,
+    set_default_tracks,
+)
 from vibe.modules.vision.analysis import VisionNotInstalled
 from vibe.modules.vision.cache import default_tracks_key
 from vibe.render import (
@@ -532,13 +538,22 @@ def analyse(project_id: str, storage: StorageDep) -> AnalysisReply:
     run through F-08's backend: ``stub`` only replays the cache, ``local`` runs them here and
     ``remote`` on the model server. Running them can take a while; the project is busy (409)
     until it's done. A video that can't be analysed is 503, never an empty result.
+
+    When a model comparison left several track sets and none is the default, this runs (or
+    replays) the app's own detectors and makes that set the default, instead of guessing.
     """
     project = _open(storage, project_id)
     with _one_request_at_a_time(project.id):
-        analysed, tracks = _tracks(storage, project)
-        if not analysed:
+        sha = project.info.video.sha256
+        try:
+            needs_run = load_tracks(storage, sha) is None
+        except AmbiguousAnalysis:
+            needs_run = default_tracks_key(storage, sha) is None
+        except (CacheError, ValidationError):
+            needs_run = False  # unreadable, or a default pointing at nothing: _tracks says so
+        if needs_run:
             _run_vision(storage, project)
-            analysed, tracks = _tracks(storage, project)
+        analysed, tracks = _tracks(storage, project)
         return AnalysisReply(analysed=analysed, tracks=len(tracks))
 
 
@@ -560,7 +575,7 @@ def _run_vision(storage: Storage, project: Project) -> None:
         logger.exception("reading the video of %s for analysis failed", project.id)
         raise HTTPException(status_code=500, detail="couldn't read this project's video") from e
     if default_tracks_key(storage, video.sha256) is None:
-        # So a later CLI run (a model comparison) doesn't leave the app with two unmarked sets.
+        # So a model comparison (CLI, bake-off) never leaves the app with unmarked sets to pick.
         set_default_tracks(storage, video.sha256, result.key)
 
 
