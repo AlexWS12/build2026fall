@@ -47,7 +47,8 @@ Tests: `backend/tests/test_api_preview.py` (the real request → plan → pendin
 - Claim the F-44 row in `docs/ROADMAP.md` once Sprint 5 is planned (I did not edit it).
 
 ## Gotchas
-- **Not checked in a browser.** The UI is covered by component tests and an HTTP run, not by looking at it (the Chrome extension didn't respond when I tried). Someone should click through Apply / Discard once.
+- **Checked in a browser once** (Chrome, 2026-11-21, 10 s test clip, stub backend, throwaway data dir): `cut 0:02 to 0:04` shows the proposal; a reload keeps the Apply / Discard bar; Apply writes the cut; a second cut previews on top of it; Discard changes nothing; Undo removes the applied cut. Screenshots: `docs/handoffs/img/f44-*.jpg`. Not checked: a real GPU backend, other browsers, narrow screens, keyboard-only use.
+- Discard shows in chat with the amber warning icon ("Discarded the preview. Nothing was changed."). It reads fine but looks like an error.
 - The toolbox CLI with `--project` can still write while a preview waits; only the HTTP routes refuse.
 - `GET /preview` takes no lock, so one that overlaps an Apply in progress can briefly show a clean-looking preview. The accept path is safe (checked above).
 - If Apply succeeds but the UI's refresh afterwards fails, it says "failed" until the next click, though the edit is applied.
