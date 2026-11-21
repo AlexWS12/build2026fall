@@ -48,7 +48,9 @@ WHOLE_CLIP = TimeRange(start=0)
 EffectType = Literal["blur", "pixelate", "box"]
 """How a visual target is hidden. ``box`` is a solid black box."""
 
-AudioFilterType = Literal["denoise"]
+AudioFilterType = Literal["denoise", "isolate_voice"]
+"""``denoise`` turns down steady noise (hiss, hum, fans). ``isolate_voice`` keeps the voices and
+turns down everything else, steady or not (taps, clicks, fans)."""
 
 Source = Literal["agent", "user"]
 """Who wrote an op: the agent (from a chat request) or the user (a hand edit in the UI)."""
