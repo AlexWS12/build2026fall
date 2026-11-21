@@ -130,7 +130,8 @@ def test_a_declined_or_broken_answer_asks_the_user_to_retry(answer: Any) -> None
 
 
 def test_an_api_outage_asks_the_user_to_retry() -> None:
-    import anthropic
+    # The SDK is the optional llm extra; CI installs the backend without it.
+    anthropic = pytest.importorskip("anthropic")
 
     outage = anthropic.APIConnectionError.__new__(anthropic.APIConnectionError)
     Exception.__init__(outage, "connection refused")
