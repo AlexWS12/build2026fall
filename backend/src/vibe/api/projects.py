@@ -12,7 +12,8 @@
     GET  /api/projects/{id}/tracks          where the targets are, for the preview's overlay
     GET  /api/projects/{id}/review          the mask stretches to check (F-41)
     POST /api/projects/{id}/review/{item}   confirm one of them, or cut it out
-    POST /api/projects/{id}/analysis        make sure the video has a vision analysis
+    POST /api/projects/{id}/analysis        make sure the video has a vision analysis (runs one
+                                            if this server is set up to)
     POST /api/projects/{id}/exports         render the timeline into a new MP4
     GET  /api/projects/{id}/exports/{name}  that MP4
 
@@ -43,6 +44,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import Field, ValidationError
 
+from vibe import config
 from vibe.agent import (
     Clarify,
     LlmError,
@@ -60,7 +62,8 @@ from vibe.contract.common import Model, Source
 from vibe.modules import ModuleError
 from vibe.modules.denoise import cached_noise_profile
 from vibe.modules.transcribe import Transcript, transcribe_video
-from vibe.modules.vision import CacheError, load_tracks
+from vibe.modules.vision import CacheError, NotInstalled, load_tracks
+from vibe.modules.vision.run import analyse_for_app
 from vibe.render import (
     NothingToRender,
     RenderError,
@@ -100,8 +103,14 @@ _EXPORT_NAME = re.compile(r"export_[0-9a-f]{12}\.mp4")
 """Exactly what ``create_export`` makes. Anything else is 404."""
 
 _NO_ANALYSIS = (
-    "no analysis is cached for this video, and this server can't run one yet. Analyse it with "
+    "no analysis is cached for this video, and this server isn't set up to run one (it needs "
+    "VIBE_DETECTORS and a backend other than stub). Analyse it with "
     "`python -m vibe.modules.vision analyze`, or copy the video's cache folder from a teammate."
+)
+_CANT_DETECT = (
+    "this server is set up to analyse videos, but its detector or tracker can't run: a missing "
+    "package or weights, or bad VIBE_DETECTORS / VIBE_TRACKER / VIBE_DETECT_EVERY settings. The "
+    "server log says which."
 )
 _BAD_ANALYSIS = (
     "this video's analysis can't be used: it's unreadable, or several are cached and none is "
@@ -417,7 +426,9 @@ def transcribe_project(project_id: str, storage: StorageDep) -> Transcript:
     project = _open(storage, project_id)
     with _one_request_at_a_time(project.id):
         try:
-            return transcribe_video(storage, project.info.video)
+            return transcribe_video(
+                storage, project.info.video, backend=config.transcribe_backend()
+            )
         # F-08's errors: also the model server failing, or a corrupt cached transcript (the
         # log names the file to delete). TranscribeError is one of them.
         except ModuleError as e:
@@ -519,15 +530,38 @@ def act_on_review_item(
 def analyse(project_id: str, storage: StorageDep) -> AnalysisReply:
     """Make sure the video has a vision analysis (F-10). 503 when this server can't provide one.
 
-    For now this only replays the shared cache: no detector is connected to the API yet, on any
-    backend, so a video nobody analysed gets 503 rather than an empty result.
+    A cached analysis is replayed. Without one, a server set up to analyse (``VIBE_DETECTORS``
+    and a backend other than ``stub``, see ``vibe.modules.vision.run``) runs the detectors and
+    the tracker now, caches the result as the video's default, and replies with it. That can
+    take minutes; the project is busy (409) until it's done. Any other server says 503, never
+    "0 tracks", so nothing is masked by an analysis that didn't run.
     """
     project = _open(storage, project_id)
     with _one_request_at_a_time(project.id):
         analysed, tracks = _tracks(storage, project)
         if not analysed:
+            _detect(storage, project)
+            analysed, tracks = _tracks(storage, project)
+        if not analysed:
             raise HTTPException(status_code=503, detail=_NO_ANALYSIS)
         return AnalysisReply(analysed=True, tracks=len(tracks))
+
+
+def _detect(storage: Storage, project: Project) -> None:
+    """Run the configured detectors on the project's video and cache the tracks, if this server
+    is set up to. Not set up is no error here: the caller still finds nothing and says 503."""
+    try:
+        stored = analyse_for_app(storage, project.info.video)
+    except (NotInstalled, ValueError) as e:  # before any frame is read: settings or packages
+        logger.warning("analysing project %s can't start: %s", project.id, e)
+        raise HTTPException(status_code=503, detail=_CANT_DETECT) from e
+    except (VideoError, OSError, RuntimeError) as e:  # RuntimeError: e.g. the GPU ran out
+        logger.exception("analysing the video of project %s failed", project.id)
+        raise HTTPException(status_code=500, detail="couldn't analyse this project's video") from e
+    if stored is not None:
+        logger.info(
+            "analysed project %s: %d tracks (%s)", project.id, len(stored.tracks), stored.tracks_key
+        )
 
 
 @router.post("/{project_id}/exports")

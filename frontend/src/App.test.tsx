@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { describe, expect, test, vi } from 'vitest'
 import App from './App'
 import type { ApiClient } from './api'
+import { ApiError } from './api/client'
 import type { HistoryReply, ReviewItem, ReviewReply, TimelineState } from './api/types'
 import { createMockClient } from './api/mock'
 import { TranscriptPanel } from './components/TranscriptPanel'
@@ -11,6 +12,12 @@ const mock = () => createMockClient({ delayMs: 0 })
 function upload(name = 'street.mp4') {
   const input = screen.getByLabelText('Video file')
   fireEvent.change(input, { target: { files: [new File(['fake'], name, { type: 'video/mp4' })] } })
+}
+
+/** The uploaded video is open, and the analysis the UI starts by itself after an upload is over. */
+async function opened(name = 'street') {
+  await screen.findByText(name)
+  await waitFor(() => expect(screen.queryByText('Analysing the video…')).not.toBeInTheDocument())
 }
 
 describe('App shell', () => {
@@ -56,7 +63,7 @@ describe('App shell', () => {
   test('the logo leads back to the landing page', async () => {
     render(<App api={mock()} />)
     upload()
-    await screen.findByText('street')
+    await opened()
     fireEvent.click(screen.getByRole('button', { name: 'Back to the start screen' }))
     expect(await screen.findByLabelText('Video file')).toBeInTheDocument()
     expect(screen.queryByLabelText('Request')).not.toBeInTheDocument()
@@ -87,7 +94,7 @@ describe('App shell', () => {
   test('transcribing shows the transcript with its times', async () => {
     render(<App api={mock()} />)
     upload()
-    await screen.findByText('street')
+    await opened()
     fireEvent.click(screen.getByRole('button', { name: 'Transcribe' }))
 
     const segments = within(await screen.findByRole('list', { name: 'Transcript segments' }))
@@ -102,7 +109,7 @@ describe('App shell', () => {
     }
     render(<App api={failing} />)
     upload()
-    await screen.findByText('street')
+    await opened()
     fireEvent.click(screen.getByRole('button', { name: 'Transcribe' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Transcription failed: 503')
   })
@@ -113,7 +120,7 @@ describe('App shell', () => {
     render(<App api={pending} />)
     upload()
     const input = await screen.findByLabelText('Request')
-    await screen.findByText('street')
+    await opened()
     fireEvent.change(input, { target: { value: 'blur faces' } })
     expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled()
 
@@ -129,7 +136,7 @@ describe('App shell', () => {
     const api: ApiClient = { ...mock(), sendRequest: () => new Promise(() => {}) }
     render(<App api={api} />)
     upload()
-    await screen.findByText('street')
+    await opened()
     const button = screen.getByRole('button', { name: 'Transcribe' })
     expect(button).toBeEnabled()
 
@@ -161,7 +168,7 @@ describe('App shell', () => {
     render(<App api={mock()} />)
     upload()
     const input = await screen.findByLabelText('Request')
-    await screen.findByText('street')
+    await opened()
 
     fireEvent.change(input, { target: { value: 'blur all faces' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
@@ -237,7 +244,7 @@ describe('App wired to a backend', () => {
 
   async function sendMute() {
     upload()
-    await screen.findByText('street')
+    await opened()
     fireEvent.change(screen.getByLabelText('Request'), { target: { value: 'mute the first 5 seconds' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     await screen.findByText('Muted 0:00–0:05.')
@@ -293,7 +300,7 @@ describe('App wired to a backend', () => {
     })
     render(<App api={failing} />)
     upload()
-    await screen.findByText('street')
+    await opened()
     fireEvent.change(screen.getByLabelText('Request'), { target: { value: 'blur faces' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
@@ -305,7 +312,7 @@ describe('App wired to a backend', () => {
   test('export offers the file, then marks it stale once the timeline changes', async () => {
     render(<App api={backend()} />)
     upload()
-    await screen.findByText('street')
+    await opened()
 
     fireEvent.click(screen.getByRole('button', { name: 'Export' }))
     const link = await screen.findByRole('link', { name: 'Download export (0:15)' })
@@ -322,7 +329,7 @@ describe('App wired to a backend', () => {
     })
     render(<App api={failing} />)
     upload()
-    await screen.findByText('street')
+    await opened()
     fireEvent.click(screen.getByRole('button', { name: 'Export' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(
       "Export failed: the renderer can't apply audio filters yet",
@@ -351,6 +358,78 @@ describe('App wired to a backend', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'interview' }))
     expect(await screen.findByText('interview', { selector: 'strong' })).toBeInTheDocument()
     expect(screen.getByLabelText('Request')).toBeEnabled()
+  })
+
+  describe('analysing a new video', () => {
+    test('an uploaded video is analysed without asking, and the chat says what was found', async () => {
+      let done = false
+      const analyse = vi.fn(() => {
+        done = true
+        return Promise.resolve({ analysed: true, tracks: 0 })
+      })
+      render(<App api={backend({ analyse, getTracks: () => Promise.resolve({ analysed: done, tracks: [] }) })} />)
+      upload()
+      await opened()
+      expect(analyse).toHaveBeenCalledWith('prj_mock')
+      expect(await screen.findByText('Analysed the video: 0 targets found.')).toBeInTheDocument()
+      expect(screen.getByText(/Analysed · 0 targets/)).toBeInTheDocument()
+    })
+
+    test("a server that can't analyse is not an error: the header still offers it", async () => {
+      const analyse = vi.fn(() => Promise.reject(new ApiError(503, 'no detector here')))
+      render(<App api={backend({ analyse })} />)
+      upload()
+      await opened()
+      expect(analyse).toHaveBeenCalledTimes(1)
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.queryByText('The video could not be analysed.')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Analyse video/ })).toBeEnabled()
+    })
+
+    test('an analysis that fails for another reason says so', async () => {
+      const analyse = vi.fn(() => Promise.reject(new ApiError(500, "couldn't analyse this project's video")))
+      render(<App api={backend({ analyse })} />)
+      upload()
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        "Analysis failed: couldn't analyse this project's video",
+      )
+    })
+
+    test('the 503 is only quiet right after an upload: the button reports it', async () => {
+      const analyse = vi.fn(() => Promise.reject(new ApiError(503, 'no detector here')))
+      render(<App api={backend({ analyse })} />)
+      upload()
+      await opened()
+      fireEvent.click(screen.getByRole('button', { name: /Analyse video/ }))
+      expect(await screen.findByRole('alert')).toHaveTextContent('Analysis failed: no detector here')
+      expect(analyse).toHaveBeenCalledTimes(2)
+    })
+
+    test('reopening a project does not start an analysis', async () => {
+      const info = {
+        storage_version: 1,
+        project_id: 'prj_old',
+        name: 'interview',
+        created_at: '2026-11-13T00:00:00Z',
+        video: { sha256: 'b'.repeat(64), ext: '.mp4', original_name: 'upload.mp4' },
+      }
+      const analyse = vi.fn(() => Promise.resolve({ analysed: true, tracks: 0 }))
+      const stored = backend({
+        analyse,
+        listProjects: () => Promise.resolve([info]),
+        getProject: () =>
+          Promise.resolve({
+            info,
+            video: { duration: 20, width: 640, height: 360, fps: 24, has_audio: true },
+            analysed: false,
+          }),
+        videoUrl: () => '',
+      })
+      render(<App api={stored} />)
+      fireEvent.click(await screen.findByRole('button', { name: 'interview' }))
+      expect(await screen.findByText('interview', { selector: 'strong' })).toBeInTheDocument()
+      expect(analyse).not.toHaveBeenCalled()
+    })
   })
 
   describe('the review panel', () => {
@@ -386,7 +465,7 @@ describe('App wired to a backend', () => {
     async function open(api: ApiClient) {
       render(<App api={api} />)
       upload()
-      await screen.findByText('street')
+      await opened()
       return screen.getByRole('region', { name: 'Review' })
     }
 

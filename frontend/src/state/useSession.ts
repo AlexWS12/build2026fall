@@ -101,17 +101,38 @@ export function useSession(api: ApiClient): { session: Session; commands: Sessio
       }
     }
 
+    /**
+     * Make sure the video is analysed (F-10). `afterUpload`: started by the UI itself, so a
+     * server that can't analyse (503) settles quietly instead of failing; anything else fails.
+     */
+    const analyse = (afterUpload: boolean) =>
+      run({ type: 'analysis_started' }, async (id) => {
+        let quiet = false
+        try {
+          await api.analyse(id)
+        } catch (error) {
+          if (!(afterUpload && error instanceof ApiError && error.status === 503)) throw error
+          quiet = true
+        }
+        const [{ analysed, tracks }, review] = await Promise.all([api.getTracks(id), reviewOf(id)])
+        return { type: 'analysis_settled', analysed, tracks, quiet, ...review }
+      })
+
     return {
       async upload(file) {
         if (!dispatch({ type: 'open_started', label: `Uploading ${file.name}…` })) return
+        let loaded: Snapshot
         try {
           const created = await api.createProject(file)
           // The player plays the local file: no need to download what was just uploaded.
-          const loaded = await snapshot(created.project_id, () => URL.createObjectURL(file))
-          dispatch({ type: 'open_succeeded', snapshot: loaded })
+          loaded = await snapshot(created.project_id, () => URL.createObjectURL(file))
         } catch (error) {
           dispatch({ type: 'open_failed', message: `Upload failed: ${errorText(error)}` })
+          return
         }
+        dispatch({ type: 'open_succeeded', snapshot: loaded })
+        // A new video gets analysed right away, so "blur the person in red" has people to look at.
+        if (!loaded.analysed) await analyse(true)
       },
       async open(id) {
         if (!dispatch({ type: 'open_started', label: 'Opening the project…' })) return
@@ -139,15 +160,7 @@ export function useSession(api: ApiClient): { session: Session; commands: Sessio
           const [timeline, review] = await Promise.all([api.getState(id), reviewOf(id)])
           return { type: 'history_settled', sync: { history, timeline, ...review } }
         }),
-      analyse: () =>
-        run({ type: 'analysis_started' }, async (id) => {
-          await api.analyse(id)
-          const [{ analysed, tracks }, review] = await Promise.all([
-            api.getTracks(id),
-            reviewOf(id),
-          ])
-          return { type: 'analysis_settled', analysed, tracks, ...review }
-        }),
+      analyse: () => analyse(false),
       exportVideo: () =>
         run({ type: 'export_started' }, async (id) => ({
           type: 'export_settled',
