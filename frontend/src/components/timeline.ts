@@ -84,3 +84,22 @@ export function fallbackDuration(state: TimelineState): number {
 
 export const formatTime = (seconds: number) =>
   `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`
+
+/**
+ * The part of the source that cuts at its two ends leave: what trimming has kept so far. Cuts in
+ * the middle don't count. Times are source seconds; a video cut entirely keeps nothing to show,
+ * so the whole length comes back then.
+ */
+export function keptRange(state: TimelineState, total: number): [number, number] {
+  const touching = 0.05
+  const cuts = [...state.cuts].sort((a, b) => a.start - b.start)
+  let start = 0
+  for (const cut of cuts) {
+    if (cut.start <= start + touching) start = Math.max(start, cut.end ?? total)
+  }
+  let end = total
+  for (const cut of [...cuts].reverse()) {
+    if ((cut.end ?? total) >= end - touching) end = Math.min(end, cut.start)
+  }
+  return start < end ? [Math.max(0, start), Math.min(total, end)] : [0, total]
+}

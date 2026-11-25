@@ -43,6 +43,8 @@ export interface ApiClient {
   ): Promise<ReviewReply>
   /** Undo the latest request still in effect. */
   undo(projectId: string): Promise<HistoryReply>
+  /** Keep only `start`..`end` of the source (the timeline's trim handles), as a hand edit. */
+  trim(projectId: string, start: number, end: number): Promise<HistoryReply>
   redo(projectId: string): Promise<HistoryReply>
   /** Find and track people, faces and plates in the video (slow the first time). */
   analyse(projectId: string): Promise<AnalysisReply>
@@ -121,6 +123,12 @@ export const httpClient: ApiClient = {
       body: JSON.stringify({ action }),
     }),
   undo: (projectId) => post(project(projectId, '/undo')),
+  trim: (projectId, start, end) =>
+    call(project(projectId, '/trim'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ start, end }),
+    }),
   redo: (projectId) => post(project(projectId, '/redo')),
   analyse: (projectId) => post(project(projectId, '/analysis')),
   exportVideo: (projectId) => post(project(projectId, '/exports')),

@@ -253,6 +253,37 @@ describe('App wired to a backend', () => {
     expect(screen.getByRole('button', { name: 'Redo' })).toBeDisabled()
   })
 
+  test('the trim handles keep a range through the server, and the chat says so', async () => {
+    const trim = vi.fn((_id: string, _start: number, _end: number) =>
+      Promise.resolve({ requests: [], can_undo: true, can_redo: false }),
+    )
+    const api = backend({
+      trim,
+      getProject: () =>
+        Promise.resolve({
+          info: {
+            storage_version: 1,
+            project_id: 'prj_mock',
+            name: 'street',
+            created_at: '2026-11-13T00:00:00Z',
+            video: { sha256: 'a'.repeat(64), ext: '.mp4', original_name: 'street.mp4' },
+          },
+          video: { duration: 10, width: 640, height: 360, fps: 24, has_audio: true },
+          analysed: true,
+        }),
+    })
+    render(<App api={api} />)
+    upload()
+    await screen.findByText('street')
+
+    fireEvent.change(screen.getByLabelText('Trim start'), { target: { value: '2' } })
+    fireEvent.change(screen.getByLabelText('Trim end'), { target: { value: '8' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Trim to 0:02–0:08' }))
+
+    await waitFor(() => expect(trim).toHaveBeenCalledWith('prj_mock', 2, 8))
+    expect(await screen.findByText('Trimmed to 0:02–0:08.')).toBeInTheDocument()
+  })
+
   test('undo takes the request back and redo restores it', async () => {
     render(<App api={backend()} />)
     await sendMute()

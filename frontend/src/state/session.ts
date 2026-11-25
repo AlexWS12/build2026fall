@@ -53,6 +53,7 @@ export type Activity =
   | { kind: 'transcribing' }
   | { kind: 'exporting' }
   | { kind: 'reviewing' }
+  | { kind: 'trimming' }
 
 export type ExportState =
   | { kind: 'none' }
@@ -122,6 +123,8 @@ export type SessionEvent =
   | { type: 'transcript_settled'; transcript: Transcript }
   | { type: 'export_started' }
   | { type: 'export_settled'; result: ExportReply }
+  | { type: 'trim_started' }
+  | { type: 'trim_settled'; sync: Sync; start: number; end: number }
   | { type: 'review_started' }
   | { type: 'review_settled'; sync: Sync; gone: boolean }
   /** The activity in flight failed. `sync`, when the server could still be read, is the truth. */
@@ -251,6 +254,17 @@ function projectTransition(project: OpenProject, event: ProjectEvent): OpenProje
         activity: IDLE,
         export: { kind: 'ready', result: event.result, stale: false },
       }
+    case 'trim_started':
+      if (!idle) return project
+      return { ...project, activity: { kind: 'trimming' } }
+    case 'trim_settled': {
+      if (activity.kind !== 'trimming') return project
+      const text = `Trimmed to ${clock(event.start)}–${clock(event.end)}.`
+      return synced(
+        { ...project, activity: IDLE, chat: [...project.chat, { kind: 'note', id: nextId(project), text }] },
+        event.sync,
+      )
+    }
     case 'review_started':
       if (!idle) return project
       return { ...project, activity: { kind: 'reviewing' } }
@@ -325,6 +339,14 @@ const withProject = (
 ): Session => (project === session.project ? session : { ...session, project, error: null })
 
 /** Takes the server's timeline and history, and marks a finished export stale if they moved. */
+/** Seconds as M:SS, with tenths when there are some: 2 -> "0:02", 8.5 -> "0:08.5". */
+function clock(seconds: number): string {
+  const tenths = Math.round(seconds * 10)
+  const whole = Math.floor(tenths / 10)
+  const text = `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`
+  return tenths % 10 ? `${text}.${tenths % 10}` : text
+}
+
 function synced(project: OpenProject, sync: Sync): OpenProject {
   const moved = JSON.stringify(sync.timeline) !== JSON.stringify(project.timeline)
   const exported =
@@ -360,6 +382,7 @@ function failureText(activity: Activity, message: string): string {
     analysing: 'Analysis failed',
     transcribing: 'Transcription failed',
     reviewing: 'Review failed',
+    trimming: 'Trim failed',
   }
   const label = activity.kind === 'idle' || activity.kind === 'exporting' ? '' : what[activity.kind]
   return `${label}: ${message}`
@@ -393,6 +416,7 @@ const ACTIVITY_LABEL: Record<Activity['kind'], string | null> = {
   transcribing: 'Waiting for the transcript…',
   exporting: 'Rendering the export…',
   reviewing: 'Applying review…',
+  trimming: 'Trimming…',
 }
 
 /** One line saying what's in flight, or null when idle. */

@@ -29,6 +29,7 @@ export function createAutoClient(
     getReview: (id) => pick().then((c) => c.getReview(id)),
     reviewItem: (id, itemId, action) => pick().then((c) => c.reviewItem(id, itemId, action)),
     undo: (id) => pick().then((c) => c.undo(id)),
+    trim: (id, start, end) => pick().then((c) => c.trim(id, start, end)),
     redo: (id) => pick().then((c) => c.redo(id)),
     analyse: (id) => pick().then((c) => c.analyse(id)),
     exportVideo: (id) => pick().then((c) => c.exportVideo(id)),
