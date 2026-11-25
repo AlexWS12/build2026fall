@@ -117,6 +117,19 @@ _TOOLS = (
         ref_args={"time_range": "time_range"},
     ),
     ToolSpec(
+        name="isolate_voice",
+        kind="edit",
+        description=(
+            "Keep the voices and turn down every other sound (taps, clicks, typing, fans, "
+            "background noise) over a time range. Voices in the background stay."
+        ),
+        args=tools.IsolateVoiceArgs,
+        result=tools.EditResult,
+        returns="none",
+        run=tools.isolate_voice,
+        ref_args={"time_range": "time_range"},
+    ),
+    ToolSpec(
         name="undo",
         kind="edit",
         description="Undo the latest request still in effect: every op it wrote, together.",

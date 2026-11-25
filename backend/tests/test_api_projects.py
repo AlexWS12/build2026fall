@@ -1097,7 +1097,7 @@ def test_denoise_export_on_a_backend_without_denoise_is_422_naming_it(
     response = client.post(f"/api/projects/{project_id}/exports")
 
     assert response.status_code == 422
-    assert "can't apply denoise" in response.json()["detail"]
+    assert "can't apply the audio filters" in response.json()["detail"]
     assert list(storage.open_project(project_id).exports_dir.iterdir()) == []
 
 

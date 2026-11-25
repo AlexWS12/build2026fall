@@ -1,5 +1,5 @@
-"""The audio side of a render: denoise the filtered spans, silence the muted ones, then remove
-the cut ones.
+"""The audio side of a render: filter the filtered spans (denoise, isolate voice), silence the
+muted ones, then remove the cut ones.
 
 Works on samples from ``vibe.video.extract_audio``, where sample 0 is at source time 0, so a
 span's source times map straight to sample numbers. Video frames are dropped over the same
@@ -9,9 +9,11 @@ The sound fades out over ``FADE_SECONDS`` before each mute and each cut, and bac
 an edit doesn't click. The fades sit outside the edited range: a muted span stays exactly
 silent, and the samples a cut keeps are the same ones.
 
-Denoise (F-33b) runs on the source sound first, through ``DenoiseMix``: a stream, so an export
-never holds the whole clip. The gate runs over the whole stream and is mixed in over each
-filter span at its strength, with the same ``FADE_SECONDS`` ramps outside the span.
+Audio filters run on the source sound first, through ``FilterMix``: a stream, so an export
+never holds the whole clip. Each filter (denoise F-33b, isolate voice F-34) runs over the whole
+stream and is mixed in over its spans at their strength, with the same ``FADE_SECONDS`` ramps
+outside the span. Filters are chained in ``FILTER_ORDER``, so where a denoise span and an
+isolate-voice span overlap, the voice is isolated from already-denoised sound.
 """
 
 from collections.abc import Callable
@@ -20,9 +22,13 @@ import numpy as np
 
 from vibe.contract import AudioFilterSpan, TimelineState
 from vibe.modules.denoise import NoiseGate, NoiseProfile, learn_noise
+from vibe.modules.isolate_voice import VoiceIsolator
 from vibe.render.errors import UnsupportedEdit
 
-SUPPORTED_FILTERS = frozenset({"denoise"})
+FILTER_ORDER = ("denoise", "isolate_voice")
+"""The audio filters this renderer applies, in the order they're chained."""
+
+_PROCESSORS = {"denoise": NoiseGate, "isolate_voice": VoiceIsolator}
 
 FADE_SECONDS = 0.01
 """How long the sound fades out before a mute or a cut, and back in after. 10 ms is short
@@ -37,44 +43,71 @@ def check_audio(state: TimelineState) -> None:
             f"the timeline mutes one speaker ({', '.join(speakers)}); that needs to know who "
             "speaks when, and comes with F-32"
         )
-    unknown = sorted({f.filter for f in state.audio_filters} - SUPPORTED_FILTERS)
+    unknown = sorted({f.filter for f in state.audio_filters} - set(FILTER_ORDER))
     if unknown:
         raise UnsupportedEdit(
             f"the timeline has audio filters ({', '.join(unknown)}) the renderer doesn't apply yet"
         )
 
 
-def denoise_spans(state: TimelineState) -> list[AudioFilterSpan]:
-    return [f for f in state.audio_filters if f.filter == "denoise"]
+def filter_spans(state: TimelineState, name: str | None = None) -> list[AudioFilterSpan]:
+    """The timeline's audio filter spans: all of them, or only filter ``name``'s."""
+    return [f for f in state.audio_filters if name is None or f.filter == name]
 
 
 def render_audio(samples: np.ndarray, sample_rate: int, state: TimelineState) -> np.ndarray:
-    """A whole clip's ``samples`` ((n,) or (n, channels)) denoised, with the mutes silenced and
-    the cuts removed. Returns a new array; ``samples`` is left as it was. Denoise learns its
-    profile from ``samples`` themselves."""
+    """A whole clip's ``samples`` ((n,) or (n, channels)) filtered, with the mutes silenced and
+    the cuts removed. Returns a new array; ``samples`` is left as it was. The filters learn
+    their noise profile from ``samples`` themselves."""
     check_audio(state)
-    if denoise_spans(state):
-        mix = DenoiseMix(learn_noise([samples], sample_rate), state, samples.dtype)
+    if filter_spans(state):
+        mix = FilterMix(learn_noise([samples], sample_rate), state, samples.dtype)
         samples = np.concatenate([mix.push(samples), mix.finish()])
     return apply_audio_edits(samples, sample_rate, state)
 
 
-class DenoiseMix:
-    """The denoise filter spans over a stream of source sound, one chunk at a time.
+class FilterMix:
+    """Every audio filter's spans over a stream of source sound, one chunk at a time.
 
     Like ``NoiseGate``, ``push`` returns the samples that are final, lined up with the input
     (sample ``i`` out is source sample ``i``), and ``finish`` the rest. Outside every span the
-    output is the input exactly; inside, the gated sound blended in at the span's strength (the
-    strongest where spans overlap), which is what ``denoise(strength=s)`` does.
+    output is the input exactly. One stage per filter with spans, chained in ``FILTER_ORDER``.
     """
 
     def __init__(self, profile: NoiseProfile, state: TimelineState, dtype: object) -> None:
-        self._rate = profile.sample_rate
-        self._spans = [
-            (s.start, s.end, 1.0 if s.strength is None else s.strength)
-            for s in denoise_spans(state)
-        ]
-        self._gate = NoiseGate(profile, 1.0, dtype)
+        check_audio(state)
+        self._stages = []
+        for name in FILTER_ORDER:
+            spans = filter_spans(state, name)
+            if spans:
+                processor = _PROCESSORS[name](profile, 1.0, dtype)
+                self._stages.append(_FilterStage(processor, spans, profile.sample_rate))
+
+    def push(self, chunk: np.ndarray) -> np.ndarray:
+        for stage in self._stages:
+            chunk = stage.push(chunk)
+        return chunk
+
+    def finish(self) -> np.ndarray:
+        rest: np.ndarray | None = None
+        for stage in self._stages:
+            parts = [stage.push(rest)] if rest is not None and len(rest) else []
+            parts.append(stage.finish())
+            rest = np.concatenate(parts)
+        return rest if rest is not None else np.zeros(0)
+
+
+class _FilterStage:
+    """One filter's spans: its processor runs over the whole stream, and the processed sound is
+    blended in over each span at the span's strength (the strongest where spans overlap), which
+    is what the module's whole-clip call does at ``strength=s``."""
+
+    def __init__(
+        self, processor: NoiseGate | VoiceIsolator, spans: list[AudioFilterSpan], rate: int
+    ) -> None:
+        self._rate = rate
+        self._spans = [(s.start, s.end, 1.0 if s.strength is None else s.strength) for s in spans]
+        self._gate = processor
         self._dry: list[np.ndarray] = []  # input not yet matched by gate output
         self._first = 0  # source sample number of the next output sample
 

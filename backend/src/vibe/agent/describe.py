@@ -77,6 +77,8 @@ def _sentence(plan: Plan, step: StepReport, steps: dict[str, StepReport]) -> str
             return f"{verb}{who} {when}.{more}"
         case "denoise":
             return f"Added noise reduction to {when}."
+        case "isolate_voice":
+            return f"Turned down everything but the voices over {when}."
         case "undo":
             return "Undid the last edit."
         case "redo":

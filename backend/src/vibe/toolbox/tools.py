@@ -300,6 +300,10 @@ class DenoiseArgs(Model):
     )
 
 
+class IsolateVoiceArgs(DenoiseArgs):
+    """Same arguments as ``denoise``: a time range (null = the whole clip) and a strength."""
+
+
 def _end(r: TimeRange) -> str:
     return "the end" if r.end is None else f"{r.end:g}s"
 
@@ -585,6 +589,17 @@ def denoise(args: DenoiseArgs, ctx: ToolContext) -> EditResult:
         time_range=args.time_range,
     )
     return _write("denoise", [op], ctx)
+
+
+def isolate_voice(args: IsolateVoiceArgs, ctx: ToolContext) -> EditResult:
+    op = AddAudioFilter(
+        request_id=ctx.request_id,
+        source=ctx.source,
+        filter="isolate_voice",
+        strength=args.strength,
+        time_range=args.time_range,
+    )
+    return _write("isolate_voice", [op], ctx)
 
 
 # --- undo / redo --------------------------------------------------------------------------

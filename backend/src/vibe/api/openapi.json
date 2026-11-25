@@ -873,7 +873,10 @@
           },
           "filter": {
             "type": "string",
-            "const": "denoise",
+            "enum": [
+              "denoise",
+              "isolate_voice"
+            ],
             "title": "Filter"
           },
           "strength": {

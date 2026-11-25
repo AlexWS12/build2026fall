@@ -50,6 +50,8 @@ def test_clock_is_minutes_and_seconds(seconds: float, text: str) -> None:
         ("keep only 0:10 to 0:40", "Kept only 0:10–0:40; the rest is cut."),
         ("reduce the noise", "Added noise reduction to the whole video."),
         ("denoise 0:10 to 0:20", "Added noise reduction to 0:10–0:20."),
+        ("keep only the voices", "Turned down everything but the voices over the whole video."),
+        ("remove taps 0:10 to 0:20", "Turned down everything but the voices over 0:10–0:20."),
         ("blur people", "Blurred 2 people, each while on screen (the whole video)."),
         ("pixelate faces from 0:10 to 0:20", "Pixelated 1 face, each while on screen (0:10–0:20)."),
         (

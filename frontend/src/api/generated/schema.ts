@@ -413,9 +413,9 @@ export interface components {
             request_id: string;
             /**
              * Filter
-             * @constant
+             * @enum {string}
              */
-            filter: "denoise";
+            filter: "denoise" | "isolate_voice";
             /** Strength */
             strength?: number | null;
         };

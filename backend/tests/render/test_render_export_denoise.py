@@ -167,3 +167,38 @@ def test_project_export_caches_the_noise_profile(
     assert len(keys) == 1
     assert cached_keys(storage, sha, "noise_profile") == keys
     assert len(list(project.exports_dir.glob("*.mp4"))) == 2
+
+
+# --- F-34: isolate voice goes through the same export path --------------------------------
+
+
+def isolate(start: float = 0.0, end: float | None = None) -> AddAudioFilter:
+    return AddAudioFilter(
+        request_id="r",
+        source="agent",
+        filter="isolate_voice",
+        time_range=TimeRange(start=start, end=end),
+    )
+
+
+def test_export_isolates_the_voice_inside_the_span_and_keeps_the_length(
+    noisy_clip: Path, tmp_path: Path
+) -> None:
+    plain = sound_of(export(noisy_clip, state_of(), [], tmp_path / "plain.mp4").path)
+    clean = sound_of(export(noisy_clip, state_of(isolate(2.0)), [], tmp_path / "iso.mp4").path)
+
+    before, after = pauses(0.0, 1.95), pauses(2.0, SECONDS - 0.1)
+    assert level(clean[after]) < level(plain[after]) - 6  # the hiss, as with denoise
+    assert abs(level(clean[before]) - level(plain[before])) < 0.5
+    assert len(clean) == pytest.approx(len(plain), abs=1024)
+
+
+@pytest.mark.parametrize("backend", ["local", "remote"])
+def test_a_backend_that_cant_isolate_fails_before_writing(
+    noisy_clip: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backend: str
+) -> None:
+    monkeypatch.setenv("VIBE_BACKEND", backend)
+
+    with pytest.raises(RenderError, match="F-34"):
+        export(noisy_clip, state_of(isolate()), [], tmp_path / "out.mp4")
+    assert not list(tmp_path.iterdir())
