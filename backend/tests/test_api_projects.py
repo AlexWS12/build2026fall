@@ -1229,6 +1229,8 @@ def test_a_request_by_what_is_said_needs_a_transcript(
     assert reply["status"] == "not_applied"
     assert "no transcript yet" in reply["reply"]
     assert log_bytes(storage, project_id) == before
+
+
 # --- Exports hide masked people by shape when a segmenter is set (F-15) ---------------------
 
 
