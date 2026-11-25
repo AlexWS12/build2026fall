@@ -52,7 +52,7 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 | F-31 | Transcription with word timestamps | Should | F-03 | done | Whisper family. paul, `paul/f31-transcribe`: module (an F-08 `Analysis`, so stub / local / remote), CLI, `POST /api/projects/{id}/transcript` and the Transcript panel |
 | F-32 | Who spoke when (diarization) + mute a specific speaker | Should | F-31 | idea | Needs separation if speakers overlap |
 | F-33 | Background noise reduction | Must | F-03 | in progress | nickolas, `nickolas/f33-denoise` |
-| F-34 | Remove a specific sound ("the fan noise", "the music") | Stretch | F-33 | idea | |
+| F-34 | Remove a specific sound ("the fan noise", "the music") | Stretch | F-33 | in progress | nickolas, `nickolas/f34-isolate-voice` (on F-33b): phase A `isolate_voice` keeps the voices and turns down taps, clicks and fans (stub). Phase B, keeping only the main speaker, needs F-32 |
 
 ### Human in the loop
 | ID | Feature | Priority | Depends on | Status | Notes |
@@ -213,14 +213,14 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 |---|---|---|---|---|
 | F-11, F-12, F-20, F-31: review and merge | (same owners) | (PR branches) | Merged, `main` green | done (#26, #27, #29, #30) |
 | R-1b Run the planner LLM comparison, add the decision row, pass `LlmPlanner` to `plan_request`; flag LLM-invented cut ranges | paul? | paul/r1-planner-llm | Script output → decision row; a non-template request gets a valid plan | planned |
-| F-50 Live feasibility spike on the RTX 5070 (also: blur at reduced resolution, since the renderer's blur is ~311 ms per quarter-1080p frame per the F-04 handoff) | _open_ | | fps and latency per stage, hardware stated → live go/no-go | planned |
+| F-50 Live feasibility spike on the RTX 5070 (also: blur at reduced resolution, since the renderer's blur is ~311 ms per quarter-1080p frame per the F-04 handoff) | alex, nickolas | nickolas/f50-live-spike | fps and latency per stage, hardware stated → live go/no-go | ready for review |
 
 **Build**
 | Card | Owner | Branch | Exit check | Status |
 |---|---|---|---|---|
 | Plan executor: run the plan through `call_tool`, resolve `$ref`s, dry-run on an `OpLog` copy, reply `applied`. **Priority: first** | alex | alex/demo-wiring-redesign | In the UI (`VITE_API_MODE=http`), "mute the first 5 seconds" is applied and shows in the timeline | done (#32) |
 | Export route + source-video route + Export button in the UI. Shared file (API routes) | alex | alex/demo-wiring-redesign | Upload → request → Export → the MP4 has the edit; route test in stub mode | done (#32) |
-| F-33b Renderer applies `audio_filters` (denoise) + pick the local/remote model | _open_ | | A test exports a clip with a denoise span, no GPU | planned |
+| F-33b Renderer applies `audio_filters` (denoise) + pick the local/remote model | nickolas | nickolas/f33b-render-audio-filters | A test exports a clip with a denoise span, no GPU | in progress (renderer part); the model pick is a follow-up |
 | F-09b Consented clips + labels in `clips.json` / `labels/` | eduardo | eduardo/f09b-pexels-clips | `benchmark report` scores an F-10 run against real labels | in progress (#35: 9 clips, 5 labelled) |
 | F-10b Detector bake-off → decision row, then harden the winner (stitching, face↔person, fit under `run_analysis`) | _open_ | | Report table with hardware stated → decision row | planned |
 | F-13 Targeting by description ("the person in red", "everyone except me") | luis | luis/f13-targeting-by-description | A request picks the right tracks on a labeled clip; unsure = masked | first cut done (#33); VLM judge (D-020) → Sprint 5 |

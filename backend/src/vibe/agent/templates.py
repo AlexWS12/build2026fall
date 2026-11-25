@@ -15,7 +15,7 @@ from vibe.contract import WHOLE_CLIP, TimeRange
 
 _EDIT_VERBS = (
     r"blur|pixelate|black ?box|box|hide|mute|silence|unmute|restore|cut|remove|delete"
-    r"|denoise|reduce"
+    r"|denoise|reduce|get rid of|take out|filter out|isolate|clean up"
 )
 _KEEP_VERBS = r"keep|(?:only|just) keep"
 _VERBS = f"{_EDIT_VERBS}|{_KEEP_VERBS}"
@@ -52,7 +52,47 @@ _DENOISE = re.compile(
 
 "cut the noise from 0:10 to 0:20" may mean cutting that noisy part out, so with a range, "cut"
 and "delete" are asked about instead (see ``_denoise``)."""
-NOISE_WORDS = frozenset({"noise", "noises", "hiss", "hisses", "hum", "hums"})
+STEADY_NOISE_WORDS = frozenset(
+    "noise noises hiss hisses hissing hum hums humming buzz buzzes buzzing fan fans".split()
+)
+"""Steady sounds: ``denoise`` (F-33) is enough for them."""
+CLICK_WORDS = frozenset(
+    "tap taps tapping click clicks clicking typing knock knocks knocking thump thumps "
+    "bump bumps sounds".split()
+)
+"""Short sounds (and "background sounds", which may be anything): ``denoise`` doesn't touch
+them, so they plan ``isolate_voice`` (F-34), which keeps the voices and turns the rest down."""
+NOISE_WORDS = STEADY_NOISE_WORDS | CLICK_WORDS
+VOICE_WORDS = frozenset("voice voices speech talking speakers dialogue".split())
+
+_SOUND_KIND = (
+    r"(?:(?:background|computer|laptop|pc|finger|desk|table|keyboard|mouse|pen|annoying|loud"
+    r"|constant|electrical|fan)\s+)*"
+)
+_SOUND = (
+    r"(?:the\s+|that\s+|those\s+|any\s+|all\s+(?:the\s+|that\s+)?)?"
+    rf"(?:{_SOUND_KIND}(?:noises?|hiss(?:es|ing)?|hums?|humming|buzz(?:es|ing)?|tapping|taps?"
+    r"|clicks?|clicking|typing|knocks?|knocking|thumps?|bumps?)"
+    r"|(?:computer|laptop|pc|ceiling|desk)\s+fans?|background\s+sounds?)"
+)
+"""One unwanted sound. A bare "fan" or "sound" isn't one: "remove the fan" may mean the object
+on screen, and "remove the sound" may mean muting."""
+_SOUNDS = re.compile(
+    r"(remove|reduce|cut|delete|get\s+rid\s+of|take\s+out|filter\s+out)\s+(?:out\s+)?"
+    rf"({_SOUND}(?:\s*,\s*(?:and\s+)?{_SOUND}|\s+and\s+{_SOUND})*)"
+    r"(?:\s+(?:in|from)\s+(?:the\s+)?(?:audio|sound|video|clip|background))?\b(.*)"
+)
+"""A list of unwanted sounds ("the finger tapping and the computer fans"). Steady ones only plan
+``denoise``; any short one plans ``isolate_voice``. Before ``_DENOISE`` and ``_CUT``."""
+_ISOLATE = re.compile(
+    r"(?:(?:(isolate)|(?:(?:only|just)\s+)?keep(?:\s+(?:only|just))?)\s+(?:the\s+)?"
+    r"(?:voices?|speech|talking|speakers|dialogue|people\s+talking)(?:\s+only)?"
+    r"|(clean\s+up)\s+(?:the\s+)?(?:audio|sound))\b(.*)"
+)
+"""Before ``_KEEP``: "keep only the voices" filters the sound, it doesn't keep a time range.
+
+With a time, "keep" is asked about (see ``_isolate``). No singular "speaker": "keep the speaker"
+suggests only the main one, and phase A keeps every voice."""
 _CUT = re.compile(r"(?:cut|remove|delete)(?:\s+out)?\b(.*)")
 _KEEP = re.compile(r"(?:(?:only|just)\s+)?keep(?:\s+(?:only|just))?\b(.*)")
 """Keep only a range: the toolbox cuts everything around it."""
@@ -90,11 +130,24 @@ class _Steps:
 
     def __init__(self) -> None:
         self.calls: list[ToolCall] = []
+        self._made = 0
 
     def add(self, tool: str, args: dict[str, Any]) -> str:
-        step_id = f"s{len(self.calls) + 1}"
+        self._made += 1
+        step_id = f"s{self._made}"
         self.calls.append(ToolCall(step_id=step_id, tool=tool, args=args))
         return step_id
+
+    def add_filter(self, tool: str, args: dict[str, Any]) -> None:
+        """An audio filter step, once. ``isolate_voice`` already turns down steady noise, so
+        "remove the noise and keep the voices" is one ``isolate_voice``, not a ``denoise`` too.
+        Only exact repeats merge: same literal range, or both the whole clip."""
+        same = [c for c in self.calls if c.tool in ("denoise", "isolate_voice") and c.args == args]
+        if any(c.tool in (tool, "isolate_voice") for c in same):
+            return
+        if tool == "isolate_voice":
+            self.calls = [c for c in self.calls if c not in same]
+        self.add(tool, args)
 
     def time_arg(self, phrase: TimeRange | str) -> dict[str, Any]:
         """A literal range, or a ``resolve_time`` step and a ref to it."""
@@ -304,7 +357,30 @@ def _denoise(match: re.Match[str], steps: _Steps) -> Matched:
         return None
     if verb in ("cut", "delete") and when is not _NO_TIME and when != WHOLE_CLIP:
         return None  # cut that part out, or filter it? Ask.
-    steps.add("denoise", _time_args(when, steps))
+    steps.add_filter("denoise", _time_args(when, steps))
+    return _scope(when)
+
+
+def _sounds(match: re.Match[str], steps: _Steps) -> Matched:
+    verb, sounds, rest = match.groups()
+    when = _time(rest)
+    if when is None:
+        return None
+    if verb in ("cut", "delete") and when is not _NO_TIME and when != WHOLE_CLIP:
+        return None  # cut that part out, or filter it? Ask.
+    clicks = not CLICK_WORDS.isdisjoint(re.findall(r"[a-z]+", sounds))
+    steps.add_filter("isolate_voice" if clicks else "denoise", _time_args(when, steps))
+    return _scope(when)
+
+
+def _isolate(match: re.Match[str], steps: _Steps) -> Matched:
+    said_keep = match.group(1) is None and match.group(2) is None
+    when = _time(match.group(3))
+    if when is None:
+        return None
+    if said_keep and when is not _NO_TIME and when != WHOLE_CLIP:
+        return None  # "keep only the dialogue from 0:30 to 1:00" may mean keep only that part
+    steps.add_filter("isolate_voice", _time_args(when, steps))
     return _scope(when)
 
 
@@ -336,6 +412,8 @@ _TEMPLATES: tuple[tuple[re.Pattern[str], Callable[[re.Match[str], _Steps], Match
     (_MASK, _mask),
     (_MUTE, _mute),
     (_UNMUTE, _unmute),
+    (_SOUNDS, _sounds),
+    (_ISOLATE, _isolate),
     (_DENOISE, _denoise),
     (_CUT, _cut),
     (_KEEP, _keep),

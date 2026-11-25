@@ -955,10 +955,24 @@ def test_export_masks_with_the_cached_tracks_and_reports_what_it_had_to_guess(
     ]
 
 
+def test_export_with_denoise_is_a_playable_mp4_and_caches_the_noise_profile(
+    client: TestClient, storage: Storage, long_clip: Path
+) -> None:
+    project_id = upload(client, long_clip)["project_id"]
+    assert ask(client, project_id, "reduce the noise")["status"] == "applied"
+    sha256 = storage.open_project(project_id).info.video.sha256
+
+    made = export(client, project_id)
+
+    path = storage.open_project(project_id).exports_dir / made["name"]
+    assert probe(path).audio is not None
+    assert made["duration"] == pytest.approx(LONG_SECONDS, abs=0.2)
+    assert list((storage.cache_dir / sha256 / "noise_profile").glob("*.json"))
+
+
 @pytest.mark.parametrize(
     ("requests", "reason"),
     [
-        (["reduce the noise"], "audio filters (denoise)"),
         (["cut the first half", "cut the second half"], "nothing to render"),
     ],
 )
@@ -978,12 +992,31 @@ def test_export_the_renderer_refuses_is_422_with_the_reason_and_no_file(
     assert projects._busy == set()
 
 
+@pytest.mark.parametrize("backend", ["local", "remote"])
+def test_denoise_export_on_a_backend_without_denoise_is_422_naming_it(
+    client: TestClient,
+    storage: Storage,
+    long_clip: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    backend: str,
+) -> None:
+    project_id = upload(client, long_clip)["project_id"]
+    assert ask(client, project_id, "reduce the noise")["status"] == "applied"
+    monkeypatch.setenv("VIBE_BACKEND", backend)
+
+    response = client.post(f"/api/projects/{project_id}/exports")
+
+    assert response.status_code == 422
+    assert "can't apply the audio filters" in response.json()["detail"]
+    assert list(storage.open_project(project_id).exports_dir.iterdir()) == []
+
+
 def test_a_render_that_breaks_is_a_500_with_a_fixed_message(
     client: TestClient, long_clip: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     project_id = upload(client, long_clip)["project_id"]
 
-    def fail(*args: object) -> None:
+    def fail(*args: object, **kwargs: object) -> None:
         raise projects.RenderError("encoding /srv/data/projects/x/exports/.tmp.mp4 failed")
 
     monkeypatch.setattr(projects, "export", fail)

@@ -130,6 +130,71 @@ def test_denoise_is_its_own_clause() -> None:
     assert [c["tool"] for c in result] == ["mute", "denoise"]
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "remove the finger tapping and the computer fans",
+        "get rid of the keyboard clicks",
+        "remove the typing, the clicking and the hum",
+        "filter out the background sounds",
+        "keep only the voices",
+        "isolate the voice",
+        "just keep the speech",
+        "clean up the audio",
+        "remove the tapping and keep the voices",
+        "remove the background noise and keep the voices",
+    ],
+)
+def test_clicks_or_keeping_the_voices_isolate_the_voice_once(text: str) -> None:
+    assert [(c["tool"], c["args"]) for c in calls(text)] == [("isolate_voice", {})]
+
+
+@pytest.mark.parametrize("text", ["remove the computer fans", "remove the fan noise and the hum"])
+def test_steady_sounds_alone_still_only_denoise(text: str) -> None:
+    assert [c["tool"] for c in calls(text)] == ["denoise"]
+
+
+def test_isolate_voice_with_a_time_filters_only_that_range() -> None:
+    (call,) = calls("remove the tapping from 0:10 to 0:20")
+
+    assert call["tool"] == "isolate_voice"
+    assert call["args"] == {"time_range": {"start": 10.0, "end": 20.0}}
+
+
+@pytest.mark.parametrize(
+    "text", ["isolate the voices from 0:10 to 0:20", "keep only the voices for the whole video"]
+)
+def test_isolate_or_keep_for_the_whole_video_still_plans(text: str) -> None:
+    assert [c["tool"] for c in calls(text)] == ["isolate_voice"]
+
+
+def test_a_filter_over_another_range_isnt_merged() -> None:
+    result = calls("reduce the noise from 0:00 to 0:10 and isolate the voices from 0:10 to 0:20")
+
+    assert [c["tool"] for c in result] == ["denoise", "isolate_voice"]
+    assert len({c["step_id"] for c in result}) == 2
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "remove the fan",  # the object on screen?
+        "remove the sound",  # mute?
+        "cut the tapping from 0:10 to 0:20",  # cut that part out, or filter it?
+        "keep the voices down",
+        # Keep only the voices there, or keep only that part? Asked, not guessed.
+        "keep only the dialogue from 0:30 to 1:00",
+        "keep the voices for the first half",
+        "just keep the speech from 0:10 to 0:20",
+        # Singular: only the main speaker, which phase A can't do.
+        "keep the speaker from 0:10 to 0:20",
+        "isolate the speaker",
+    ],
+)
+def test_unclear_sound_requests_are_asked_not_guessed(text: str) -> None:
+    assert parse(text) is None
+
+
 def test_step_ids_are_numbered_across_clauses() -> None:
     result = calls("mute 0:01 to 0:02 and then blur faces for the whole video")
 
