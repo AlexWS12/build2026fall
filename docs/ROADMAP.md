@@ -52,7 +52,7 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 | F-31 | Transcription with word timestamps | Should | F-03 | done | Whisper family. paul, `paul/f31-transcribe`: module (an F-08 `Analysis`, so stub / local / remote), CLI, `POST /api/projects/{id}/transcript` and the Transcript panel |
 | F-32 | Who spoke when (diarization) + mute a specific speaker | Should | F-31 | idea | Needs separation if speakers overlap |
 | F-33 | Background noise reduction | Must | F-03 | in progress | nickolas, `nickolas/f33-denoise` |
-| F-34 | Remove a specific sound ("the fan noise", "the music") | Stretch | F-33 | idea | |
+| F-34 | Remove a specific sound ("the fan noise", "the music") | Stretch | F-33 | in progress | nickolas, `nickolas/f34-isolate-voice` (on F-33b): phase A `isolate_voice` keeps the voices and turns down taps, clicks and fans (stub). Phase B, keeping only the main speaker, needs F-32 |
 
 ### Human in the loop
 | ID | Feature | Priority | Depends on | Status | Notes |

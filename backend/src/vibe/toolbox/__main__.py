@@ -38,6 +38,7 @@ EXAMPLES = {
     "mute": '{"time_range": {"start": 10, "end": 20}}',
     "unmute": '{"time_range": {"start": 12, "end": 15}}',
     "denoise": '{"time_range": {"start": 10, "end": 20}, "strength": 0.5}',
+    "isolate_voice": '{"time_range": {"start": 10, "end": 20}, "strength": 0.8}',
     "undo": "{}",
     "redo": "{}",
 }

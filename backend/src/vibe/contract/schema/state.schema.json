@@ -30,7 +30,10 @@
           "type": "string"
         },
         "filter": {
-          "const": "denoise",
+          "enum": [
+            "denoise",
+            "isolate_voice"
+          ],
           "title": "Filter",
           "type": "string"
         },

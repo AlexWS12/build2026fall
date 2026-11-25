@@ -7,7 +7,7 @@ import pytest
 from vibe.contract import AddAudioFilter, Cut, Mute, Op, OpLog, TimelineState, TimeRange
 from vibe.modules.denoise import learn_noise
 from vibe.render import UnsupportedEdit
-from vibe.render.audio import FADE_SECONDS, DenoiseMix, apply_audio_edits, render_audio
+from vibe.render.audio import FADE_SECONDS, FilterMix, apply_audio_edits, render_audio
 
 RATE = 10  # 10 samples per second keeps the sample numbers easy to read
 
@@ -183,11 +183,11 @@ def test_denoise_runs_before_mutes_and_cuts() -> None:
 
 @pytest.mark.parametrize("size", [1601, 4800])
 def test_chunked_like_export_gives_the_whole_clip_result(size: int) -> None:
-    """What export does: DenoiseMix a chunk at a time, then mutes and cuts on what comes out,
+    """What export does: FilterMix a chunk at a time, then mutes and cuts on what comes out,
     numbered by output sample. Must match the whole clip at once, edges and fades included."""
     noisy, _ = noisy_tone()
     state = state_of(denoise_op(0.5, 3.2, strength=0.7), mute(1.0, 1.25), cut(2.0, 2.5))
-    mix = DenoiseMix(learn_noise([noisy], NOISY_RATE), state, noisy.dtype)
+    mix = FilterMix(learn_noise([noisy], NOISY_RATE), state, noisy.dtype)
 
     outputs = [mix.push(noisy[i : i + size]) for i in range(0, len(noisy), size)]
     parts, first = [], 0
@@ -258,3 +258,58 @@ def test_fades_of_close_edits_take_the_lower_gain() -> None:
     gap = out[1500:1505]
     expected = np.minimum(np.arange(1, 6), np.arange(5, 0, -1)) / 11
     assert np.allclose(gap, expected)
+
+
+# --- Isolate voice (F-34) -----------------------------------------------------------------
+
+
+def isolate_op(start: float = 0.0, end: float | None = None) -> AddAudioFilter:
+    return AddAudioFilter(
+        request_id="r",
+        source="agent",
+        filter="isolate_voice",
+        time_range=TimeRange(start=start, end=end),
+    )
+
+
+def tapped_tone(seconds: float = 4.0) -> tuple[np.ndarray, np.ndarray]:
+    """``noisy_tone`` with a short broadband tap every 0.37 s, and a mask of the taps that
+    land in the tone's pauses (under the tone, the tone is most of what's measured)."""
+    noisy, pauses = noisy_tone(seconds)
+    rng = np.random.default_rng(1)
+    taps = np.zeros(len(noisy), dtype=bool)
+    length = round(0.006 * NOISY_RATE)
+    for start in (np.arange(0.3, seconds - 0.1, 0.37) * NOISY_RATE).astype(int):
+        decay = np.exp(-np.arange(length) / (0.0015 * NOISY_RATE))
+        noisy[start : start + length] += (rng.normal(0, 0.3, length) * decay)[:, None]
+        taps[start : start + round(0.01 * NOISY_RATE)] = True
+    return noisy, taps & pauses
+
+
+def test_isolate_voice_turns_the_taps_down_inside_its_span_only() -> None:
+    noisy, taps = tapped_tone()
+    out = render_audio(noisy, NOISY_RATE, state_of(isolate_op(2.0, None)))
+
+    t = np.arange(len(noisy)) / NOISY_RATE
+    after, before = taps & (t >= 2.05), t < 1.95
+    assert level(out[after]) < level(noisy[after]) - 6
+    np.testing.assert_array_equal(out[before], noisy[before])
+
+
+@pytest.mark.parametrize("size", [1601, 4800])
+def test_denoise_and_isolate_voice_chained_and_chunked_give_the_whole_clip_result(
+    size: int,
+) -> None:
+    noisy, _ = tapped_tone()
+    state = state_of(denoise_op(0.0, 2.5), isolate_op(1.5, 3.5), mute(1.0, 1.25), cut(2.0, 2.5))
+    mix = FilterMix(learn_noise([noisy], NOISY_RATE), state, noisy.dtype)
+
+    outputs = [mix.push(noisy[i : i + size]) for i in range(0, len(noisy), size)]
+    parts, first = [], 0
+    for samples in [*outputs, mix.finish()]:
+        parts.append(apply_audio_edits(samples, NOISY_RATE, state, first_sample=first))
+        first += len(samples)
+
+    whole = render_audio(noisy, NOISY_RATE, state)
+    assert len(whole) == len(noisy) - NOISY_RATE // 2
+    np.testing.assert_allclose(np.concatenate(parts), whole, atol=1e-6)
