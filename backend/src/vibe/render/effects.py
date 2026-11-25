@@ -25,22 +25,35 @@ PIXELATE_BLOCKS = (8, 3)
 """Blocks across the target's shorter side, at strength 0 and at 1 (fewer is coarser)."""
 
 
-def apply_effect(image: np.ndarray, rect: Rect, effect: Effect) -> None:
-    """Hide ``rect`` of ``image`` (height, width, channels) in place."""
+def apply_effect(
+    image: np.ndarray, rect: Rect, effect: Effect, where: np.ndarray | None = None
+) -> None:
+    """Hide ``rect`` of ``image`` (height, width, channels) in place.
+
+    With ``where`` (a boolean array the shape of ``rect``), the effect is worked out over the
+    whole rect, so its size and look match the box's, but only the pixels set in ``where``
+    change: a shape mask (F-15).
+    """
     x1, y1, x2, y2 = rect
     if x2 <= x1 or y2 <= y1:
         return
     region = image[y1:y2, x1:x2]
+    if where is not None and where.shape != region.shape[:2]:
+        raise RenderError(f"mask shape {where.shape} doesn't match the region {region.shape[:2]}")
     strength = DEFAULT_STRENGTH if effect.strength is None else effect.strength
     match effect.type:
         case "box":
-            region[...] = 0
+            hidden = np.zeros_like(region)
         case "pixelate":
-            region[...] = _pixelate(region, strength)
+            hidden = _pixelate(region, strength)
         case "blur":
-            region[...] = _blur(region, strength)
+            hidden = _blur(region, strength)
         case _:
             raise RenderError(f"unknown effect {effect.type!r}")
+    if where is None:
+        region[...] = hidden
+    else:
+        region[where] = hidden[where]
 
 
 def _lerp(ends: tuple[float, float], strength: float) -> float:

@@ -11,7 +11,7 @@ and renamed once complete, so a failed render never leaves a half-written export
 import os
 import tempfile
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from fractions import Fraction
 from pathlib import Path
 
@@ -26,8 +26,9 @@ from vibe.modules import denoise, isolate_voice
 from vibe.modules.denoise import NoiseProfile, ProfileSource, learn_noise_from_file
 from vibe.render.audio import FilterMix, apply_audio_edits, check_audio, filter_spans
 from vibe.render.errors import NothingToRender, RenderError, UnsupportedEdit
-from vibe.render.frame import FrameRenderer, RenderIssue
+from vibe.render.frame import FrameRenderer, RenderIssue, ShapeUse
 from vibe.render.mask_report import MaskAudit, audit_masks
+from vibe.render.shape import MaskLookup
 from vibe.video import AudioInfo, FrameIndex, VideoInfo, VideoReader, iter_audio_chunks, probe
 
 VIDEO_CODEC = "libx264"
@@ -61,6 +62,8 @@ class RenderResult:
     ``audit.clean`` means no ``lost``/``no_track`` time, in continuous time, and no unchecked
     rules, so it can be false with no issues: a lost stretch too short to reach a frame is here
     but not in ``issues``. A rule never gets this far, so ``rules_not_audited`` is empty."""
+    shape_use: dict[str, ShapeUse] = field(default_factory=dict)
+    """With ``masks``: per masked track, frames hidden by its shape vs by its padded box."""
 
 
 def export(
@@ -69,12 +72,16 @@ def export(
     tracks: Iterable[Track],
     out_path: str | Path,
     noise_profile: ProfileSource | None = None,
+    masks: MaskLookup | None = None,
 ) -> RenderResult:
     """Render ``source`` with ``state`` and ``tracks`` into an MP4 at ``out_path``.
 
     ``noise_profile(sample_rate, layout)`` gives the noise profile for audio filters, e.g. from
     the analysis cache (``cached_noise_profile``). Without it, export learns one from ``source``
     first, which reads the sound twice.
+
+    ``masks`` (F-15, e.g. from ``vision.masks.ensure_masks``) hides targets by their shape where
+    a mask fits, and by the padded box everywhere else (``FrameRenderer``).
 
     Raises ``UnsupportedEdit`` before anything is written if the timeline has an edit this
     renderer can't apply yet, ``RenderError`` if the output can't be made (``NothingToRender``
@@ -88,7 +95,7 @@ def export(
         raise RenderError(f"{out_path} is the source video: exporting there would overwrite it")
     tracks = list(tracks)  # read twice below, and it may be a generator
     check_audio(state)
-    renderer = FrameRenderer(state, tracks)
+    renderer = FrameRenderer(state, tracks, masks)
     info = probe(source)
     index = FrameIndex.build(source)
     audit = audit_masks(state, tracks, duration=index.end, frame_times=index.times.tolist())
@@ -104,7 +111,9 @@ def export(
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
-    return RenderResult(out_path, frames, duration, tuple(renderer.issues), audit)
+    return RenderResult(
+        out_path, frames, duration, tuple(renderer.issues), audit, renderer.shape_use
+    )
 
 
 def _profile(
