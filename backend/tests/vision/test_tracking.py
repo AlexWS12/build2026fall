@@ -149,12 +149,35 @@ def test_bytetrack_still_covers_the_frames_before_it_confirms_a_track(fake_libra
     fake_libraries()
     seen = [Detection("face", box_at(0.3), 0.9)]
     tracks = run_bytetrack([(0.0, seen), (0.1, seen), (0.2, seen)])
-    # ByteTrack says nothing on the first frame; that sighting becomes its own track instead of
-    # being dropped, and ends once ByteTrack covers the same object (no box drawn twice).
-    times = sorted(k.t for t in tracks for k in t.keyframes)
-    assert times == pytest.approx([0.0, 0.1, 0.2])
-    assert sorted(len(t.keyframes) for t in tracks) == [1, 2]
-    assert tracks[1].keyframes[0].box == pytest.approx(box_at(0.3), abs=1e-6)
+    # ByteTrack says nothing on the first frame. That sighting isn't dropped, and the track
+    # ByteTrack confirms next continues it: one object, one track, from the first frame.
+    assert len(tracks) == 1
+    assert [k.t for k in tracks[0].keyframes] == pytest.approx([0.0, 0.1, 0.2])
+    assert tracks[0].keyframes[0].box == pytest.approx(box_at(0.3), abs=1e-6)
+
+
+def test_bytetrack_hands_each_stand_in_to_the_track_over_the_same_object(fake_libraries):
+    fake_libraries()
+    three = [Detection("person", box_at(x), 0.9) for x in (0.05, 0.4, 0.75)]
+    tracks = run_bytetrack([(0.0, three), (0.1, three), (0.2, three)])
+    # Three people, three tracks, each from the first frame and never jumping to someone else.
+    assert len(tracks) == 3
+    for track in tracks:
+        assert [k.t for k in track.keyframes] == pytest.approx([0.0, 0.1, 0.2])
+        assert len({round(k.box[0], 4) for k in track.keyframes}) == 1
+
+
+def test_bytetrack_is_version_2_in_the_cache_key(fake_libraries):
+    from vibe.modules.vision import cache
+
+    fake_libraries()
+    tracker = ByteTracker(TrackerSettings())
+    assert tracker.version == 2
+    v1 = cache.tracks_key("det-k1-aaaa1111", "bytetrack", TrackerSettings())
+    v2 = cache.tracks_key("det-k1-aaaa1111", "bytetrack", TrackerSettings(), tracker.version)
+    assert v1 != v2  # results from before the hand-over are never served for it
+    # Version 1 is the key from before versions existed, so older caches stay valid.
+    assert v1 == cache.tracks_key("det-k1-aaaa1111", "bytetrack", TrackerSettings(), 1)
 
 
 def test_bytetrack_keeps_a_weak_face_it_never_returns_next_to_a_confirmed_one(fake_libraries):

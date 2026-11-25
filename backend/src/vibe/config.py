@@ -20,6 +20,18 @@ def model_backend() -> Backend:
     return value
 
 
+def transcribe_backend() -> Backend:
+    """The backend for transcripts only (F-31), from ``VIBE_TRANSCRIBE_BACKEND``; unset means
+    ``VIBE_BACKEND``. For a machine that sends the description judge to a remote GPU
+    (``remote``) but runs Whisper itself (``local``)."""
+    value = os.environ.get("VIBE_TRANSCRIBE_BACKEND", "").strip()
+    if not value:
+        return model_backend()
+    if value not in _BACKENDS:
+        raise ValueError(f"VIBE_TRANSCRIBE_BACKEND must be one of {_BACKENDS}, got {value!r}")
+    return value
+
+
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -59,3 +71,35 @@ def remote_hosts() -> frozenset[str]:
 def remote_token() -> str | None:
     """Shared secret between the ``remote`` backend and the model server (``.env``, never git)."""
     return os.environ.get("VIBE_REMOTE_TOKEN") or None
+
+
+def detectors() -> list[str]:
+    """Detectors the app runs on a video that has no analysis yet (F-10), from ``VIBE_DETECTORS``:
+    one or more specs ``name[:option=value,...]`` separated by ``;``, e.g. ``tv-frcnn-mobile`` or
+    ``rfdetr-s;yunet:weights=data/models/yunet.onnx``. ``python -m vibe.modules.vision
+    detectors`` lists them.
+
+    Empty (the default) means the app only replays the analysis cache. There is no default
+    detector: which one is D-015, still Proposed, and not a choice to make silently."""
+    value = os.environ.get("VIBE_DETECTORS", "")
+    return [spec.strip() for spec in value.split(";") if spec.strip()]
+
+
+def tracker() -> str:
+    """The tracker for those analyses, from ``VIBE_TRACKER``: ``iou`` (the default) or
+    ``bytetrack``, optionally with ``TrackerSettings`` as ``:name=value,...``, e.g.
+    ``bytetrack:min_conf=0.85,iou_match=0.2,max_gap=3``."""
+    return os.environ.get("VIBE_TRACKER", "").strip() or "iou"
+
+
+def detect_every() -> int:
+    """Detect on every how many frames when the app analyses a video (``VIBE_DETECT_EVERY``,
+    default 1: every frame). Higher is faster and may miss short appearances."""
+    value = os.environ.get("VIBE_DETECT_EVERY", "").strip() or "1"
+    try:
+        every = int(value)
+    except ValueError:
+        every = 0
+    if every < 1:
+        raise ValueError(f"VIBE_DETECT_EVERY must be a whole number of at least 1, got {value!r}")
+    return every

@@ -840,16 +840,25 @@ def test_analysis_replays_what_is_cached(
     assert response.json() == {"analysed": True, "tracks": 1}
 
 
-@pytest.mark.parametrize("backend", ["stub", "local", "remote"])
+@pytest.mark.parametrize(
+    ("backend", "detectors"),
+    [("stub", None), ("local", None), ("remote", None), ("stub", "stub:color=red")],
+)
 def test_analysis_with_nothing_cached_is_503_not_an_empty_result(
     client: TestClient,
     storage: Storage,
     long_clip: Path,
     monkeypatch: pytest.MonkeyPatch,
     backend: str,
+    detectors: str | None,
 ) -> None:
-    # No detector is connected to the API yet, whatever the backend: say so, never "0 tracks".
+    # A server with no detector configured, or on the stub backend (which never runs a model),
+    # can't analyse: say so, never "0 tracks".
     monkeypatch.setenv("VIBE_BACKEND", backend)
+    if detectors is None:
+        monkeypatch.delenv("VIBE_DETECTORS", raising=False)
+    else:
+        monkeypatch.setenv("VIBE_DETECTORS", detectors)
     project_id = upload(client, long_clip)["project_id"]
 
     response = client.post(f"/api/projects/{project_id}/analysis")
@@ -858,6 +867,114 @@ def test_analysis_with_nothing_cached_is_503_not_an_empty_result(
     assert response.json() == {"detail": projects._NO_ANALYSIS}
     assert get(client, project_id, "tracks")["analysed"] is False
     assert not (storage.cache_dir / storage.open_project(project_id).info.video.sha256).exists()
+    assert projects._busy == set()
+
+
+@pytest.fixture(scope="module")
+def red_clip(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Two seconds of grey with a red square moving right: one target for the stub detector."""
+    path = tmp_path_factory.mktemp("clips") / "red square.mp4"
+    with av.open(str(path), "w") as out:
+        stream = out.add_stream("mpeg4", rate=10)
+        stream.width, stream.height, stream.pix_fmt = 64, 64, "yuv420p"
+        for i in range(20):
+            image = np.full((64, 64, 3), 128, dtype=np.uint8)
+            image[16:48, 4 + i : 28 + i] = (255, 0, 0)
+            out.mux(stream.encode(av.VideoFrame.from_ndarray(image, format="rgb24")))
+        out.mux(stream.encode())
+    return path
+
+
+@pytest.fixture
+def detecting(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A server set up to analyse: the local backend and the stub detector (no model, no GPU)."""
+    monkeypatch.setenv("VIBE_BACKEND", "local")
+    monkeypatch.setenv("VIBE_DETECTORS", "stub:color=red")
+    monkeypatch.delenv("VIBE_TRACKER", raising=False)
+    monkeypatch.delenv("VIBE_DETECT_EVERY", raising=False)
+
+
+@pytest.mark.usefixtures("detecting")
+def test_analysis_runs_the_configured_detector_and_caches_it_as_the_default(
+    client: TestClient, storage: Storage, red_clip: Path
+) -> None:
+    project_id = upload(client, red_clip)["project_id"]
+    sha = storage.open_project(project_id).info.video.sha256
+    assert get(client, project_id, "tracks")["analysed"] is False
+
+    response = client.post(f"/api/projects/{project_id}/analysis")
+
+    assert response.status_code == 200
+    assert response.json() == {"analysed": True, "tracks": 1}
+    tracks = get(client, project_id, "tracks")
+    assert tracks["analysed"] is True
+    assert [t["label"] for t in tracks["tracks"]] == ["person"]
+    assert (storage.cache_dir / sha / "default" / "tracks.json").is_file()
+    assert projects._busy == set()
+    # The toolbox sees it too: "blur people" now has someone to blur.
+    assert ask(client, project_id, "blur people")["status"] == "applied"
+
+
+@pytest.mark.usefixtures("detecting")
+def test_analysis_runs_once_then_replays_the_cache(
+    client: TestClient, storage: Storage, red_clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_id = upload(client, red_clip)["project_id"]
+    assert client.post(f"/api/projects/{project_id}/analysis").status_code == 200
+
+    def no_second_run(*_: object, **__: object) -> None:
+        raise AssertionError("analysed again although the tracks are cached")
+
+    monkeypatch.setattr(projects, "analyse_for_app", no_second_run)
+    response = client.post(f"/api/projects/{project_id}/analysis")
+
+    assert response.status_code == 200 and response.json()["analysed"] is True
+
+
+@pytest.mark.usefixtures("detecting")
+def test_analysis_with_the_tracker_and_stride_from_the_environment(
+    client: TestClient, storage: Storage, red_clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VIBE_TRACKER", "iou:max_gap=0.5")
+    monkeypatch.setenv("VIBE_DETECT_EVERY", "2")
+    project_id = upload(client, red_clip)["project_id"]
+    sha = storage.open_project(project_id).info.video.sha256
+
+    assert client.post(f"/api/projects/{project_id}/analysis").status_code == 200
+
+    [key] = [p.stem for p in (storage.cache_dir / sha / "tracks").glob("*.json")]
+    assert "-k2-" in key and "-iou-" in key
+
+
+@pytest.mark.usefixtures("detecting")
+@pytest.mark.parametrize(
+    ("variable", "value"),
+    [
+        ("VIBE_DETECTORS", "no-such-detector"),
+        ("VIBE_DETECTORS", "stub:color=purple"),
+        ("VIBE_TRACKER", "sort"),
+        ("VIBE_TRACKER", "iou:min_conf=high"),
+        ("VIBE_DETECT_EVERY", "0"),
+    ],
+)
+def test_analysis_with_bad_settings_is_503_and_reads_no_frame(
+    client: TestClient,
+    storage: Storage,
+    red_clip: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    variable: str,
+    value: str,
+) -> None:
+    monkeypatch.setenv(variable, value)
+    project_id = upload(client, red_clip)["project_id"]
+    sha = storage.open_project(project_id).info.video.sha256
+
+    response = client.post(f"/api/projects/{project_id}/analysis")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": projects._CANT_DETECT}
+    assert not (storage.cache_dir / sha).exists()
+    assert get(client, project_id, "tracks")["analysed"] is False
     assert projects._busy == set()
 
 
@@ -1184,7 +1301,7 @@ def test_an_unreadable_cached_transcript_is_503_and_the_log_names_it(
 def test_unreadable_audio_is_a_logged_500(
     client: TestClient, clip: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def no_frames(*_: object) -> None:
+    def no_frames(*_: object, **__: object) -> None:
         raise ValueError("need at least one array to concatenate")
 
     monkeypatch.setattr(projects, "transcribe_video", no_frames)
@@ -1229,3 +1346,41 @@ def test_a_request_by_what_is_said_needs_a_transcript(
     assert reply["status"] == "not_applied"
     assert "no transcript yet" in reply["reply"]
     assert log_bytes(storage, project_id) == before
+
+
+# --- VIBE_TRANSCRIBE_BACKEND: transcripts on another backend than the rest ------------------
+
+
+def test_transcripts_can_run_here_while_the_rest_goes_remote(
+    client: TestClient, long_clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The judge goes to a remote GPU; Whisper runs on this machine.
+    monkeypatch.setenv("VIBE_BACKEND", "remote")
+    monkeypatch.delenv("VIBE_REMOTE_URL", raising=False)
+    monkeypatch.setenv("VIBE_TRANSCRIBE_BACKEND", "local")
+    ran: list[Path] = []
+
+    def whisper(self: TranscriptAnalysis, video: Path) -> dict:
+        ran.append(video)
+        return {"model": self.settings["model"], "language": "en", "segments": []}
+
+    monkeypatch.setattr(TranscriptAnalysis, "compute", whisper)
+    project_id = upload(client, long_clip)["project_id"]
+
+    response = client.post(f"/api/projects/{project_id}/transcript")
+
+    assert response.status_code == 200
+    assert response.json()["language"] == "en"
+    assert len(ran) == 1
+
+
+def test_without_the_override_transcripts_follow_vibe_backend(
+    client: TestClient, long_clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VIBE_BACKEND", "remote")
+    monkeypatch.delenv("VIBE_REMOTE_URL", raising=False)
+    monkeypatch.delenv("VIBE_TRANSCRIBE_BACKEND", raising=False)
+    project_id = upload(client, long_clip)["project_id"]
+
+    # Remote with no model server configured: transcripts aren't available, as before.
+    assert client.post(f"/api/projects/{project_id}/transcript").status_code == 503

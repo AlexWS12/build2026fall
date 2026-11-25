@@ -117,7 +117,11 @@ export type SessionEvent =
   | { type: 'redo_started' }
   | { type: 'history_settled'; sync: Sync }
   | { type: 'analysis_started' }
-  | ({ type: 'analysis_settled'; analysed: boolean; tracks: Track[] } & ReviewData)
+  /**
+   * `quiet`: the analysis the UI starts by itself after an upload, on a server that can't analyse.
+   * Nothing to say in the chat: the header still offers "Analyse video".
+   */
+  | ({ type: 'analysis_settled'; analysed: boolean; tracks: Track[]; quiet?: boolean } & ReviewData)
   | { type: 'transcript_started' }
   | { type: 'transcript_settled'; transcript: Transcript }
   | { type: 'export_started' }
@@ -225,6 +229,7 @@ function projectTransition(project: OpenProject, event: ProjectEvent): OpenProje
       const text = event.analysed
         ? `Analysed the video: ${count} ${count === 1 ? 'target' : 'targets'} found.`
         : 'The video could not be analysed.'
+      const quiet = event.quiet === true && !event.analysed
       return {
         ...project,
         activity: IDLE,
@@ -232,7 +237,7 @@ function projectTransition(project: OpenProject, event: ProjectEvent): OpenProje
         tracks: event.tracks,
         review: event.review,
         reviewError: event.reviewError,
-        chat: [...project.chat, { kind: 'note', id: nextId(project), text }],
+        chat: quiet ? project.chat : [...project.chat, { kind: 'note', id: nextId(project), text }],
       }
     }
     case 'transcript_started':

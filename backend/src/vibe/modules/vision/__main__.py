@@ -24,10 +24,11 @@ from pydantic import ValidationError
 
 from vibe.modules import ModuleError
 from vibe.modules.vision import cache
-from vibe.modules.vision.analyze import analyze_video, retrack
+from vibe.modules.vision.analyze import retrack
 from vibe.modules.vision.describe import VideoDescriber, combine
 from vibe.modules.vision.detection import NotInstalled
 from vibe.modules.vision.detectors import DETECTORS, make_detector
+from vibe.modules.vision.run import analyse_and_store
 from vibe.modules.vision.tracking import TRACKERS, Tracker, TrackerSettings
 from vibe.storage import Storage, StorageError
 from vibe.video import VideoError
@@ -126,15 +127,11 @@ def _analyze(storage: Storage, args: argparse.Namespace) -> int:
         print(f"detector {det.name} on {getattr(det, 'device', 'cpu')}")
     tracker = _tracker(args)
     sha = cache.video_sha256(args.video)
-    analysis = analyze_video(args.video, detectors, tracker, every=args.every)
-    det_key = cache.detections_key(detectors, args.every)
-    trk_key = cache.tracks_key(det_key, tracker.name, tracker.settings)
-    cache.save_detections(storage, sha, det_key, analysis.detections)
-    tracks = cache.save_tracks(storage, sha, trk_key, analysis.tracks)
+    stored = analyse_and_store(storage, sha, args.video, detectors, tracker, args.every)
     print(f"video:   {args.video.name} ({sha[:12]})")
-    print(f"detections key: {det_key}")
-    print(f"tracks key:     {trk_key}")
-    _summary(tracks, analysis.seconds, analysis.frames)
+    print(f"detections key: {stored.detections_key}")
+    print(f"tracks key:     {stored.tracks_key}")
+    _summary(stored.tracks, stored.analysis.seconds, stored.analysis.frames)
     return 0
 
 
@@ -143,7 +140,9 @@ def _retrack(storage: Storage, args: argparse.Namespace) -> int:
     detections = cache.load_detections(storage, sha, args.key)
     tracker = _tracker(args)
     tracks = retrack(detections, tracker)
-    trk_key = cache.tracks_key(args.key, tracker.name, tracker.settings)
+    trk_key = cache.tracks_key(
+        args.key, tracker.name, tracker.settings, getattr(tracker, "version", 1)
+    )
     tracks = cache.save_tracks(storage, sha, trk_key, tracks)
     print(f"tracks key: {trk_key}")
     _summary(tracks, None, len(detections.frames))

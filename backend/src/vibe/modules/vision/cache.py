@@ -73,17 +73,27 @@ def detections_key(detectors: Sequence[Detector], every: int) -> str:
     return _key(f"{'_'.join(names)}-k{every}", {"detectors": settings, "every": every})
 
 
-def tracks_key(detections_key: str, tracker: str, settings: TrackerSettings) -> str:
+def tracks_key(
+    detections_key: str, tracker: str, settings: TrackerSettings, version: int = 1
+) -> str:
     """E.g. ``rfdetr-l_egoblur-face-k1-3f9a1c2e-iou-7b0d4e11``.
 
     The final hash covers the whole detections key, not only the tracker: it becomes the prefix of
     every track id (``namespaced``), so two detector runs must never share it, and a long key that
     gets cut to fit the 128 characters still ends in a hash that tells the runs apart.
+
+    ``version`` is the tracker's (``Tracker.version``): a tracker whose code now gives other
+    tracks bumps it, so an older result is never served for it. Version 1 adds nothing to the
+    hash, so keys made before versions existed stay valid.
     """
-    return _key(
-        f"{detections_key}-{tracker}",
-        {"detections": detections_key, "tracker": tracker, **settings.model_dump()},
-    )
+    value: dict[str, object] = {
+        "detections": detections_key,
+        "tracker": tracker,
+        **settings.model_dump(),
+    }
+    if version != 1:
+        value["tracker_version"] = version
+    return _key(f"{detections_key}-{tracker}", value)
 
 
 def _write(path: Path, text: str) -> None:

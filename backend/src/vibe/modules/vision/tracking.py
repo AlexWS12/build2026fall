@@ -160,6 +160,19 @@ class _Linker:
                 self._live.append(lv)
                 self._builder.add(lv.key, t, d)
 
+    def take_over(self, t: float, label: str, box: Box, threshold: float) -> int | None:
+        """Hand the live ``label`` track that ``box`` covers most (at least ``threshold``) to
+        another tracker: it stops being extended here, and its key is returned so the other
+        tracker continues the same track. ``None`` if no live track is covered enough."""
+        best: tuple[float, int] | None = None
+        for i, lv in enumerate(self._live):
+            if lv.label == label and (overlap := iou(lv.predict(t), box)) >= threshold:
+                if best is None or overlap > best[0]:
+                    best = (overlap, i)
+        if best is None:
+            return None
+        return self._live.pop(best[1]).key
+
     def retire_covered(self, t: float, label: str, boxes: Sequence[Box], threshold: float) -> None:
         """Stop extending live ``label`` tracks that one of ``boxes`` now covers: another tracker
         has taken over that object, so continuing both would only draw it twice."""
@@ -203,8 +216,14 @@ class ByteTracker:
 
     ByteTrack confirms a track only after a few sightings, and ignores weak detections. Privacy
     fails closed, so every kept detection it didn't return is linked by overlap (the same
-    matching as ``IouTracker``) into its own track, and that track ends once ByteTrack returns
-    a box over the same object.
+    matching as ``IouTracker``) into a stand-in track. When ByteTrack confirms a new track over
+    a stand-in, it continues the stand-in (same track id), so the frames before confirmation
+    belong to the track that follows. A stand-in no new ByteTrack track takes over ends once a
+    returned box covers it, as before.
+
+    Version 2: before it, each stand-in stayed a separate short track (often one keyframe at the
+    start of the clip), which the description judge can't answer for (unsure, so masked) and the
+    renderer kept masking at its last box for the rest of the clip.
 
     ``max_gap`` also sets ByteTrack's lost-track buffer, in seconds (each update carries its
     timestamp), so it means the same with any ``--every N``. ``iou_match`` configures only the
@@ -213,6 +232,8 @@ class ByteTracker:
     """
 
     name = "bytetrack"
+    version = 2
+    """In the tracks cache key (``cache.tracks_key``): bump it when the glue's output changes."""
     CONFIRMED_OVERLAP = 0.5
     """A kept detection this much covered by a returned box counts as confirmed."""
 
@@ -281,7 +302,11 @@ class ByteTracker:
             conf = float(out.confidence[i]) if out.confidence is not None else 0.0
             key = self._keys.get((label, tid))
             if key is None:
-                key = self._keys[(label, tid)] = self._builder.new(label)
+                # A newly confirmed track continues the stand-in that was covering the object.
+                key = self._linker.take_over(t, label, box, self.CONFIRMED_OVERLAP)
+                if key is None:
+                    key = self._builder.new(label)
+                self._keys[(label, tid)] = key
             self._builder.add(key, t, Detection(label, box, conf))
             returned.append(box)
         self._linker.retire_covered(t, label, returned, self.CONFIRMED_OVERLAP)
