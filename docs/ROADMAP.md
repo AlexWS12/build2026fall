@@ -213,7 +213,7 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 |---|---|---|---|---|
 | F-11, F-12, F-20, F-31: review and merge | (same owners) | (PR branches) | Merged, `main` green | done (#26, #27, #29, #30) |
 | R-1b Run the planner LLM comparison, add the decision row, pass `LlmPlanner` to `plan_request`; flag LLM-invented cut ranges | paul? | paul/r1-planner-llm | Script output → decision row; a non-template request gets a valid plan | planned |
-| F-50 Live feasibility spike on the RTX 5070 (also: blur at reduced resolution, since the renderer's blur is ~311 ms per quarter-1080p frame per the F-04 handoff) | _open_ | | fps and latency per stage, hardware stated → live go/no-go | planned |
+| F-50 Live feasibility spike on the RTX 5070 (also: blur at reduced resolution, since the renderer's blur is ~311 ms per quarter-1080p frame per the F-04 handoff) | alex, nickolas | nickolas/f50-live-spike | fps and latency per stage, hardware stated → live go/no-go | ready for review |
 
 **Build**
 | Card | Owner | Branch | Exit check | Status |
