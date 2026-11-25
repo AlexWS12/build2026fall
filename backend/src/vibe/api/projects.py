@@ -14,6 +14,8 @@
     POST /api/projects/{id}/review/{item}   confirm one of them, or cut it out
     POST /api/projects/{id}/analysis        make sure the video has a vision analysis
     POST /api/projects/{id}/exports         render the timeline into a new MP4
+    GET  /api/projects/{id}/shapes          masked targets' shapes for the preview (F-15)
+    POST /api/projects/{id}/shapes          segment them first (VIBE_SEGMENTER)
     GET  /api/projects/{id}/exports/{name}  that MP4
 
 The server handles requests to a project one at a time, because the contract needs a request's
@@ -43,6 +45,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import Field, ValidationError
 
+from vibe import config
 from vibe.agent import (
     Clarify,
     LlmError,
@@ -61,6 +64,9 @@ from vibe.modules import ModuleError
 from vibe.modules.denoise import cached_noise_profile
 from vibe.modules.transcribe import Transcript, transcribe_video
 from vibe.modules.vision import CacheError, load_tracks
+from vibe.modules.vision.masks import MaskSet, ensure_masks
+from vibe.modules.vision.preview_shapes import ShapeFrame, cached_files, preview_shapes
+from vibe.modules.vision.segmenters import Segmenter, make_segmenter
 from vibe.render import (
     NothingToRender,
     RenderError,
@@ -538,12 +544,15 @@ def create_export(project_id: str, storage: StorageDep) -> ExportReply:
     with _one_request_at_a_time(project.id):
         _, tracks = _tracks(storage, project)
         name = f"{new_id('export')}.mp4"
+        source, state = storage.video_path(project.info.video), project.state()
+        masks, mask_issue = _shape_masks(storage, project, source, state, tracks)
         try:
             result = export(
-                storage.video_path(project.info.video),
-                project.state(),
+                source,
+                state,
                 tracks,
                 project.exports_dir / name,
+                masks=masks,
                 noise_profile=lambda rate, layout: cached_noise_profile(
                     storage, project.info.video, rate, layout
                 ),
@@ -559,10 +568,78 @@ def create_export(project_id: str, storage: StorageDep) -> ExportReply:
             url=f"/api/projects/{project.id}/exports/{name}",
             duration=result.duration,
             issues=[
-                f"{i.track_id}: {i.message} ({clock(i.first_seen)}–{clock(i.last_seen)})"
-                for i in result.issues
+                *([mask_issue] if mask_issue else []),
+                *(
+                    f"{i.track_id}: {i.message} ({clock(i.first_seen)}–{clock(i.last_seen)})"
+                    for i in result.issues
+                ),
             ],
         )
+
+
+def _shape_masks(
+    storage: Storage, project: Project, source: Path, state: TimelineState, tracks: list[Track]
+) -> tuple[MaskSet | None, str | None]:
+    """The F-15 masks for this export, when ``VIBE_SEGMENTER`` is set: computed only for the
+    tracks the timeline masks, cached in the analysis cache. ``(None, why)`` when they can't be
+    made: the export then hides everything by its padded box, as before, and says so."""
+    spec = config.segmenter()
+    if spec is None or not state.masks:
+        return None, None
+    try:
+        segmenter = _segmenter(spec)
+        with _segmenting:
+            masks, report = ensure_masks(
+                storage, project.info.video.sha256, source, state, tracks, segmenter
+            )
+    except Exception:  # bad spec, missing package or weights, GPU out of memory...
+        logger.exception("segmenting for project %s failed; exporting with boxes", project.id)
+        return None, "shapes unavailable: masked targets were hidden by their boxes"
+    logger.info("masks for project %s: %s", project.id, report)
+    return masks, None
+
+
+_segmenting = threading.Lock()
+"""One segmentation at a time: they share the GPU and the cached model."""
+
+
+@functools.cache
+def _segmenter(spec: str) -> Segmenter:
+    """The segmenter for ``spec``, built once per server: building SAM 2.1 loads its weights."""
+    return make_segmenter(spec)
+
+
+class ShapesReply(Model):
+    shapes: dict[str, list[ShapeFrame]] = Field(
+        description="By track id, in time order: the shape of each masked target at its "
+        "keyframes, for the preview to clip its effect to (F-15). Tracks with no cached shape "
+        "aren't listed: the preview keeps their box."
+    )
+
+
+@router.get("/{project_id}/shapes")
+def get_shapes(project_id: str, storage: StorageDep) -> ShapesReply:
+    """The shapes already cached for the masked targets (none if nothing was segmented yet)."""
+    project = _open(storage, project_id)
+    _, tracks = _tracks(storage, project)
+    files = cached_files(storage, project.info.video.sha256)
+    return ShapesReply(shapes=preview_shapes(project.state(), tracks, files))
+
+
+@router.post("/{project_id}/shapes")
+def make_shapes(project_id: str, storage: StorageDep) -> ShapesReply:
+    """Segment the masked targets that have no shape yet (``VIBE_SEGMENTER``), then reply like
+    ``GET``. 503 when this server has no segmenter or it can't run: the preview and the export
+    keep the boxes. Doesn't hold the project, so chatting goes on while it runs."""
+    project = _open(storage, project_id)
+    _, tracks = _tracks(storage, project)
+    state = project.state()
+    source = storage.video_path(project.info.video)
+    masks, issue = _shape_masks(storage, project, source, state, tracks)
+    if config.segmenter() is None or issue is not None:
+        raise HTTPException(status_code=503, detail="this server can't make shapes")
+    files = cached_files(storage, project.info.video.sha256)
+    return ShapesReply(shapes=preview_shapes(state, tracks, files))
 
 
 @router.get(

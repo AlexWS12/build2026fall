@@ -56,6 +56,12 @@
   backdrop-filter: blur(9px);
 }
 
+/* Clipped to the target's shape (F-15): the outline would only draw the box again. */
+.shaped {
+  border-color: transparent;
+  border-radius: 0;
+}
+
 .box {
   border-color: transparent;
   background: #000;

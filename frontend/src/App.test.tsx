@@ -253,6 +253,15 @@ describe('App wired to a backend', () => {
     expect(screen.getByRole('button', { name: 'Redo' })).toBeDisabled()
   })
 
+  test('after a request the shapes are asked for, without holding the project', async () => {
+    const shapes = { trk_1: [{ t: 0, image: 'data:image/png;base64,A' }] }
+    const makeShapes = vi.fn(() => Promise.resolve({ shapes }))
+    render(<App api={backend({ makeShapes })} />)
+    await sendMute()
+    await waitFor(() => expect(makeShapes).toHaveBeenCalledWith('prj_mock'))
+    expect(screen.getByLabelText('Request')).toBeEnabled()
+  })
+
   test('undo takes the request back and redo restores it', async () => {
     render(<App api={backend()} />)
     await sendMute()

@@ -22,6 +22,9 @@ export type ChatRecord = Schemas['ChatMessage']
 export type HistoryEntry = Schemas['HistoryEntry']
 export type HistoryReply = Schemas['HistoryReply']
 export type AnalysisReply = Schemas['AnalysisReply']
+/** A masked target's shape at one keyframe, for the preview (F-15). */
+export type ShapeFrame = Schemas['ShapeFrame']
+export type ShapesReply = Schemas['ShapesReply']
 /** The mask stretches to check (`GET /api/projects/{id}/review`, F-41). */
 export type ReviewReply = Schemas['ReviewReply']
 export type ReviewItem = Schemas['ReviewItem']

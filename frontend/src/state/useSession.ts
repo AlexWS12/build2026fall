@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ApiClient } from '../api'
 import { ApiError } from '../api/client'
-import type { ReviewReply } from '../api/types'
+import type { ReviewReply, ShapesReply } from '../api/types'
 import {
   initialSession,
   transition,
@@ -101,6 +101,29 @@ export function useSession(api: ApiClient): { session: Session; commands: Sessio
       }
     }
 
+    /**
+     * The masked targets' shapes (F-15), fetched without holding the project: the cached ones
+     * first, then the server makes any missing ones. A server that can't make shapes leaves the
+     * boxes; the preview is approximate anyway, and the export says what it used.
+     */
+    const refreshShapes = (id: string) => {
+      const loaded = (reply: ShapesReply) => {
+        dispatch({ type: 'shapes_loaded', projectId: id, shapes: reply.shapes })
+      }
+      void api
+        .getShapes(id)
+        .then(loaded, () => undefined)
+        .then(() => api.makeShapes(id))
+        .then(loaded, () => undefined)
+    }
+
+    /** Run `command`, then bring the shapes up to date with the masks it may have changed. */
+    const thenShapes = async (command: Promise<void>) => {
+      await command
+      const id = projectId()
+      if (id !== null) refreshShapes(id)
+    }
+
     return {
       async upload(file) {
         if (!dispatch({ type: 'open_started', label: `Uploading ${file.name}…` })) return
@@ -118,27 +141,28 @@ export function useSession(api: ApiClient): { session: Session; commands: Sessio
         try {
           const loaded = await snapshot(id, () => api.videoUrl(id))
           dispatch({ type: 'open_succeeded', snapshot: loaded })
+          refreshShapes(id)
         } catch (error) {
           dispatch({ type: 'open_failed', message: `Couldn't open the project: ${errorText(error)}` })
         }
       },
       send: (text) =>
-        run({ type: 'request_started', text }, async (id) => {
+        thenShapes(run({ type: 'request_started', text }, async (id) => {
           const reply = await api.sendRequest(id, text)
           return { type: 'request_settled', reply, sync: await sync(id) }
-        }),
+        })),
       undo: () =>
-        run({ type: 'undo_started' }, async (id) => {
+        thenShapes(run({ type: 'undo_started' }, async (id) => {
           const history = await api.undo(id)
           const [timeline, review] = await Promise.all([api.getState(id), reviewOf(id)])
           return { type: 'history_settled', sync: { history, timeline, ...review } }
-        }),
+        })),
       redo: () =>
-        run({ type: 'redo_started' }, async (id) => {
+        thenShapes(run({ type: 'redo_started' }, async (id) => {
           const history = await api.redo(id)
           const [timeline, review] = await Promise.all([api.getState(id), reviewOf(id)])
           return { type: 'history_settled', sync: { history, timeline, ...review } }
-        }),
+        })),
       analyse: () =>
         run({ type: 'analysis_started' }, async (id) => {
           await api.analyse(id)

@@ -31,6 +31,8 @@ export function createAutoClient(
     undo: (id) => pick().then((c) => c.undo(id)),
     redo: (id) => pick().then((c) => c.redo(id)),
     analyse: (id) => pick().then((c) => c.analyse(id)),
+    getShapes: (id) => pick().then((c) => c.getShapes(id)),
+    makeShapes: (id) => pick().then((c) => c.makeShapes(id)),
     exportVideo: (id) => pick().then((c) => c.exportVideo(id)),
     transcribe: (id) => pick().then((c) => c.transcribe(id)),
   }

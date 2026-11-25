@@ -390,3 +390,21 @@ describe('the review queue', () => {
     expect(project(analysed).review).toEqual(queue)
   })
 })
+
+describe('shapes (F-15)', () => {
+  const shapes = { trk_1: [{ t: 0, image: 'data:image/png;base64,A' }] }
+
+  test('a project opens with none, and takes the ones that arrive for it', () => {
+    const open = opened()
+    expect(project(open).shapes).toEqual({})
+    const id = project(open).detail.info.project_id
+    const next = transition(open, { type: 'shapes_loaded', projectId: id, shapes })
+    expect(project(next).shapes).toEqual(shapes)
+  })
+
+  test('shapes for another project are ignored', () => {
+    const open = opened()
+    const next = transition(open, { type: 'shapes_loaded', projectId: 'prj_other', shapes })
+    expect(project(next).shapes).toEqual({})
+  })
+})

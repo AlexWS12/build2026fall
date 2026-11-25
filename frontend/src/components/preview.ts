@@ -1,4 +1,4 @@
-import type { Box, Effect, TimelineState, TimeRange, Track } from '../api/types'
+import type { Box, Effect, ShapeFrame, TimelineState, TimeRange, Track } from '../api/types'
 
 // What the edits look and sound like at one moment, worked out in the browser so the player
 // can preview them without a render. It follows the renderer's rules where they matter for
@@ -62,6 +62,23 @@ export function masksAt(state: TimelineState, tracks: Track[], t: number): Previ
     })
   }
   return masks
+}
+
+/** A shape this close in time to a keyframe's is still drawn; further, the box is. */
+const SHAPE_SECONDS = 0.5
+
+/**
+ * The shape to clip a mask to at source time `t` (F-15): the one made at the nearest keyframe,
+ * if it is close enough. None means the box, as before.
+ */
+export function shapeAt(frames: ShapeFrame[] | undefined, t: number): ShapeFrame | null {
+  let best: ShapeFrame | null = null
+  for (const frame of frames ?? []) {
+    if (Math.abs(frame.t - t) <= SHAPE_SECONDS && (!best || Math.abs(frame.t - t) < Math.abs(best.t - t))) {
+      best = frame
+    }
+  }
+  return best
 }
 
 /** The cut that removes source time `t`, if any. */

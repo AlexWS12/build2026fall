@@ -1229,3 +1229,102 @@ def test_a_request_by_what_is_said_needs_a_transcript(
     assert reply["status"] == "not_applied"
     assert "no transcript yet" in reply["reply"]
     assert log_bytes(storage, project_id) == before
+# --- Exports hide masked people by shape when a segmenter is set (F-15) ---------------------
+
+
+def test_export_segments_only_the_masked_tracks_and_caches_their_masks(
+    client: TestClient, storage: Storage, long_clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VIBE_SEGMENTER", "stub")
+    project_id = upload(client, long_clip)["project_id"]
+    analysed(storage, project_id)
+    ask(client, project_id, "blur faces")
+    sha = storage.open_project(project_id).info.video.sha256
+
+    made = export(client, project_id)
+
+    assert not any(issue.startswith("shapes unavailable") for issue in made["issues"])
+    assert list((storage.cache_dir / sha / "masks").glob("*.json"))
+
+
+@pytest.mark.parametrize("spec", ["no-such-segmenter", "stub:speed=fast"])
+def test_a_segmenter_that_cant_run_means_boxes_and_says_so(
+    client: TestClient,
+    storage: Storage,
+    long_clip: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    spec: str,
+) -> None:
+    monkeypatch.setenv("VIBE_SEGMENTER", spec)
+    project_id = upload(client, long_clip)["project_id"]
+    analysed(storage, project_id)
+    ask(client, project_id, "blur faces")
+
+    made = export(client, project_id)
+
+    assert made["issues"][0] == "shapes unavailable: masked targets were hidden by their boxes"
+    assert projects._busy == set()
+
+
+def test_without_a_segmenter_exports_use_boxes_and_cache_no_masks(
+    client: TestClient, storage: Storage, long_clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("VIBE_SEGMENTER", raising=False)
+    project_id = upload(client, long_clip)["project_id"]
+    analysed(storage, project_id)
+    ask(client, project_id, "blur faces")
+    sha = storage.open_project(project_id).info.video.sha256
+
+    export(client, project_id)
+
+    assert not (storage.cache_dir / sha / "masks").exists()
+
+
+# --- The preview's shapes (F-15): GET reads the cache, POST segments first -------------------
+
+
+def test_shapes_are_segmented_on_request_and_then_read_from_the_cache(
+    client: TestClient, storage: Storage, long_clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VIBE_SEGMENTER", "stub")
+    project_id = upload(client, long_clip)["project_id"]
+    track_id = analysed(storage, project_id)
+    ask(client, project_id, "blur faces")
+    base = f"/api/projects/{project_id}/shapes"
+    assert client.get(base).json() == {"shapes": {}}  # nothing segmented yet
+
+    made = client.post(base)
+
+    assert made.status_code == 200
+    frames = made.json()["shapes"][track_id]
+    assert frames and frames[0]["t"] == 0
+    assert frames[0]["image"].startswith("data:image/png;base64,")
+    assert client.get(base).json() == made.json()  # cached now
+
+
+def test_shapes_without_a_segmenter_are_503_and_none_are_listed(
+    client: TestClient, storage: Storage, long_clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("VIBE_SEGMENTER", raising=False)
+    project_id = upload(client, long_clip)["project_id"]
+    analysed(storage, project_id)
+    ask(client, project_id, "blur faces")
+    base = f"/api/projects/{project_id}/shapes"
+
+    assert client.post(base).status_code == 503
+    assert client.get(base).json() == {"shapes": {}}
+
+
+def test_shapes_of_a_target_no_longer_masked_are_not_listed(
+    client: TestClient, storage: Storage, long_clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VIBE_SEGMENTER", "stub")
+    project_id = upload(client, long_clip)["project_id"]
+    analysed(storage, project_id)
+    ask(client, project_id, "blur faces")
+    base = f"/api/projects/{project_id}/shapes"
+    assert client.post(base).json()["shapes"]
+
+    client.post(f"/api/projects/{project_id}/undo")
+
+    assert client.get(base).json() == {"shapes": {}}
