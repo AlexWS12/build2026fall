@@ -103,3 +103,19 @@ test('the output is the source without its cuts', () => {
   expect(outputDuration(cutAndMuted, 60)).toBe(45)
   expect(outputDuration(empty, 60)).toBe(60)
 })
+
+// --- Shapes (F-15) --------------------------------------------------------------------------
+
+test('shapeAt picks the nearest shape within half a second, else none', async () => {
+  const { shapeAt } = await import('./preview')
+  const frames = [
+    { t: 1, image: 'data:image/png;base64,A' },
+    { t: 2, image: 'data:image/png;base64,B' },
+  ]
+  expect(shapeAt(frames, 1.2)?.image).toMatch(/A$/)
+  expect(shapeAt(frames, 1.8)?.image).toMatch(/B$/)
+  expect(shapeAt(frames, 2.5)?.image).toMatch(/B$/)
+  expect(shapeAt(frames, 2.6)).toBeNull()
+  expect(shapeAt(undefined, 1)).toBeNull()
+  expect(shapeAt([], 1)).toBeNull()
+})

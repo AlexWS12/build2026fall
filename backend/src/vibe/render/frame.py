@@ -14,9 +14,18 @@ import numpy as np
 from vibe.contract import Effect, TimelineState, Track
 from vibe.render.effects import apply_effect
 from vibe.render.errors import UnsupportedEdit
-from vibe.render.geometry import TrackPath, to_pixels
+from vibe.render.geometry import PlacedBox, Rect, TrackPath, to_pixels
+from vibe.render.shape import MaskLookup, place_shape
 
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class ShapeUse:
+    """How often a track was hidden by its shape (F-15) or by its padded box, in frames."""
+
+    shape: int = 0
+    box: int = 0
 
 
 @dataclass(frozen=True)
@@ -50,16 +59,29 @@ class FrameRenderer:
 
     Tracks that share an id (say, a detector's track and its correction by hand) are all
     masked: masking too much beats leaving a target visible.
+
+    ``masks`` (F-15) gives segmentation masks per keyframe. Where one fits, only the target's
+    shape, grown by a margin, is hidden; everywhere else, or on any doubt, the padded box is, as
+    without masks (``render.shape``).
     """
 
-    def __init__(self, state: TimelineState, tracks: Iterable[Track]) -> None:
+    def __init__(
+        self, state: TimelineState, tracks: Iterable[Track], masks: MaskLookup | None = None
+    ) -> None:
         check_video(state)
         self.state = state
+        self._shapes = masks
+        self._shape_use: dict[str, ShapeUse] = {}
         self._paths: dict[str, list[TrackPath]] = {}
         for track in tracks:
             self._paths.setdefault(track.track_id, []).append(TrackPath(track))
         self._issues: list[RenderIssue] = []
         self._ongoing: dict[str, int] = {}  # track id -> its issue, if the last frame had one
+
+    @property
+    def shape_use(self) -> dict[str, ShapeUse]:
+        """Per masked track, frames hidden by shape vs by box. Empty without ``masks``."""
+        return dict(self._shape_use)
 
     @property
     def issues(self) -> list[RenderIssue]:
@@ -94,8 +116,37 @@ class FrameRenderer:
                 self._report(track_id, "lost, so its nearest known box stays masked", t, previous)
             for box in placed:
                 padding = effect.padding + box.extra_padding
-                apply_effect(out, to_pixels(box.box, padding, width, height), effect)
+                rect = to_pixels(box.box, padding, width, height)
+                if self._shapes is None or not self._hide_shape(out, track_id, box, rect, effect):
+                    apply_effect(out, rect, effect)
         return out
+
+    def _hide_shape(
+        self, out: np.ndarray, track_id: str, box: PlacedBox, rect: Rect, effect: Effect
+    ) -> bool:
+        """Hide the target's shape instead of its box. False (and nothing changed) when there's
+        no usable mask, so the caller hides the box: privacy fails closed."""
+        assert self._shapes is not None
+        height, width = out.shape[:2]
+        use = self._shape_use.setdefault(track_id, ShapeUse())
+        try:
+            shape = place_shape(self._shapes, track_id, box, effect.padding, width, height)
+        except Exception:  # a broken mask must never leave the target visible
+            log.exception("render: %s at a mask: using its box", track_id)
+            shape = None
+        if shape is None:
+            use.box += 1
+            return False
+        (sx1, sy1, sx2, sy2), mask = shape
+        # The effect is worked out over the box and the shape together, so a blur looks the same
+        # size as without masks, then applied only inside the shape.
+        x1, y1 = min(rect[0], sx1), min(rect[1], sy1)
+        x2, y2 = max(rect[2], sx2), max(rect[3], sy2)
+        where = np.zeros((y2 - y1, x2 - x1), dtype=bool)
+        where[sy1 - y1 : sy2 - y1, sx1 - x1 : sx2 - x1] = mask
+        apply_effect(out, (x1, y1, x2, y2), effect, where)
+        use.shape += 1
+        return True
 
     def _masks(self, t: float, until: float | None) -> list[tuple[str, Effect]]:
         """Each track to mask, with its effect. Two spans touching one frame give two entries."""
@@ -124,6 +175,7 @@ def render_frame(
     state: TimelineState,
     tracks: Iterable[Track],
     until: float | None = None,
+    masks: MaskLookup | None = None,
 ) -> np.ndarray:
     """One frame, without keeping a renderer around: see ``FrameRenderer.render``."""
-    return FrameRenderer(state, tracks).render(image, t, until)
+    return FrameRenderer(state, tracks, masks).render(image, t, until)

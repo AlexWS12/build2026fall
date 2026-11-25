@@ -59,3 +59,11 @@ def remote_hosts() -> frozenset[str]:
 def remote_token() -> str | None:
     """Shared secret between the ``remote`` backend and the model server (``.env``, never git)."""
     return os.environ.get("VIBE_REMOTE_TOKEN") or None
+
+
+def segmenter() -> str | None:
+    """How exports hide masked people by their shape instead of their box (F-15), from
+    ``VIBE_SEGMENTER``: a segmenter spec such as ``sam2``,
+    ``sam2:model=facebook/sam2.1-hiera-small`` or ``stub``. Unset (the default) means boxes, as
+    before. A segmenter that can't run means boxes too, and the export says so."""
+    return os.environ.get("VIBE_SEGMENTER", "").strip() or None

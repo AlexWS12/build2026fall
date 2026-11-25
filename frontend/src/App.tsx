@@ -147,6 +147,7 @@ function App({ api = defaultClient }: { api?: ApiClient }) {
           duration={duration}
           state={project.timeline}
           tracks={project.tracks}
+          shapes={project.shapes}
           className={styles.player}
           handle={player}
           onTime={(seconds) => setPosition({ url: videoUrl, seconds })}

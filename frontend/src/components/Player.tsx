@@ -1,8 +1,8 @@
 import { useEffect, useImperativeHandle, useRef, useState, type CSSProperties, type Ref } from 'react'
-import type { TimelineState, Track } from '../api/types'
+import type { ShapeFrame, TimelineState, Track } from '../api/types'
 import { Panel } from './Panel'
 import styles from './Player.module.css'
-import { cutAt, masksAt, mutedAt, outputDuration, type PreviewMask } from './preview'
+import { cutAt, masksAt, mutedAt, outputDuration, shapeAt, type PreviewMask } from './preview'
 import { formatTime } from './timeline'
 
 export interface PlayerHandle {
@@ -23,6 +23,7 @@ export function Player({
   duration,
   state,
   tracks,
+  shapes,
   className,
   handle,
   onTime,
@@ -35,6 +36,8 @@ export function Player({
   duration?: number | null
   state?: TimelineState | null
   tracks?: Track[]
+  /** Masked targets' shapes by track id (F-15); without one a mask is its box. */
+  shapes?: Record<string, ShapeFrame[]>
   className?: string
   handle?: Ref<PlayerHandle>
   onTime?: (seconds: number) => void
@@ -145,13 +148,16 @@ export function Player({
                 onSeeked={tick}
               />
               <div className={styles.overlay} aria-hidden="true">
-                {masks.map((mask) => (
-                  <span
-                    key={mask.trackId}
-                    className={`${styles.mask} ${styles[mask.effect.type]}`}
-                    style={maskStyle(mask)}
-                  />
-                ))}
+                {masks.map((mask) => {
+                  const shape = mask.box ? shapeAt(shapes?.[mask.trackId], time) : null
+                  return (
+                    <span
+                      key={mask.trackId}
+                      className={`${styles.mask} ${styles[mask.effect.type]} ${shape ? styles.shaped : ''}`}
+                      style={{ ...maskStyle(mask), ...shapeStyle(shape) }}
+                    />
+                  )
+                })}
               </div>
             </div>
           </div>
@@ -179,6 +185,20 @@ export function Player({
       )}
     </Panel>
   )
+}
+
+/** Clip the mask to the target's shape (an image whose alpha is the shape over the padded box). */
+function shapeStyle(shape: ShapeFrame | null): CSSProperties {
+  if (!shape) return {}
+  const image = `url("${shape.image}")`
+  return {
+    maskImage: image,
+    WebkitMaskImage: image,
+    maskSize: '100% 100%',
+    WebkitMaskSize: '100% 100%',
+    maskRepeat: 'no-repeat',
+    WebkitMaskRepeat: 'no-repeat',
+  }
 }
 
 function maskStyle({ box }: PreviewMask): CSSProperties {

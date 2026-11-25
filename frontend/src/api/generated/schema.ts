@@ -321,6 +321,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/shapes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Shapes
+         * @description The shapes already cached for the masked targets (none if nothing was segmented yet).
+         */
+        get: operations["get_shapes_api_projects__project_id__shapes_get"];
+        put?: never;
+        /**
+         * Make Shapes
+         * @description Segment the masked targets that have no shape yet (``VIBE_SEGMENTER``), then reply like
+         *     ``GET``. 503 when this server has no segmenter or it can't run: the preview and the export
+         *     keep the boxes. Doesn't hold the project, so chatting goes on while it runs.
+         */
+        post: operations["make_shapes_api_projects__project_id__shapes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/exports/{name}": {
         parameters: {
             query?: never;
@@ -737,6 +763,23 @@ export interface components {
             text: string;
             /** Words */
             words: components["schemas"]["Word"][];
+        };
+        /** ShapeFrame */
+        ShapeFrame: {
+            /** T */
+            t: number;
+            /** Image */
+            image: string;
+        };
+        /** ShapesReply */
+        ShapesReply: {
+            /**
+             * Shapes
+             * @description By track id, in time order: the shape of each masked target at its keyframes, for the preview to clip its effect to (F-15). Tracks with no cached shape aren't listed: the preview keeps their box.
+             */
+            shapes: {
+                [key: string]: components["schemas"]["ShapeFrame"][];
+            };
         };
         /** Span */
         Span: {
@@ -1421,6 +1464,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExportReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_shapes_api_projects__project_id__shapes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShapesReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    make_shapes_api_projects__project_id__shapes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShapesReply"];
                 };
             };
             /** @description Validation Error */

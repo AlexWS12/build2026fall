@@ -1,6 +1,7 @@
 """Renderer: export path and per-frame path (F-04). The only code that writes video.
 
-``FrameRenderer`` / ``render_frame`` apply a timeline's masks to one frame (preview, live).
+``FrameRenderer`` / ``render_frame`` apply a timeline's masks to one frame (preview, live),
+by box, or by the target's shape where a segmentation mask fits (F-15, ``shape``).
 ``render_audio`` silences the mutes and removes the cuts from a clip's samples.
 ``export`` renders a whole clip into an MP4.
 ``audit_masks`` says how far to trust each mask's box, with or without a render.
@@ -10,19 +11,22 @@
 from vibe.render.audio import apply_audio_edits, check_audio, render_audio
 from vibe.render.errors import NothingToRender, RenderError, UnsupportedEdit
 from vibe.render.export import RenderResult, export
-from vibe.render.frame import FrameRenderer, RenderIssue, check_video, render_frame
+from vibe.render.frame import FrameRenderer, RenderIssue, ShapeUse, check_video, render_frame
 from vibe.render.mask_report import MaskAudit, audit_masks
 from vibe.render.review import ReviewItem, ReviewQueue, review_queue
+from vibe.render.shape import MaskLookup
 
 __all__ = [
     "FrameRenderer",
     "NothingToRender",
     "MaskAudit",
+    "MaskLookup",
     "RenderError",
     "RenderIssue",
     "RenderResult",
     "ReviewItem",
     "ReviewQueue",
+    "ShapeUse",
     "UnsupportedEdit",
     "apply_audio_edits",
     "audit_masks",

@@ -128,6 +128,14 @@ export function createMockClient({ delayMs = 300 }: { delayMs?: number } = {}): 
       await wait(delayMs)
       throw unavailable('Analysis')
     },
+    async getShapes() {
+      await wait(delayMs)
+      return { shapes: {} }
+    },
+    async makeShapes() {
+      await wait(delayMs)
+      throw unavailable('Shapes')
+    },
     async exportVideo() {
       await wait(delayMs)
       throw unavailable('Export')

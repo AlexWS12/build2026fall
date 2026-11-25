@@ -15,9 +15,9 @@ The constants are starting points; F-11 tunes them on real detections.
 
 import math
 from bisect import bisect_right
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from vibe.contract import Track
+from vibe.contract import Keyframe, Track
 
 HOLD_SECONDS = 0.5
 """How long a box can be held from a keyframe before the target counts as lost."""
@@ -48,6 +48,10 @@ class PlacedBox:
     extra_padding: float
     lost: bool = False
     """No detection near this moment, so the target may not be inside the box."""
+    anchors: tuple[Keyframe, ...] = ()
+    """The keyframes this box comes straight from (one at a keyframe, two between close ones),
+    when a mask may follow the target's shape here (F-15): none when the box is held, spans a
+    long gap or is next to an ``uncertain`` keyframe. Those always use the box."""
 
 
 class TrackPath:
@@ -64,7 +68,10 @@ class TrackPath:
         if t < first.t:
             return _held(first.box, first.t - t, first.state == "uncertain")
         if t >= last.t:
-            return _held(last.box, t - last.t, last.state == "uncertain")
+            held = _held(last.box, t - last.t, last.state == "uncertain")
+            if t == last.t and last.state != "uncertain":
+                return replace(held, anchors=(last,))
+            return held
         i = bisect_right(self._times, t) - 1  # keyframes[i].t <= t < keyframes[i + 1].t
         a, b = keyframes[i], keyframes[i + 1]
         uncertain = "uncertain" in (a.state, b.state)
@@ -79,7 +86,9 @@ class TrackPath:
             ax2 + (bx2 - ax2) * w,
             ay2 + (by2 - ay2) * w,
         )
-        return PlacedBox(box, UNCERTAIN_PADDING if uncertain else 0.0)
+        if uncertain:
+            return PlacedBox(box, UNCERTAIN_PADDING)
+        return PlacedBox(box, 0.0, anchors=(a,) if t == a.t else (a, b))
 
 
 def _held(box: Box, held: float, uncertain: bool) -> PlacedBox:

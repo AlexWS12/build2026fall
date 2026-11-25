@@ -6,6 +6,7 @@ import type {
   HistoryReply,
   ProjectDetail,
   ReviewReply,
+  ShapeFrame,
   StepReport,
   TimelineState,
   Track,
@@ -89,6 +90,8 @@ export interface OpenProject extends ReviewData {
   analysed: boolean
   /** The video's transcript (F-31), once it has been asked for in this session. */
   transcript: Transcript | null
+  /** Masked targets' shapes by track id (F-15): the preview clips their effect to them. */
+  shapes: Record<string, ShapeFrame[]>
   chat: ChatEntry[]
   activity: Activity
   export: ExportState
@@ -118,6 +121,8 @@ export type SessionEvent =
   | { type: 'history_settled'; sync: Sync }
   | { type: 'analysis_started' }
   | ({ type: 'analysis_settled'; analysed: boolean; tracks: Track[] } & ReviewData)
+  /** Shapes arrived for a project (F-15). Not an activity: they come in while it is idle. */
+  | { type: 'shapes_loaded'; projectId: string; shapes: Record<string, ShapeFrame[]> }
   | { type: 'transcript_started' }
   | { type: 'transcript_settled'; transcript: Transcript }
   | { type: 'export_started' }
@@ -235,6 +240,9 @@ function projectTransition(project: OpenProject, event: ProjectEvent): OpenProje
         chat: [...project.chat, { kind: 'note', id: nextId(project), text }],
       }
     }
+    case 'shapes_loaded':
+      if (event.projectId !== project.detail.info.project_id) return project
+      return { ...project, shapes: event.shapes }
     case 'transcript_started':
       if (!idle) return project
       return { ...project, activity: { kind: 'transcribing' } }
@@ -313,6 +321,7 @@ function fromSnapshot(snapshot: Snapshot): OpenProject {
     review: snapshot.review,
     reviewError: snapshot.reviewError,
     transcript: null,
+    shapes: {},
     chat,
     activity: IDLE,
     export: { kind: 'none' },

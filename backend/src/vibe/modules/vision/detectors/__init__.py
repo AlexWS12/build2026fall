@@ -126,15 +126,16 @@ def _convert(detector: str, option: str, text: str, annotation: object) -> objec
         ) from None
 
 
-def resolve_options(name: str, raw: dict[str, str]) -> dict[str, object]:
-    """Convert a spec's text options by the declared types of the detector's parameters."""
-    info = DETECTORS[name]
-    params = inspect.signature(info.make).parameters
+def resolve_options(
+    name: str, raw: dict[str, str], make: Callable[..., object] | None = None
+) -> dict[str, object]:
+    """Convert a spec's text options by the declared types of the detector's parameters (or of
+    ``make``'s, for other models picked by spec, like the segmenters)."""
+    params = inspect.signature(make or DETECTORS[name].make).parameters
     unknown = [k for k in raw if k not in params]
     if unknown:
         raise ValueError(
-            f"bad options for detector {name!r}: unknown {', '.join(unknown)} "
-            f"(options: {', '.join(params)})"
+            f"bad options for {name!r}: unknown {', '.join(unknown)} (options: {', '.join(params)})"
         )
     return {k: _convert(name, k, v, params[k].annotation) for k, v in raw.items()}
 

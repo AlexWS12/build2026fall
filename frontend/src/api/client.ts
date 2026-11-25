@@ -1,5 +1,6 @@
 import type {
   AnalysisReply,
+  ShapesReply,
   ChatRecord,
   ChatReply,
   ExportReply,
@@ -46,6 +47,10 @@ export interface ApiClient {
   redo(projectId: string): Promise<HistoryReply>
   /** Find and track people, faces and plates in the video (slow the first time). */
   analyse(projectId: string): Promise<AnalysisReply>
+  /** The masked targets' shapes already made (F-15), for the preview. */
+  getShapes(projectId: string): Promise<ShapesReply>
+  /** Make the missing shapes first (slow the first time; 503 if the server can't). */
+  makeShapes(projectId: string): Promise<ShapesReply>
   /** Render the timeline to a new file. */
   exportVideo(projectId: string): Promise<ExportReply>
   /** The video's transcript, made on the server if it isn't cached yet (slow the first time). */
@@ -123,6 +128,8 @@ export const httpClient: ApiClient = {
   undo: (projectId) => post(project(projectId, '/undo')),
   redo: (projectId) => post(project(projectId, '/redo')),
   analyse: (projectId) => post(project(projectId, '/analysis')),
+  getShapes: (projectId) => call(project(projectId, '/shapes')),
+  makeShapes: (projectId) => post(project(projectId, '/shapes')),
   exportVideo: (projectId) => post(project(projectId, '/exports')),
   transcribe: (projectId) => post(project(projectId, '/transcript')),
 }
