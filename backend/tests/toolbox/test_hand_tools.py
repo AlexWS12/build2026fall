@@ -81,7 +81,7 @@ def test_only_the_ui_registry_has_it() -> None:
     assert "confirm_mask" not in TOOLS
     assert "confirm_mask" in HAND_TOOLS
     assert "confirm_mask" in UI_TOOLS
-    assert set(UI_TOOLS) == set(TOOLS) | {"confirm_mask"}
+    assert set(UI_TOOLS) == set(TOOLS) | {"confirm_mask", "mask_targets"}
     with pytest.raises(ToolError, match="unknown tool"):
         call_tool("confirm_mask", confirm_args("trk_1"), ctx(masked_log()))
 
