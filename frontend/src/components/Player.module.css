@@ -87,6 +87,28 @@
   margin-left: auto;
 }
 
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.target {
+  padding: 3px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font-size: 0.83rem;
+  cursor: pointer;
+}
+
+.target[aria-pressed='true'] {
+  border-color: rgb(250 204 21 / 0.8);
+  background: rgb(250 204 21 / 0.12);
+  color: var(--text);
+}
+
 .modes {
   display: inline-flex;
   padding: 2px;

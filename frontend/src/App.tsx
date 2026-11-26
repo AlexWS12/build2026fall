@@ -151,6 +151,8 @@ function App({ api = defaultClient }: { api?: ApiClient }) {
           handle={player}
           onTime={(seconds) => setPosition({ url: videoUrl, seconds })}
           onDuration={(seconds) => setMeasured({ url: videoUrl, seconds })}
+          onTarget={commands.target}
+          editable={canSend(session)}
         />
         <div className={styles.side}>
           <ChatPanel

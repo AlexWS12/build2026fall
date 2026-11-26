@@ -1,8 +1,10 @@
 import { useEffect, useImperativeHandle, useRef, useState, type CSSProperties, type Ref } from 'react'
-import type { TimelineState, Track } from '../api/types'
+import type { TargetRequest, TimelineState, Track } from '../api/types'
 import { Panel } from './Panel'
 import styles from './Player.module.css'
 import { cutAt, masksAt, mutedAt, outputDuration, type PreviewMask } from './preview'
+import { TargetBar, TargetLayer } from './TargetLayer'
+import type { EffectType } from './targets'
 import { formatTime } from './timeline'
 
 export interface PlayerHandle {
@@ -27,6 +29,8 @@ export function Player({
   handle,
   onTime,
   onDuration,
+  onTarget,
+  editable = false,
 }: {
   src: string | null
   /** Width over height of the picture, when the server knows it. */
@@ -39,6 +43,10 @@ export function Player({
   handle?: Ref<PlayerHandle>
   onTime?: (seconds: number) => void
   onDuration: (seconds: number) => void
+  /** Hand edit (F-14): mask what was clicked or boxed. Without it, there's no target mode. */
+  onTarget?: (target: TargetRequest) => void
+  /** Whether a hand edit can start now (nothing else in flight). */
+  editable?: boolean
 }) {
   const video = useRef<HTMLVideoElement>(null)
   const [mode, setMode] = useState<Mode>('preview')
@@ -46,6 +54,8 @@ export function Player({
   const [measuredAspect, setMeasuredAspect] = useState<number | null>(null)
   /** True while the preview, not the viewer, is holding the sound off. */
   const forcedMute = useRef(false)
+  const [targeting, setTargeting] = useState(false)
+  const [effect, setEffect] = useState<EffectType>('blur')
 
   const previewing = mode === 'preview' && !!state
 
@@ -108,17 +118,57 @@ export function Player({
   }, [mode, state])
 
   const masks = previewing ? masksAt(state, tracks ?? [], time) : []
+
+  function startTargeting() {
+    // A box is drawn on one frame: hold the picture still while the viewer aims.
+    video.current?.pause()
+    setTargeting(true)
+  }
+
+  function target(where: Pick<TargetRequest, 'point' | 'box'>) {
+    if (!onTarget || !editable) return
+    onTarget({ t: video.current?.currentTime ?? time, effect, ...where })
+  }
+
+  useEffect(() => {
+    if (!targeting) return
+    function onKey(event: KeyboardEvent) {
+      const element = event.target
+      if (element instanceof Element && element.closest('input, textarea, [contenteditable="true"]'))
+        return
+      if (event.key === 'Escape') setTargeting(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [targeting])
   const ratio = aspect || measuredAspect
   const output = state && duration ? outputDuration(state, duration) : null
 
   const modes = src && state && (
-    <div className={styles.modes} role="group" aria-label="What the player shows">
-      <button type="button" aria-pressed={mode === 'preview'} onClick={() => setMode('preview')}>
-        Preview
-      </button>
-      <button type="button" aria-pressed={mode === 'original'} onClick={() => setMode('original')}>
-        Original
-      </button>
+    <div className={styles.actions}>
+      {onTarget && (
+        <button
+          type="button"
+          className={styles.target}
+          aria-pressed={targeting}
+          title="Click a target or draw a box around something to blur it"
+          onClick={() => (targeting ? setTargeting(false) : startTargeting())}
+        >
+          Target
+        </button>
+      )}
+      <div className={styles.modes} role="group" aria-label="What the player shows">
+        <button type="button" aria-pressed={mode === 'preview'} onClick={() => setMode('preview')}>
+          Preview
+        </button>
+        <button
+          type="button"
+          aria-pressed={mode === 'original'}
+          onClick={() => setMode('original')}
+        >
+          Original
+        </button>
+      </div>
     </div>
   )
 
@@ -153,8 +203,25 @@ export function Player({
                   />
                 ))}
               </div>
+              {targeting && (
+                <TargetLayer
+                  tracks={tracks ?? []}
+                  time={time}
+                  disabled={!editable}
+                  onPoint={(point) => target({ point })}
+                  onBox={(box) => target({ box })}
+                />
+              )}
             </div>
           </div>
+          {targeting && (
+            <TargetBar
+              effect={effect}
+              busy={!editable}
+              onEffect={setEffect}
+              onDone={() => setTargeting(false)}
+            />
+          )}
           <div className={styles.bar}>
             <span className={styles.clock}>
               {formatTime(time)}
