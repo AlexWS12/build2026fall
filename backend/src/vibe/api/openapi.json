@@ -803,6 +803,59 @@
         }
       }
     },
+    "/api/projects/{project_id}/targets": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Add Target",
+        "description": "Mask the target clicked (``point``) or boxed (``box``) on the frame at ``t``, as a hand\nedit (F-14). 400 if nothing is under a click, ``t`` is past the end, or the toolbox refuses.",
+        "operationId": "add_target_api_projects__project_id__targets_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TargetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TargetReply"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "Health",
@@ -1714,6 +1767,167 @@
         ],
         "title": "StepReport",
         "description": "One tool call as it ran."
+      },
+      "TargetReply": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "how": {
+            "type": "string",
+            "enum": [
+              "picked",
+              "matched",
+              "followed"
+            ],
+            "title": "How",
+            "description": "picked: the clicked target; matched: an already followed target the box fills; followed: a new hand-drawn track."
+          },
+          "track_id": {
+            "type": "string",
+            "title": "Track Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "followed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TimeRange"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a followed box: from its first keyframe to its last."
+          },
+          "lost_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lost Before",
+            "description": "Followed box: lost going back, at this time; null = never."
+          },
+          "lost_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lost After",
+            "description": "Followed box: lost going forward, at this time; null = never."
+          },
+          "reply": {
+            "type": "string",
+            "title": "Reply",
+            "description": "What happened, in plain words."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "request_id",
+          "how",
+          "track_id",
+          "label",
+          "reply"
+        ],
+        "title": "TargetReply"
+      },
+      "TargetRequest": {
+        "properties": {
+          "t": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "T",
+            "description": "Source time of the frame the user clicked or drew on."
+          },
+          "point": {
+            "anyOf": [
+              {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Point",
+            "description": "A click, normalized [x, y]: mask the target under it."
+          },
+          "box": {
+            "anyOf": [
+              {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 4,
+                "minItems": 4
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Box",
+            "description": "A drawn box, normalized [x1, y1, x2, y2]: mask what's in it."
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "blur",
+              "pixelate",
+              "box"
+            ],
+            "title": "Effect",
+            "default": "blur"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9 _-]*$",
+            "title": "Label",
+            "description": "What a newly followed box is called, e.g. \"person\". Not used otherwise.",
+            "default": "object"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "t"
+        ],
+        "title": "TargetRequest"
       },
       "TimeRange": {
         "properties": {
