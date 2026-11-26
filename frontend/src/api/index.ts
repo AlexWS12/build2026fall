@@ -28,6 +28,7 @@ export function createAutoClient(
     getTracks: (id) => pick().then((c) => c.getTracks(id)),
     getReview: (id) => pick().then((c) => c.getReview(id)),
     reviewItem: (id, itemId, action) => pick().then((c) => c.reviewItem(id, itemId, action)),
+    addTarget: (id, target) => pick().then((c) => c.addTarget(id, target)),
     undo: (id) => pick().then((c) => c.undo(id)),
     trim: (id, start, end) => pick().then((c) => c.trim(id, start, end)),
     redo: (id) => pick().then((c) => c.redo(id)),

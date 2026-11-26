@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ApiClient } from '../api'
 import { ApiError } from '../api/client'
-import type { ReviewReply } from '../api/types'
+import type { ReviewReply, TargetRequest } from '../api/types'
 import {
   initialSession,
   transition,
@@ -29,6 +29,8 @@ export interface SessionCommands {
   review(itemId: string, action: 'confirm' | 'cut'): Promise<void>
   /** Keep only `start`..`end` of the source (the timeline's trim handles). */
   trim(start: number, end: number): Promise<void>
+  /** Mask the target clicked or boxed in the player (F-14). */
+  target(target: TargetRequest): Promise<void>
   /** Leave the open project and go back to the start screen. */
   close(): void
 }
@@ -183,6 +185,12 @@ export function useSession(api: ApiClient): { session: Session; commands: Sessio
             sync: { timeline, history, review, reviewError: null },
             gone: false,
           }
+        }),
+      target: (target) =>
+        run({ type: 'target_started' }, async (id) => {
+          const reply = await api.addTarget(id, target)
+          const [synced, { tracks }] = await Promise.all([sync(id), api.getTracks(id)])
+          return { type: 'target_settled', reply, sync: synced, tracks }
         }),
       close() {
         if (dispatch({ type: 'closed' })) window.history.replaceState(null, '', ' ')

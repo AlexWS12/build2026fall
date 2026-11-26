@@ -120,6 +120,10 @@ export function createMockClient({ delayMs = 300 }: { delayMs?: number } = {}): 
       await wait(delayMs)
       throw unavailable('Trimming')
     },
+    async addTarget() {
+      await wait(delayMs)
+      throw unavailable('Targeting by hand')
+    },
     async undo() {
       await wait(delayMs)
       throw unavailable('Undo')

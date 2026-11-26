@@ -30,6 +30,12 @@ export type ReviewAction = Schemas['ReviewAction']
 export type ExportReply = Required<Schemas['ExportReply']>
 /** The video's transcript with word timestamps (`POST /api/projects/{id}/transcript`, F-31). */
 export type Transcript = Schemas['Transcript']
+/** Body of `POST /api/projects/{id}/targets` (F-14): a click (`point`) or a drawn `box`. The
+ * generated type marks `effect` and `label` required, but the server has defaults for both. */
+export type TargetRequest = Omit<Schemas['TargetRequest'], 'effect' | 'label'> &
+  Partial<Pick<Schemas['TargetRequest'], 'effect' | 'label'>>
+/** What clicking or boxing a target did (F-14). */
+export type TargetReply = Required<Schemas['TargetReply']>
 
 /** Normalized `[x1, y1, x2, y2]`, each 0..1. */
 export type Box = [number, number, number, number]
