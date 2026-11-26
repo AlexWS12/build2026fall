@@ -34,7 +34,7 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 | F-11 | Blur / pixelate / black-box targets | Must | F-04, F-10 | done | Mask audit: jonathan, `jonathan/f11-mask-effects`; cached tracks + export tests: christopher, `christopher/f11-track-loading` (merged into #29) |
 | F-12 | Time-bounded edits ("first half", "after 0:30") | Must | F-05 | done | `resolve_time` / `resolve_range` (jean/f12-time-bounded-edits) |
 | F-13 | Targeting by description ("the person in red", "everyone except me") | Must | F-10 | in progress | VLM yes/no per track |
-| F-14 | Click / draw a box to target, tracked through the clip | Should | F-10 | idea | |
+| F-14 | Click / draw a box to target, tracked through the clip | Should | F-10 | in progress | christopher, `christopher/f14-draw-box-target`: Target mode in the player (click an outlined target, or drag a box), CPU box follower (`modules/vision/follow.py`, no model), `POST /api/projects/{id}/targets`, hand-only `mask_targets` tool. Ready for review |
 | F-15 | Segmentation masks instead of boxes | Should | F-10 | idea | SAM 2 / SAM 3 |
 | F-16 | Remove a person or object with background fill (video inpainting) | Should | F-15 | idea | Heaviest compute; preview before applying |
 
