@@ -59,3 +59,16 @@ def remote_hosts() -> frozenset[str]:
 def remote_token() -> str | None:
     """Shared secret between the ``remote`` backend and the model server (``.env``, never git)."""
     return os.environ.get("VIBE_REMOTE_TOKEN") or None
+
+
+def vlm_url() -> str:
+    """The server the F-13 description judge asks (``VIBE_VLM_URL``): anything that speaks the
+    OpenAI chat API with images, such as Ollama (the default, port 11434), llama.cpp or vLLM."""
+    return os.environ.get("VIBE_VLM_URL") or "http://localhost:11434"
+
+
+def vlm_model() -> str | None:
+    """The model the description judge asks for (``VIBE_VLM_MODEL``, e.g. ``gemma3:12b``).
+
+    No default: which VLM to use is D-020, still Proposed, and not a choice to make silently."""
+    return os.environ.get("VIBE_VLM_MODEL") or None
