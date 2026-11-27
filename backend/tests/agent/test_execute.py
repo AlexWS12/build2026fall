@@ -404,12 +404,13 @@ def test_a_description_with_no_judge_on_this_backend_is_refused(
     storage: Storage, clip: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("VIBE_BACKEND", "local")
+    monkeypatch.delenv("VIBE_VLM_MODEL", raising=False)
     project = storage.create_project(clip)
     save_tracks(storage, project.info.video.sha256, "k-aaaa1111", [person("trk_1", (1.0, 1.2))])
 
     done = execute_request(storage, project, from_text("blur the person in grey"), "r_1")
 
-    assert not done.ok and "isn't built yet" in done.error
+    assert not done.ok and "VIBE_VLM_MODEL" in done.error
     assert len(project.log()) == 0
     # ... and edits that describe nobody still work there.
     assert execute_request(storage, project, from_text("mute the first half"), "r_2").ok

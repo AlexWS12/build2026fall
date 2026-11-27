@@ -192,10 +192,13 @@ def test_the_stub_thresholds_must_leave_a_gap() -> None:
         ColorJudge(yes_at=0.1, no_at=0.2)
 
 
-def test_only_the_stub_backend_has_a_judge_so_far() -> None:
+def test_a_vlm_backend_has_no_judge_until_a_model_is_named(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("VIBE_VLM_MODEL", raising=False)
     assert isinstance(make_judge("stub"), ColorJudge)
     for backend in ("local", "remote"):
-        with pytest.raises(DescribeError, match="isn't built yet"):
+        with pytest.raises(DescribeError, match="VIBE_VLM_MODEL"):
             make_judge(backend)
 
 

@@ -12,8 +12,9 @@ Judges, by backend (``VIBE_BACKEND``, docs/ARCHITECTURE.md "Compute"):
 - ``stub``: :class:`ColorJudge`, numpy only. It answers clothing-colour descriptions ("in red",
   "wearing a blue shirt") from the pixels and says ``unsure`` to everything else, so CI and CPU
   laptops get a real, if narrow, answer. Its thresholds are starting points, not measured.
-- ``local`` / ``remote``: a VLM. Which one is still open, so they raise until it lands instead
-  of quietly answering with the colour stub.
+- ``local`` / ``remote``: a VLM, asked through an OpenAI-style chat server (:mod:`.vlm`). Which
+  model is D-020, still Proposed, so ``VIBE_VLM_MODEL`` must be set; until it is they raise
+  instead of quietly answering with the colour stub.
 
 A description may hold several criteria ("in a grey t-shirt with a bag"). Unless the judge
 reads whole sentences itself (``Judge.compound``), the describer splits it, answers each part
@@ -267,10 +268,9 @@ def make_judge(backend: Backend | None = None) -> Judge:
     backend = backend or model_backend()
     if backend == "stub":
         return ColorJudge()
-    raise DescribeError(
-        f"the {backend!r} description judge (a VLM) isn't built yet (F-13); set VIBE_BACKEND=stub "
-        "for clothing colours only"
-    )
+    from vibe.modules.vision.vlm import vlm_judge  # vlm imports Judge from here
+
+    return vlm_judge(backend)
 
 
 # --- crops --------------------------------------------------------------------------------

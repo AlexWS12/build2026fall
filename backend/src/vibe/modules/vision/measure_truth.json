@@ -1,0 +1,39 @@
+{
+  "truth_version": 1,
+  "notes": "DRAFT, not checked against the videos. Drafted from the clothing notes in each clip's benchmark labels (who wears what), by Claude; nobody has watched the clips for this yet. Watch each clip and fix or drop cases before trusting a number. Every track not listed under matches counts as NOT matching, so a description is only here if its clip's notes say who wears it; tracks whose notes don't say are under ambiguous. pair-backpacks-behind has no cases: its passers-by have no descriptions. These clips have consent_cloud false (D-017): run them with --runs-on this-machine, team-machine or university (HiPerGator, which the team approved), never third-party.",
+  "cases": [
+    {"clip_id": "trio-street-outfits", "description": "in a neon green jacket", "matches": ["p1"]},
+    {"clip_id": "trio-street-outfits", "description": "in an orange jacket", "matches": ["p2"]},
+    {"clip_id": "trio-street-outfits", "description": "in a white denim jacket", "matches": ["p3"]},
+
+    {"clip_id": "trio-skatepark-pastels", "description": "in a pink denim jacket", "matches": ["q1"]},
+    {"clip_id": "trio-skatepark-pastels", "description": "wearing a bucket hat", "matches": ["q2"]},
+    {
+      "clip_id": "trio-skatepark-pastels",
+      "description": "wearing glasses",
+      "matches": ["q1"],
+      "notes": "Assumes the label notes list every pair of glasses; they only name q1's."
+    },
+    {"clip_id": "trio-skatepark-pastels", "description": "in a white t-shirt", "matches": ["q2"]},
+
+    {"clip_id": "trio-sidewalk-totes", "description": "in a red plaid shirt", "matches": ["r2"]},
+    {"clip_id": "trio-sidewalk-totes", "description": "with a tote bag", "matches": ["r1", "r3"]},
+    {"clip_id": "trio-sidewalk-totes", "description": "in a tan shirt", "matches": ["r1"]},
+
+    {"clip_id": "hikers-backpacks", "description": "with a pink backpack", "matches": ["h4"]},
+    {
+      "clip_id": "hikers-backpacks",
+      "description": "in a grey shirt",
+      "matches": ["h6"],
+      "ambiguous": ["h4"],
+      "notes": "h4's top isn't described in the label notes."
+    },
+    {
+      "clip_id": "hikers-backpacks",
+      "description": "with a red backpack",
+      "matches": ["h2"],
+      "ambiguous": ["h1", "h3"],
+      "notes": "h1 has a red-and-grey backpack and h3 a red-and-black one: partly red."
+    }
+  ]
+}
