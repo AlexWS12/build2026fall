@@ -99,17 +99,6 @@ def remote_token() -> str | None:
     return os.environ.get("VIBE_REMOTE_TOKEN") or None
 
 
-def planner_llm() -> str | None:
-    """Which LLM plans requests no template reads (``VIBE_PLANNER_LLM``): ``claude``, or unset
-    for templates only (the default). See ``vibe.agent.llm``."""
-    value = os.environ.get("VIBE_PLANNER_LLM", "").strip().lower()
-    if value in ("", "none", "off"):
-        return None
-    if value != "claude":
-        raise ValueError(f"VIBE_PLANNER_LLM must be 'claude' or unset, got {value!r}")
-    return value
-
-
 def vlm_url() -> str:
     """The server the F-13 description judge asks (``VIBE_VLM_URL``): anything that speaks the
     OpenAI chat API with images, such as Ollama (the default, port 11434), llama.cpp or vLLM."""

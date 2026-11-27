@@ -518,7 +518,7 @@ def test_planner_failures_get_a_clear_error_and_write_nothing(
 ) -> None:
     project_id = upload(client, clip)["project_id"]
 
-    def fail(text: str, llm: object = None) -> None:
+    def fail(text: str) -> None:
         raise error
 
     monkeypatch.setattr(projects, "plan_request", fail)
@@ -1386,46 +1386,3 @@ def test_removing_masks_needs_at_least_one_target(
     project_id = upload(client, long_clip)["project_id"]
     response = client.post(f"/api/projects/{project_id}/masks/remove", json={"targets": []})
     assert response.status_code == 422
-
-
-# --- The Claude planner through the chat route (R-1b, D-023) -------------------------------
-
-
-def test_without_the_setting_chat_plans_with_templates_only(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv("VIBE_PLANNER_LLM", raising=False)
-    assert projects._planner_llm() is None
-
-
-def test_a_request_claude_plans_is_applied_like_any_other(
-    client: TestClient, storage: Storage, long_clip: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import json
-    from types import SimpleNamespace
-
-    from vibe.agent.llm import ClaudePlanner
-
-    answer = {
-        "calls": [
-            {"step_id": "s1", "tool": "resolve_time", "args_json": '{"phrase": "first 2 seconds"}'},
-            {"step_id": "s2", "tool": "mute", "args_json": '{"time_range": {"$ref": "s1"}}'},
-        ],
-        "question": "",
-    }
-    text = SimpleNamespace(type="text", text=json.dumps(answer))
-    fake = SimpleNamespace(
-        beta=SimpleNamespace(
-            messages=SimpleNamespace(
-                create=lambda **_: SimpleNamespace(stop_reason="end_turn", content=[text])
-            )
-        )
-    )
-    monkeypatch.setattr(projects, "_planner_llm", lambda: ClaudePlanner(client=fake))
-    project_id = upload(client, long_clip)["project_id"]
-
-    reply = ask(client, project_id, "shh, no sound at the very start please")
-
-    assert reply["status"] == "applied", reply
-    assert reply["reply"] == "Muted 0:00–0:02."
-    assert get(client, project_id, "state")["mutes"]

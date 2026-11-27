@@ -15,7 +15,7 @@ status: ready for review
 > - **Settings and dependencies:** `config.py` (`VIBE_VISION_DETECTORS`, `VIBE_VISION_EVERY`), the new optional `vision` extra in `pyproject.toml` / `uv.lock`, and the YuNet hash in `models.json`.
 > - **Generated files:** `openapi.json` and `frontend/src/api/generated/schema.ts` are regenerated.
 > - **Toolbox and API (F-42):** a new hand-only tool `remove_mask` (`registry.py`, `tools.py`; the planner never gets it) and a new route `POST /api/projects/{id}/masks/remove`, plus `removeMasks` in `frontend/src/api/`.
-> - **Dependencies (D-023):** a new optional `llm` extra (`anthropic`) in `pyproject.toml` / `uv.lock`, and `VIBE_PLANNER_LLM` in `config.py`.
+> - **Planner LLM decision (D-023, rewritten 2026-11-27):** templates first, local Gemma 4 E4B for the rest, Gemini's free tier opt-in, no paid model. The Claude planner this PR used to add (`agent/llm.py`, `VIBE_PLANNER_LLM=claude`, the `llm` extra) is removed, so it no longer conflicts with Paul's `paul/r1b-planner-llm`.
 > - **Benchmark (Jean's F-09):** two masked-area columns in `score.py` / `report.py`.
 > - **No contract or toolbox change.**
 > - **After merging, everyone runs** `uv sync --extra cpu --extra vision` (or `cu128`) **and** `uv run python -m vibe.modules download yunet`. PR #44.
@@ -38,12 +38,13 @@ status: ready for review
   - `benchmark report`: new `masked` / `masked outside` columns, the share of the frame inside padded masks at the scored moments (200×200 grid).
 - **Click a mask to remove it (F-42, the remove part):** in the player's preview, clicking selects the smallest mask under the pointer. **Remove blur** or Delete removes that target's whole mask as a hand edit (`remove_mask`, `source: user`), Esc cancels, and Undo brings it back. Typing in the chat never triggers Delete. Added because the default over-blurs, so a person can take off a wrong mask.
 - **Timeline lanes scroll** in a box capped at min(220px, 32vh), so one lane per tracked face no longer pushes the player off the screen.
-- **Claude as the planner LLM (R-1b, D-023 Proposed, opt-in):** `agent/llm.py` `ClaudePlanner` fills `plan_request`'s existing LLM slot for requests no template reads. Opt in with `VIBE_PLANNER_LLM=claude`, `uv sync --extra llm` and `ANTHROPIC_API_KEY`; off by default. It sends only the request text and tool descriptions, uses structured output, and asks a question (new `{"question": ...}` answer) when no tool fits. Tests use a fake client; nothing calls the network in CI.
+- **Planner LLM (R-1b, D-023):** no LLM code in this PR any more. A Claude planner was added on Nov 21 and removed on Nov 27, after D-023 was rewritten (see "Decisions made"). Chat plans with templates only until Paul's `paul/r1b-planner-llm` lands with the Gemma and Gemini adapters.
 - **Found targets follow their tracks:** "blur faces / people / plates" set `while_tracked`, so ended tracks don't leave boxes behind (32 → 9–21 on screen on trio-street-outfits).
 - **Face labels** for trio-street-outfits (3 people, 39 boxes), trio-sidewalk-totes (3, 21) and crowd-orange (16, 42), drawn by Eduardo. In crowd-orange, one track the page had joined across two people is split into tracks 6 and 16.
 
 ## How to check it
 - `npm test`: backend 1656 passed, frontend 116 passed. `npm run lint` and `python -m vibe.api --check` are clean. Run on macOS, 2026-11-21.
+- After removing the Claude planner (2026-11-27, macOS): backend `uv run pytest -q` 1780 passed (main merged in since), `ruff check`, `ruff format --check` and `python -m vibe.api --check` clean. The frontend wasn't touched and wasn't rerun.
 - In the app:
   1. In `backend/`, run `uv sync --extra cpu --extra vision` and `uv run python -m vibe.modules download yunet`.
   2. Start the backend with `VIBE_BACKEND=local`.
@@ -79,6 +80,7 @@ status: ready for review
 ## Decisions made
 - **D-022 (Proposed, in use)** in `docs/ARCHITECTURE.md`: the default above. Eduardo chose it for now from these scores. Revisit when the team weighs in, or when a GPU bake-off of D-015's RF-DETR + EgoBlur has numbers.
 - **"Blur people" stays in the demo** with its limit stated (up to 21% of labelled people exposed). Mention it as a known blocker when showing it.
+- **D-023 (Proposed, rewritten 2026-11-27):** with no budget, the planner is templates first, then Gemma 4 E4B on local Ollama, with Gemini 3.5 Flash-Lite's free tier as an opt-in setting. Eduardo chose it from R-1b's benchmark (#45); Paul still has to confirm. Claude Opus 5.5 was also run once through R-1b's benchmark for reference (91% correct, 15 unsafe, $0.0033 per request, macOS arm64), but it's paid, so it isn't an option. The raw results and the adapter patch it needed are in `outputs/r1-planner/` (gitignored), not in this PR.
 
 ## Next steps
 - **Team review of D-022.** Is about 0.3 s/frame acceptable on laptops? Or should tier 0 default to faces only (`VIBE_VISION_DETECTORS="yunet:weights=@yunet,grow=2.6"`), which misses hidden faces?
