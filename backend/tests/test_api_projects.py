@@ -973,7 +973,8 @@ def test_export_with_denoise_is_a_playable_mp4_and_caches_the_noise_profile(
 @pytest.mark.parametrize(
     ("requests", "reason"),
     [
-        (["cut the first half", "cut the second half"], "nothing to render"),
+        # On screen, after the first cut, 0:00-0:05 is everything left.
+        (["cut the first half", "cut 0:00 to 0:05"], "nothing to render"),
     ],
 )
 def test_export_the_renderer_refuses_is_422_with_the_reason_and_no_file(
@@ -1229,3 +1230,142 @@ def test_a_request_by_what_is_said_needs_a_transcript(
     assert reply["status"] == "not_applied"
     assert "no transcript yet" in reply["reply"]
     assert log_bytes(storage, project_id) == before
+
+
+# --- POST /api/projects/{id}/trim: the timeline's trim handles -----------------------------
+
+
+def test_trim_keeps_only_the_range_as_one_hand_edit_that_undo_takes_back(
+    client: TestClient, storage: Storage, long_clip: Path
+) -> None:
+    project_id = upload(client, long_clip)["project_id"]
+    base = f"/api/projects/{project_id}"
+
+    response = client.post(f"{base}/trim", json={"start": 2, "end": 6})
+
+    assert response.status_code == 200
+    cuts = client.get(f"{base}/state").json()["cuts"]
+    # Everything before 2 s and from 6 s on is cut: two cuts, written as one request.
+    assert [c["start"] for c in cuts] == [0, 6] and cuts[0]["end"] == 2
+    (request,) = response.json()["requests"]
+    assert request["source"] == "user" and request["kinds"] == ["cut", "cut"]
+    assert response.json()["can_undo"] is True
+
+    client.post(f"{base}/undo")
+    assert client.get(f"{base}/state").json()["cuts"] == []
+
+
+def test_trimmed_export_is_as_long_as_the_kept_range(
+    client: TestClient, storage: Storage, long_clip: Path
+) -> None:
+    project_id = upload(client, long_clip)["project_id"]
+    assert (
+        client.post(f"/api/projects/{project_id}/trim", json={"start": 2, "end": 6}).status_code
+        == 200
+    )
+
+    made = export(client, project_id)
+
+    assert made["duration"] == pytest.approx(4, abs=0.15)
+
+
+@pytest.mark.parametrize(
+    ("body", "status"),
+    [
+        ({"start": 5, "end": 5}, 400),  # empty
+        ({"start": 6, "end": 2}, 400),  # backwards
+        ({"start": 2, "end": 60}, 400),  # past the end
+        ({"start": -1, "end": 2}, 422),  # not a time
+    ],
+)
+def test_a_trim_the_toolbox_refuses_writes_nothing(
+    client: TestClient, storage: Storage, long_clip: Path, body: dict, status: int
+) -> None:
+    project_id = upload(client, long_clip)["project_id"]
+
+    response = client.post(f"/api/projects/{project_id}/trim", json=body)
+
+    assert response.status_code == status
+    assert client.get(f"/api/projects/{project_id}/state").json()["cuts"] == []
+    assert projects._busy == set()
+
+
+# --- A chat request's times are what the user sees: earlier cuts are taken out -------------
+
+
+def trimmed_project(client: TestClient, clip: Path) -> str:
+    """A project of the 10 s clip, trimmed to keep 0:03-0:09 (6 s on screen)."""
+    project_id = upload(client, clip)["project_id"]
+    trim = client.post(f"/api/projects/{project_id}/trim", json={"start": 3, "end": 9})
+    assert trim.status_code == 200
+    return project_id
+
+
+def mutes(client: TestClient, project_id: str) -> list[tuple[float, float | None]]:
+    state = client.get(f"/api/projects/{project_id}/state").json()
+    return [(m["start"], m["end"]) for m in state["mutes"]]
+
+
+def test_after_a_trim_the_first_seconds_are_the_first_ones_on_screen(
+    client: TestClient, long_clip: Path
+) -> None:
+    project_id = trimmed_project(client, long_clip)
+
+    reply = ask(client, project_id, "mute the first 5 seconds")
+
+    assert reply["status"] == "applied"
+    assert mutes(client, project_id) == [(3, 8)]  # source time, 3 s in
+    assert "0:00–0:05" in reply["reply"]  # the reply speaks the user's times
+
+
+def test_after_a_trim_a_written_range_is_read_on_screen_too(
+    client: TestClient, long_clip: Path
+) -> None:
+    project_id = trimmed_project(client, long_clip)
+
+    assert ask(client, project_id, "mute 0:01 to 0:02")["status"] == "applied"
+
+    assert mutes(client, project_id) == [(4, 5)]
+
+
+def test_a_range_to_the_end_of_what_is_on_screen_runs_to_the_end(
+    client: TestClient, long_clip: Path
+) -> None:
+    project_id = trimmed_project(client, long_clip)
+
+    assert ask(client, project_id, "mute 0:04 to 0:06")["status"] == "applied"
+
+    assert mutes(client, project_id) == [(7, None)]
+
+
+def test_halves_are_halves_of_what_is_left(client: TestClient, long_clip: Path) -> None:
+    project_id = upload(client, long_clip)["project_id"]
+    ask(client, project_id, "cut the first half")  # 5 s left
+
+    assert ask(client, project_id, "cut the second half")["status"] == "applied"
+
+    made = export(client, project_id)
+    assert made["duration"] == pytest.approx(2.5, abs=0.15)
+
+
+def test_a_time_past_the_end_of_what_is_on_screen_is_refused(
+    client: TestClient, long_clip: Path
+) -> None:
+    project_id = trimmed_project(client, long_clip)  # 6 s on screen
+
+    reply = ask(client, project_id, "mute 0:07 to 0:08")
+
+    assert reply["status"] == "not_applied"
+    assert mutes(client, project_id) == []
+
+
+def test_hand_edits_stay_in_source_time(client: TestClient, long_clip: Path) -> None:
+    project_id = trimmed_project(client, long_clip)
+    base = f"/api/projects/{project_id}"
+
+    # The trim handles send source times: 4-8 of the original, inside what was kept.
+    assert client.post(f"{base}/trim", json={"start": 4, "end": 8}).status_code == 200
+
+    cuts = client.get(f"{base}/state").json()["cuts"]
+    # Kept 4-8 of the original as sent; read on screen it would have been 7-..., not this.
+    assert [(c["start"], c["end"]) for c in cuts][-2:] == [(0, 4), (8, None)]

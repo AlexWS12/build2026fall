@@ -189,6 +189,8 @@ function App({ api = defaultClient }: { api?: ApiClient }) {
           className={styles.timeline}
           onSeek={(seconds) => player.current?.seek(seconds)}
           onFocusRequest={setFocusedRequest}
+          onTrim={(start, end) => void commands.trim(start, end)}
+          trimDisabled={!canSend(session)}
         />
       </main>
     </div>

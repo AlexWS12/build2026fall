@@ -341,6 +341,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/trim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trim
+         * @description Keep only ``start``..``end`` of the source (the timeline's trim handles), as a hand edit:
+         *     ``keep_range`` through the toolbox, as the user, with its own request id, so undo takes it
+         *     back. 400 when the toolbox refuses (a range past the end, the whole video, or one earlier
+         *     cuts already removed).
+         */
+        post: operations["trim_api_projects__project_id__trim_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -873,6 +896,19 @@ export interface components {
             language: string | null;
             /** Segments */
             segments: components["schemas"]["Segment"][];
+        };
+        /** TrimRequest */
+        TrimRequest: {
+            /**
+             * Start
+             * @description Source seconds where the kept part starts.
+             */
+            start: number;
+            /**
+             * End
+             * @description Source seconds where it ends.
+             */
+            end: number;
         };
         /** ValidationError */
         ValidationError: {
@@ -1453,6 +1489,41 @@ export interface operations {
                 };
                 content: {
                     "video/mp4": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trim_api_projects__project_id__trim_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrimRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryReply"];
                 };
             };
             /** @description Validation Error */

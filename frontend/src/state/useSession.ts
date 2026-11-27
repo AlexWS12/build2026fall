@@ -27,6 +27,8 @@ export interface SessionCommands {
   transcribe(): Promise<void>
   /** Confirm a stretch of the review queue as it is, or cut it out. */
   review(itemId: string, action: 'confirm' | 'cut'): Promise<void>
+  /** Keep only `start`..`end` of the source (the timeline's trim handles). */
+  trim(start: number, end: number): Promise<void>
   /** Leave the open project and go back to the start screen. */
   close(): void
 }
@@ -158,6 +160,12 @@ export function useSession(api: ApiClient): { session: Session; commands: Sessio
           type: 'transcript_settled',
           transcript: await api.transcribe(id),
         })),
+      trim: (start, end) =>
+        run({ type: 'trim_started' }, async (id) => {
+          const history = await api.trim(id, start, end)
+          const [timeline, review] = await Promise.all([api.getState(id), reviewOf(id)])
+          return { type: 'trim_settled', start, end, sync: { history, timeline, ...review } }
+        }),
       review: (itemId, action) =>
         run({ type: 'review_started' }, async (id) => {
           // The reply is the fresh queue: only the timeline and the history are left to read.

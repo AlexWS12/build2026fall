@@ -9,6 +9,7 @@
     GET  /api/projects/{id}/state           the timeline state
     GET  /api/projects/{id}/history         the requests in the log; what undo and redo would do
     POST /api/projects/{id}/undo, /redo     through the toolbox, like any other edit
+    POST /api/projects/{id}/trim            keep only a range (the timeline's trim handles)
     GET  /api/projects/{id}/tracks          where the targets are, for the preview's overlay
     GET  /api/projects/{id}/review          the mask stretches to check (F-41)
     POST /api/projects/{id}/review/{item}   confirm one of them, or cut it out
@@ -699,6 +700,48 @@ def _history(project: Project) -> HistoryReply:
         can_undo=history.can_undo is not None,
         can_redo=history.can_redo is not None,
     )
+
+
+class TrimRequest(Model):
+    start: float = Field(ge=0, description="Source seconds where the kept part starts.")
+    end: float = Field(gt=0, description="Source seconds where it ends.")
+
+
+@router.post("/{project_id}/trim")
+def trim(project_id: str, body: TrimRequest, storage: StorageDep) -> HistoryReply:
+    """Keep only ``start``..``end`` of the source (the timeline's trim handles), as a hand edit:
+    ``keep_range`` through the toolbox, as the user, with its own request id, so undo takes it
+    back. 400 when the toolbox refuses (a range past the end, the whole video, or one earlier
+    cuts already removed)."""
+    if body.end <= body.start:
+        raise HTTPException(status_code=400, detail="the trim must end after it starts")
+    project = _open(storage, project_id)
+    with _one_request_at_a_time(project.id):
+        index = _frame_index(storage, project)
+        call = ToolCall(
+            step_id="s1",
+            tool="keep_range",
+            args={"time_range": {"start": body.start, "end": body.end}},
+        )
+        try:
+            done = execute_plan(
+                Plan(calls=(call,)),
+                project,
+                request_id=new_id("r"),
+                source="user",
+                duration=index.end,
+                registry=UI_TOOLS,
+            )
+        except (OSError, ValueError) as e:  # an unreadable timeline, or a write that failed
+            logger.exception("trimming project %s failed", project.id)
+            raise HTTPException(
+                status_code=500,
+                detail="couldn't trim: the project's files can't be read or written.",
+            ) from e
+        if not done.ok:
+            reason = (done.error or "the trim was refused").removeprefix("keep_range: ")
+            raise HTTPException(status_code=400, detail=reason)
+        return _history(project)
 
 
 def _undo_or_redo(storage: Storage, project_id: str, tool: Literal["undo", "redo"]) -> HistoryReply:
