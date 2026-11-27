@@ -132,7 +132,7 @@ These hold whatever stack we pick.
 |---|---|---|
 | Backend | Python 3.12, FastAPI | Worked well at Knight Hacks |
 | Video I/O and render | ffmpeg, OpenCV, PyAV | PyAV or OpenCV for the per-frame path (live) |
-| Agent / planner LLM | Templates first; Gemma 4 E4B on local Ollama for the rest; Gemini free tier opt-in (D-023, Proposed) | Cloud allowed (hybrid); typed tool schemas, JSON plan |
+| Agent / planner LLM | Templates first; Gemma 4 E4B on local Ollama for the rest; Gemini free tier opt-in (D-023) | Cloud allowed (hybrid); typed tool schemas, JSON plan |
 | Detection | YOLOE / YOLO-World, Grounding DINO, EgoBlur (faces, plates) | Open-vocabulary detection for "find X" |
 | Segmentation and tracking | SAM 2 / SAM 3, BoT-SORT / ByteTrack | Pixel-accurate masks, better tracking |
 | Visual questions | Qwen-VL family, other VLMs | "Is this the person in red?" |

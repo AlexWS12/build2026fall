@@ -80,7 +80,7 @@ status: ready for review
 ## Decisions made
 - **D-022 (Proposed, in use)** in `docs/ARCHITECTURE.md`: the default above. Eduardo chose it for now from these scores. Revisit when the team weighs in, or when a GPU bake-off of D-015's RF-DETR + EgoBlur has numbers.
 - **"Blur people" stays in the demo** with its limit stated (up to 21% of labelled people exposed). Mention it as a known blocker when showing it.
-- **D-023 (Proposed, rewritten 2026-11-27):** with no budget, the planner is templates first, then Gemma 4 E4B on local Ollama, with Gemini 3.5 Flash-Lite's free tier as an opt-in setting. Eduardo chose it from R-1b's benchmark (#45); Paul still has to confirm. Claude Opus 5.5 was also run once through R-1b's benchmark for reference (91% correct, 15 unsafe, $0.0033 per request, macOS arm64), but it's paid, so it isn't an option. The raw results and the adapter patch it needed are in `outputs/r1-planner/` (gitignored), not in this PR.
+- **D-023 (Accepted 2026-11-27, Eduardo and Paul):** with no budget, the planner is templates first, then Gemma 4 E4B on local Ollama, with Gemini 3.5 Flash-Lite's free tier as an opt-in setting. Eduardo chose it from R-1b's benchmark (#45), and Paul agreed. Claude Opus 5.5 was also run once through R-1b's benchmark for reference (91% correct, 15 unsafe, $0.0033 per request, macOS arm64), but it's paid, so it isn't an option. The raw results and the adapter patch it needed are in `outputs/r1-planner/` (gitignored), not in this PR.
 
 ## Next steps
 - **Team review of D-022.** Is about 0.3 s/frame acceptable on laptops? Or should tier 0 default to faces only (`VIBE_VISION_DETECTORS="yunet:weights=@yunet,grow=2.6"`), which misses hidden faces?
