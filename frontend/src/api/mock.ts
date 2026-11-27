@@ -120,6 +120,10 @@ export function createMockClient({ delayMs = 300 }: { delayMs?: number } = {}): 
       await wait(delayMs)
       throw unavailable('Removing a mask')
     },
+    async trim() {
+      await wait(delayMs)
+      throw unavailable('Trimming')
+    },
     async undo() {
       await wait(delayMs)
       throw unavailable('Undo')

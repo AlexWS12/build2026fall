@@ -803,6 +803,59 @@
         }
       }
     },
+    "/api/projects/{project_id}/trim": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Trim",
+        "description": "Keep only ``start``..``end`` of the source (the timeline's trim handles), as a hand edit:\n``keep_range`` through the toolbox, as the user, with its own request id, so undo takes it\nback. 400 when the toolbox refuses (a range past the end, the whole video, or one earlier\ncuts already removed).",
+        "operationId": "trim_api_projects__project_id__trim_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrimRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryReply"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "Health",
@@ -1933,6 +1986,29 @@
           "segments"
         ],
         "title": "Transcript"
+      },
+      "TrimRequest": {
+        "properties": {
+          "start": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Start",
+            "description": "Source seconds where the kept part starts."
+          },
+          "end": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "End",
+            "description": "Source seconds where it ends."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "TrimRequest"
       },
       "ValidationError": {
         "properties": {

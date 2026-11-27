@@ -11,6 +11,7 @@ No HTTP here: the API calls ``execute_request``, tests call ``execute_plan`` wit
 
 import logging
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Protocol
 
 from pydantic import Field, ValidationError
@@ -18,7 +19,7 @@ from pydantic import Field, ValidationError
 from vibe.agent.plan import Plan, as_ref
 from vibe.agent.planner import PlanError
 from vibe.agent.validate import validate_plan
-from vibe.contract import Op, OpLog, Track
+from vibe.contract import Op, OpLog, TimelineState, Track
 from vibe.contract.common import Model, Source
 from vibe.storage import Project, Storage
 from vibe.toolbox import TOOLS, Describer, Returns, ToolContext, ToolError, ToolSpec, call_tool
@@ -88,6 +89,57 @@ def _ref_value(returns: Returns, result: Model) -> Any:
     raise PlanError(f"a step that returns {returns!r} can't be the target of a $ref")
 
 
+SCREEN_TIME_TOOLS = frozenset({"resolve_time"})
+"""Tools whose time ranges are in on-screen time when a chat request runs ("the first 5
+seconds" of what the user sees, cuts already taken out). ``find_speech`` isn't one: its words
+come from the transcript, in source time."""
+
+RANGE_ARGS = frozenset({"time_range"})
+"""Arguments that hold a time range."""
+
+
+@dataclass(frozen=True)
+class ScreenTime:
+    """On-screen (output) time for a chat request: the timeline as it was before the request.
+
+    The contract keeps every op in source time, so a cut never shifts other edits. What a user
+    types is what they see, with earlier cuts gone (docs/ARCHITECTURE.md, "The contract"): "mute
+    the first 5 seconds" after trimming to 0:03-0:09 means source 0:03-0:08."""
+
+    state: TimelineState
+    source_end: float | None
+    """Seconds of source video, or None when it isn't known."""
+
+    @property
+    def output_end(self) -> float | None:
+        return None if self.source_end is None else self.state.source_to_output(self.source_end)
+
+    def to_source(self, time_range: Mapping[str, Any]) -> dict[str, Any]:
+        """``time_range`` from on-screen to source time. An end at or past the end of the output
+        means "until the end". A start past it stays past the end of the source by as much, so
+        the tool refuses it as it would any time past the end."""
+        start, end = time_range["start"], time_range.get("end")
+        return {"start": self._start(start), "end": None if end is None else self._end(end)}
+
+    def _past_end(self, t: float) -> float | None:
+        """How far ``t`` is past the end of the output, or None if it's before the end."""
+        out = self.output_end
+        return None if out is None or t < out - 1e-6 else t - out
+
+    def _start(self, t: float) -> float:
+        past = self._past_end(t)
+        if past is not None and self.source_end is not None:
+            return self.source_end + past
+        return self.state.output_to_source(max(0.0, t))
+
+    def _end(self, t: float) -> float | None:
+        return None if self._past_end(t) is not None else self.state.output_to_source(max(0.0, t))
+
+
+def _is_range(value: object) -> bool:
+    return isinstance(value, Mapping) and "start" in value
+
+
 def execute_plan(
     plan: Plan,
     timeline: Timeline | OpLog,
@@ -99,6 +151,7 @@ def execute_plan(
     transcript: "Transcript | None" = None,
     describer: Describer | None = None,
     registry: Mapping[str, ToolSpec] = TOOLS,
+    screen_time: bool | None = None,
 ) -> Execution:
     """Run ``plan`` and write its ops to ``timeline``, all of them or none.
 
@@ -106,6 +159,10 @@ def execute_plan(
     tools know about the video (``ToolContext``): ``tracks=None`` means it was never analysed,
     so a step that looks for targets fails and nothing gets masked by guesswork. ``describer``
     looks at the video for ``find_by_description`` (F-13); without one that step fails too.
+
+    ``screen_time`` (default: for the agent's requests, not for hand edits): the plan's time
+    ranges are what the user sees, earlier cuts taken out. They're turned into source time
+    before a tool writes anything (``ScreenTime``); the step reports keep the user's times.
 
     Raises ``PlanError`` for a plan the registry rejects (the planner validates before this, so
     that's a bug), and whatever the timeline raises when it can't be read or written.
@@ -125,6 +182,12 @@ def execute_plan(
         transcript=transcript,
         describer=describer,
     )
+    screen = (
+        ScreenTime(scratch.state(), duration)
+        if (source == "agent" if screen_time is None else screen_time)
+        else None
+    )
+    on_screen_steps: set[str] = set()
     steps: list[StepReport] = []
     values: dict[str, Any] = {}
     for call in plan.calls:
@@ -132,8 +195,22 @@ def execute_plan(
             name: values[target] if (target := as_ref(value)) is not None else value
             for name, value in call.args.items()
         }
+        tool_args, tool_ctx = args, ctx
+        if screen is not None:
+            # Ranges the user (or a time phrase) gave go to the tool in source time.
+            tool_args = {
+                name: screen.to_source(args[name])
+                if name in RANGE_ARGS
+                and _is_range(args[name])
+                and ((target := as_ref(raw)) is None or target in on_screen_steps)
+                else args[name]
+                for name, raw in call.args.items()
+            }
+            if call.tool in SCREEN_TIME_TOOLS:
+                tool_ctx = replace(ctx, duration=screen.output_end)
+                on_screen_steps.add(call.step_id)
         try:
-            result = call_tool(call.tool, args, ctx, registry)
+            result = call_tool(call.tool, tool_args, tool_ctx, registry)
         except ToolError as exc:
             steps.append(StepReport(step_id=call.step_id, tool=call.tool, args=args, ok=False))
             return Execution(

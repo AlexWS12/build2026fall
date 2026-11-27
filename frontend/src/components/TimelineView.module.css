@@ -57,6 +57,19 @@
   pointer-events: none;
 }
 
+/* The ruler and the lanes are one scrub area: press anywhere and drag to move the playhead. */
+.scrub {
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+.body.scrub:focus-visible {
+  outline: 2px solid var(--lane-mask);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+
 .playhead {
   position: absolute;
   top: 0;
@@ -66,6 +79,18 @@
   border-radius: 1px;
   background: var(--text);
   box-shadow: 0 0 8px rgb(243 240 248 / 0.6);
+}
+
+/* The grip at the top: shows the playhead can be dragged. */
+.playhead::before {
+  position: absolute;
+  top: -7px;
+  left: -5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text);
+  content: '';
 }
 
 .lanes {
@@ -129,6 +154,113 @@
 
 .filter {
   background: var(--lane-filter);
+}
+
+/* --- Trim handles: two range inputs over one track; outside the kept part is shaded --- */
+.trimLane {
+  flex-wrap: wrap;
+  gap: 6px 0;
+  margin-bottom: 8px;
+}
+
+.trimTrack {
+  position: relative;
+  flex: 1;
+  height: 22px;
+  border-radius: 5px;
+  background: var(--sunken);
+}
+
+/* Trimmed away already: hatched like the Cuts lane. */
+.trimGone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(135deg, var(--lane-cut) 0 5px, #b9504a 5px 10px);
+  opacity: 0.85;
+}
+
+.trimNote {
+  margin-right: auto;
+  align-self: center;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.trimShade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(135deg, rgb(0 0 0 / 0.35) 0 5px, transparent 5px 10px);
+}
+
+.trimKept {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border: 2px solid var(--lane-mask);
+  border-radius: 5px;
+}
+
+/* Only the thumbs take the pointer, so both handles can be grabbed where they overlap the track. */
+.trimHandle {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: none;
+  pointer-events: none;
+  appearance: none;
+}
+
+.trimHandle::-webkit-slider-thumb {
+  width: 10px;
+  height: 26px;
+  border-radius: 3px;
+  background: var(--lane-mask);
+  box-shadow: 0 0 0 2px var(--surface);
+  cursor: ew-resize;
+  pointer-events: auto;
+  appearance: none;
+}
+
+.trimHandle::-moz-range-thumb {
+  width: 10px;
+  height: 26px;
+  border: none;
+  border-radius: 3px;
+  background: var(--lane-mask);
+  cursor: ew-resize;
+  pointer-events: auto;
+}
+
+.trimHandle:disabled::-webkit-slider-thumb {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.trimActions {
+  display: flex;
+  flex: 1 0 100%;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.trimButton,
+.trimReset {
+  padding: 4px 10px;
+  border: 1px solid var(--border, rgb(255 255 255 / 0.15));
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.trimButton:disabled {
+  color: var(--faint);
+  cursor: default;
 }
 
 .rules {

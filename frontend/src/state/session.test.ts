@@ -407,3 +407,24 @@ describe('removing a mask by hand (F-42)', () => {
     expect(canEditByHand(settled)).toBe(true)
   })
 })
+
+describe('trim (the timeline handles)', () => {
+  test('trimming is an activity, and its end says what was kept', () => {
+    const done = play(
+      [
+        { type: 'trim_started' },
+        { type: 'trim_settled', start: 2, end: 8.5, sync: afterMute },
+      ],
+      opened(),
+    )
+    const p = project(done)
+    expect(p.activity.kind).toBe('idle')
+    expect(p.chat.at(-1)).toMatchObject({ kind: 'note', text: 'Trimmed to 0:02–0:08.5.' })
+    expect(p.timeline).toEqual(afterMute.timeline)
+  })
+
+  test('a trim waits while something else runs', () => {
+    const busy = play([{ type: 'analysis_started' }], opened())
+    expect(transition(busy, { type: 'trim_started' })).toBe(busy)
+  })
+})
