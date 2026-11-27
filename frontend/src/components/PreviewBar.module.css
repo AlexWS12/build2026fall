@@ -1,0 +1,54 @@
+.bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px dashed var(--lane-cut);
+  border-radius: 12px;
+  background: rgb(240 118 110 / 0.07);
+}
+
+.summary {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.numbers {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.actions button {
+  padding: 6px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  font: inherit;
+  cursor: pointer;
+}
+
+.actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.apply {
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
+  color: var(--on-accent);
+}
+
+.discard {
+  background: transparent;
+  color: var(--text);
+}
+
+.actions button:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}

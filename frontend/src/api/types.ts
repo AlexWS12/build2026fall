@@ -31,6 +31,9 @@ export type ExportReply = Required<Schemas['ExportReply']>
 /** The video's transcript with word timestamps (`POST /api/projects/{id}/transcript`, F-31). */
 export type Transcript = Schemas['Transcript']
 
+/** What a proposed edit does to the length (F-44). */
+export type PreviewSummary = Schemas['PreviewSummary']
+
 /** Normalized `[x1, y1, x2, y2]`, each 0..1. */
 export type Box = [number, number, number, number]
 
@@ -106,3 +109,10 @@ export interface TimelineState {
   audio_filters: AudioFilterSpan[]
   rules: Rule[]
 }
+
+/**
+ * A cut or keep waiting to be accepted or rejected (`GET /api/projects/{id}/preview`, F-44).
+ * `state` is the timeline as it would be, which the player previews; `problem` is set when the
+ * timeline moved on and the edit can only be discarded.
+ */
+export type PreviewReply = Omit<Schemas['PreviewReply'], 'state'> & { state: TimelineState }

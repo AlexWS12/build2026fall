@@ -14,6 +14,7 @@ import { Toolbar } from './components/Toolbar'
 import { TranscriptPanel } from './components/TranscriptPanel'
 import {
   busyLabel,
+  canDecide,
   canExport,
   canOpen,
   canRedo,
@@ -83,6 +84,9 @@ function App({ api = defaultClient }: { api?: ApiClient }) {
   const duration = video.duration || measuredDuration
   const activity = session.status === 'open' ? busyLabel(session) : null
   const targets = project.tracks.length
+  // A waiting cut or keep is shown as if applied, in the player and on the timeline (F-44).
+  const shown = project.pending?.state ?? project.timeline
+  const deciding = project.activity.kind === 'accepting' || project.activity.kind === 'rejecting'
 
   return (
     <div className={styles.app}>
@@ -145,7 +149,7 @@ function App({ api = defaultClient }: { api?: ApiClient }) {
           src={videoUrl || null}
           aspect={video.height > 0 && video.duration > 0 ? video.width / video.height : null}
           duration={duration}
-          state={project.timeline}
+          state={shown}
           tracks={project.tracks}
           className={styles.player}
           handle={player}
@@ -157,7 +161,11 @@ function App({ api = defaultClient }: { api?: ApiClient }) {
             className={styles.chat}
             entries={project.chat}
             disabled={false}
-            busy={canSend(session) ? null : (activity ?? opening)}
+            busy={canSend(session) || canDecide(session) ? null : (activity ?? opening)}
+            pending={project.pending}
+            deciding={deciding}
+            onAccept={commands.accept}
+            onReject={commands.reject}
             undone={undone}
             focusedRequest={focusedRequest}
             onSend={commands.send}
@@ -181,7 +189,7 @@ function App({ api = defaultClient }: { api?: ApiClient }) {
           />
         </div>
         <TimelineView
-          state={project.timeline}
+          state={shown}
           duration={duration ?? null}
           tracks={project.tracks}
           time={time}

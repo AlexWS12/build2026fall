@@ -52,8 +52,9 @@ class StepReport(Model):
 
 
 class Execution(Model):
-    """What running a plan did. ``ok`` means every step ran and ``ops`` are in the timeline;
-    otherwise nothing was written, and ``failed_step`` and ``error`` say why."""
+    """What running a plan did. ``ok`` means every step ran and ``ops`` are in the timeline
+    (or, for a dry run, would be); otherwise nothing was written, and ``failed_step`` and
+    ``error`` say why."""
 
     request_id: str
     ok: bool
@@ -99,8 +100,12 @@ def execute_plan(
     transcript: "Transcript | None" = None,
     describer: Describer | None = None,
     registry: Mapping[str, ToolSpec] = TOOLS,
+    commit: bool = True,
 ) -> Execution:
     """Run ``plan`` and write its ops to ``timeline``, all of them or none.
+
+    With ``commit=False`` it only runs the dry run: the result says what the ops would be
+    (``ops``) and nothing is written, so a person can look first (F-44).
 
     Every op carries ``request_id`` and ``source``. ``duration`` and ``tracks`` are what the
     tools know about the video (``ToolContext``): ``tracks=None`` means it was never analysed,
@@ -157,7 +162,7 @@ def execute_plan(
         )
 
     new_ops = scratch.ops[before:]
-    if new_ops:  # one batch: the request's ops land together, right after each other
+    if new_ops and commit:  # one batch: the request's ops land together, right after each other
         timeline.append_many(new_ops)
     return Execution(request_id=request_id, ok=True, steps=tuple(steps), ops=new_ops)
 
@@ -168,6 +173,7 @@ def execute_request(
     plan: Plan,
     request_id: str,
     source: Source = "agent",
+    commit: bool = True,
 ) -> Execution:
     """Run a chat request's plan on a project, with what's known about its video.
 
@@ -201,6 +207,7 @@ def execute_request(
         project,
         request_id=request_id,
         source=source,
+        commit=commit,
         duration=duration,
         tracks=tracks,
         transcript=transcript,

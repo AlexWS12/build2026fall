@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import type { StepReport } from '../api/types'
+import type { PreviewReply, StepReport } from '../api/types'
 import type { ChatEntry } from '../state/session'
 import { Panel } from './Panel'
+import { PreviewBar } from './PreviewBar'
 import styles from './ChatPanel.module.css'
 
 const SUGGESTIONS = ['blur faces', 'cut the first 5 seconds', 'mute the first 5 seconds']
@@ -12,6 +13,7 @@ const STATUS_NOTE: Record<AgentStatus, string | null> = {
   applied: null,
   clarify: 'A question. Nothing was changed.',
   not_applied: 'Nothing was changed.',
+  preview: null, // the preview bar says it
 }
 
 const icon = (children: ReactNode) => (
@@ -27,6 +29,12 @@ const STATUS_ICON: Record<AgentStatus | 'error', ReactNode> = {
       <circle cx="12" cy="12" r="9" />
       <path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7" />
       <path d="M12 17h.01" />
+    </>,
+  ),
+  preview: icon(
+    <>
+      <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" />
+      <circle cx="12" cy="12" r="2.6" />
     </>,
   ),
   not_applied: icon(
@@ -52,8 +60,12 @@ export function ChatPanel({
   undone,
   focusedRequest,
   className,
+  pending = null,
+  deciding = false,
   onSend,
   onFocusRequest,
+  onAccept,
+  onReject,
 }: {
   entries: ChatEntry[]
   /** True until there's a project to edit. */
@@ -64,8 +76,14 @@ export function ChatPanel({
   undone?: ReadonlySet<string>
   focusedRequest?: string | null
   className?: string
+  /** A cut or keep waiting for a go-ahead: requests wait until it's applied or discarded. */
+  pending?: PreviewReply | null
+  /** True while applying or discarding it is in flight. */
+  deciding?: boolean
   onSend: (text: string) => void
   onFocusRequest?: (requestId: string | null) => void
+  onAccept?: () => void
+  onReject?: () => void
 }) {
   const [draft, setDraft] = useState('')
   const input = useRef<HTMLInputElement>(null)
@@ -104,7 +122,15 @@ export function ChatPanel({
           {busy && <li className={`${styles.agent} ${styles.pending}`}>{busy}</li>}
           <li ref={end} aria-hidden="true" />
         </ol>
-        {!disabled && (
+        {pending && (
+          <PreviewBar
+            pending={pending}
+            busy={deciding}
+            onAccept={() => onAccept?.()}
+            onReject={() => onReject?.()}
+          />
+        )}
+        {!disabled && !pending && (
           <div className={styles.suggestions} aria-label="Examples">
             {SUGGESTIONS.map((text) => (
               <button
@@ -133,12 +159,18 @@ export function ChatPanel({
           <input
             ref={input}
             aria-label="Request"
-            placeholder={disabled ? 'Upload a video first' : 'Tell the editor what to change'}
+            placeholder={
+              disabled
+                ? 'Upload a video first'
+                : pending
+                  ? 'Apply or discard the preview first'
+                  : 'Tell the editor what to change'
+            }
             value={draft}
-            disabled={disabled}
+            disabled={disabled || !!pending}
             onChange={(event) => setDraft(event.target.value)}
           />
-          <button type="submit" aria-label="Send" disabled={disabled || !!busy || !draft.trim()}>
+          <button type="submit" aria-label="Send" disabled={disabled || !!pending || !!busy || !draft.trim()}>
             <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 19V5" />
               <path d="m5 12 7-7 7 7" />

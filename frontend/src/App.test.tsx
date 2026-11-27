@@ -470,3 +470,144 @@ describe('App wired to a backend', () => {
     })
   })
 })
+
+describe('preview before apply (F-44)', () => {
+  const empty: TimelineState = {
+    schema_version: 1,
+    masks: {},
+    reviewed: {},
+    cuts: [],
+    mutes: [],
+    audio_filters: [],
+    rules: [],
+  }
+  const cut: TimelineState = { ...empty, cuts: [{ start: 2, end: 4 }] }
+  const summary = { duration_before: 10, duration_after: 8, removed: [{ start: 2, end: 4 }] }
+
+  /** A backend that proposes a cut and keeps it waiting until accepted or rejected. */
+  function proposing(overrides: Partial<ApiClient> = {}) {
+    let waiting = false
+    let applied = false
+    const pending = (problem: string | null = null) => ({
+      request_id: 'r_cut',
+      text: 'cut 0:02 to 0:04',
+      reply: 'Cut 0:02–0:04.',
+      steps: [],
+      state: cut,
+      preview: summary,
+      problem,
+    })
+    const api: ApiClient = {
+      ...mock(),
+      health: () => Promise.resolve({ status: 'ok', backend: 'stub' }),
+      sendRequest: () => {
+        waiting = true
+        return Promise.resolve({
+          request_id: 'r_cut',
+          status: 'preview' as const,
+          reply: 'Cut 0:02–0:04. Nothing is changed until you apply it.',
+          steps: [],
+          preview: summary,
+        })
+      },
+      getPreview: () => Promise.resolve(waiting ? pending() : null),
+      acceptPreview: () => {
+        waiting = false
+        applied = true
+        return Promise.resolve({
+          request_id: 'r_cut',
+          status: 'applied' as const,
+          reply: 'Cut 0:02–0:04.',
+          steps: [],
+        })
+      },
+      rejectPreview: () => {
+        waiting = false
+        return Promise.resolve({
+          request_id: 'r_cut',
+          status: 'not_applied' as const,
+          reply: 'Discarded the preview. Nothing was changed.',
+          steps: [],
+        })
+      },
+      getState: () => Promise.resolve(applied ? cut : empty),
+      ...overrides,
+    }
+    return api
+  }
+
+  async function proposeCut() {
+    upload()
+    await screen.findByText('street')
+    fireEvent.change(screen.getByLabelText('Request'), { target: { value: 'cut 0:02 to 0:04' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await screen.findByRole('group', { name: 'Preview of the proposed edit' })
+  }
+
+  test('a proposed cut is previewed, not applied, and the request box waits', async () => {
+    render(<App api={proposing()} />)
+    await proposeCut()
+
+    expect(screen.getByText(/nothing is applied yet/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Apply' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeEnabled()
+    expect(screen.getByLabelText('Request')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled()
+  })
+
+  test('Apply applies it and gives the request box back', async () => {
+    render(<App api={proposing()} />)
+    await proposeCut()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
+    await waitFor(() =>
+      expect(screen.queryByRole('group', { name: 'Preview of the proposed edit' })).toBeNull(),
+    )
+    expect(screen.getAllByText('Cut 0:02–0:04.')).toHaveLength(1) // one chat line per request
+    expect(screen.getByLabelText('Request')).toBeEnabled()
+  })
+
+  test('Discard throws it away and says nothing was changed', async () => {
+    render(<App api={proposing()} />)
+    await proposeCut()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+
+    expect(await screen.findByText(/Discarded the preview/)).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Preview of the proposed edit' })).toBeNull()
+    expect(screen.getByLabelText('Request')).toBeEnabled()
+  })
+
+  test('a failed Apply says so, and the proposal is still there to settle', async () => {
+    const api = proposing({ acceptPreview: () => Promise.reject(new Error('disk full')) })
+    render(<App api={api} />)
+    await proposeCut()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
+    expect(await screen.findByText(/Applying the preview failed: disk full/)).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Preview of the proposed edit' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeEnabled()
+  })
+
+  test('a proposal the timeline no longer allows can only be discarded', async () => {
+    const api = proposing()
+    const stale = {
+      request_id: 'r_cut',
+      text: 'cut 0:02 to 0:04',
+      reply: 'x',
+      steps: [],
+      state: empty,
+      preview: { duration_before: 10, duration_after: 10, removed: [] },
+      problem: 'I couldn’t do that: it changed.',
+    }
+    render(<App api={{ ...api, getPreview: () => Promise.resolve(stale) }} />)
+    upload()
+    await screen.findByRole('group', { name: 'Preview of the proposed edit' })
+
+    expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeEnabled()
+    expect(screen.getByRole('alert')).toHaveTextContent('it changed')
+  })
+})

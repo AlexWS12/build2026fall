@@ -209,8 +209,13 @@ def test_errors_dont_reveal_server_paths(
 
 
 def ask(client: TestClient, project_id: str, text: str) -> dict:
+    """Send a request. A cut or keep is only proposed (F-44), so this accepts the proposal and
+    returns the reply to that; ``test_api_preview`` covers the two steps on their own."""
     response = client.post(f"/api/projects/{project_id}/requests", json={"text": text})
     assert response.status_code == 200, response.text
+    if response.json()["status"] == "preview":
+        response = client.post(f"/api/projects/{project_id}/preview/accept")
+        assert response.status_code == 200, response.text
     return response.json()
 
 
@@ -609,7 +614,10 @@ def test_the_chat_persists_with_every_kind_of_reply(
     assert [m["text"] for m in messages] == texts
     assert [m["status"] for m in messages] == ["clarify", "applied", "not_applied"]
     for message, reply in zip(messages, replies, strict=True):
-        assert {k: message[k] for k in reply} == reply
+        # `preview` is only on the live reply; a reload gets it from GET /preview instead.
+        assert {k: message[k] for k in reply if k != "preview"} == {
+            k: v for k, v in reply.items() if k != "preview"
+        }
         assert message["at"].startswith("20")
     assert [r.request_id for r in reopened.open_project(project_id).chat()] == [
         r["request_id"] for r in replies

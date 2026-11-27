@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ApiClient } from '../api'
 import { ApiError } from '../api/client'
-import type { ReviewReply } from '../api/types'
+import type { PreviewReply, ReviewReply } from '../api/types'
 import {
   initialSession,
   transition,
+  type PendingData,
   type ReviewData,
   type Session,
   type SessionEvent,
@@ -25,6 +26,10 @@ export interface SessionCommands {
   analyse(): Promise<void>
   exportVideo(): Promise<void>
   transcribe(): Promise<void>
+  /** Apply the cut or keep that is waiting for a go-ahead. */
+  accept(): Promise<void>
+  /** Discard it; nothing is changed. */
+  reject(): Promise<void>
   /** Confirm a stretch of the review queue as it is, or cut it out. */
   review(itemId: string, action: 'confirm' | 'cut'): Promise<void>
   /** Leave the open project and go back to the start screen. */
@@ -59,23 +64,31 @@ export function useSession(api: ApiClient): { session: Session; commands: Sessio
         (error: unknown) => ({ review: null, reviewError: errorText(error) }),
       )
 
+    /** The edit waiting for a go-ahead. Unlike the review queue it is never guessed: when it
+     * can't be read the action fails and says so, rather than showing a timeline without it. */
+    const pendingOf = async (id: string): Promise<PendingData> => ({
+      pending: (await api.getPreview(id)) satisfies PreviewReply | null,
+    })
+
     const sync = async (id: string): Promise<Sync> => {
-      const [timeline, history, review] = await Promise.all([
+      const [timeline, history, review, pending] = await Promise.all([
         api.getState(id),
         api.getHistory(id),
         reviewOf(id),
+        pendingOf(id),
       ])
-      return { timeline, history, ...review }
+      return { timeline, history, ...review, ...pending }
     }
 
     const snapshot = async (id: string, videoUrl: () => string): Promise<Snapshot> => {
-      const [detail, timeline, history, messages, tracks, review] = await Promise.all([
+      const [detail, timeline, history, messages, tracks, review, pending] = await Promise.all([
         api.getProject(id),
         api.getState(id),
         api.getHistory(id),
         api.getMessages(id),
         api.getTracks(id),
         reviewOf(id),
+        pendingOf(id),
       ])
       return {
         detail,
@@ -85,6 +98,7 @@ export function useSession(api: ApiClient): { session: Session; commands: Sessio
         tracks: tracks.tracks,
         analysed: tracks.analysed,
         ...review,
+        ...pending,
         videoUrl: videoUrl(),
       }
     }
@@ -131,13 +145,13 @@ export function useSession(api: ApiClient): { session: Session; commands: Sessio
         run({ type: 'undo_started' }, async (id) => {
           const history = await api.undo(id)
           const [timeline, review] = await Promise.all([api.getState(id), reviewOf(id)])
-          return { type: 'history_settled', sync: { history, timeline, ...review } }
+          return { type: 'history_settled', sync: { history, timeline, ...review, pending: null } }
         }),
       redo: () =>
         run({ type: 'redo_started' }, async (id) => {
           const history = await api.redo(id)
           const [timeline, review] = await Promise.all([api.getState(id), reviewOf(id)])
-          return { type: 'history_settled', sync: { history, timeline, ...review } }
+          return { type: 'history_settled', sync: { history, timeline, ...review, pending: null } }
         }),
       analyse: () =>
         run({ type: 'analysis_started' }, async (id) => {
@@ -172,9 +186,19 @@ export function useSession(api: ApiClient): { session: Session; commands: Sessio
           const [timeline, history] = await Promise.all([api.getState(id), api.getHistory(id)])
           return {
             type: 'review_settled',
-            sync: { timeline, history, review, reviewError: null },
+            sync: { timeline, history, review, reviewError: null, pending: null },
             gone: false,
           }
+        }),
+      accept: () =>
+        run({ type: 'accept_started' }, async (id) => {
+          const reply = await api.acceptPreview(id)
+          return { type: 'preview_settled', reply, sync: await sync(id) }
+        }),
+      reject: () =>
+        run({ type: 'reject_started' }, async (id) => {
+          const reply = await api.rejectPreview(id)
+          return { type: 'preview_settled', reply, sync: await sync(id) }
         }),
       close() {
         if (dispatch({ type: 'closed' })) window.history.replaceState(null, '', ' ')

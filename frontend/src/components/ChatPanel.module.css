@@ -69,6 +69,15 @@
   color: var(--warn);
 }
 
+.preview {
+  border-style: dashed;
+  border-color: var(--lane-cut);
+}
+
+.preview .icon {
+  color: var(--lane-cut);
+}
+
 .error {
   border-color: rgb(240 118 110 / 0.5);
   background: rgb(240 118 110 / 0.08);

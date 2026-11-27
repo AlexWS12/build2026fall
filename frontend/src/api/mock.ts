@@ -92,6 +92,18 @@ export function createMockClient({ delayMs = 300 }: { delayMs?: number } = {}): 
         steps: [],
       }
     },
+    async getPreview() {
+      await wait(delayMs)
+      return null // the mock never proposes an edit
+    },
+    async acceptPreview() {
+      await wait(delayMs)
+      throw new ApiError(404, 'no preview is waiting')
+    },
+    async rejectPreview() {
+      await wait(delayMs)
+      throw new ApiError(404, 'no preview is waiting')
+    },
     async getState() {
       await wait(delayMs)
       return exampleState

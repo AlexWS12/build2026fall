@@ -32,6 +32,22 @@ test('forwards the review queue to whichever backend answered', async () => {
   expect(reviewItem).toHaveBeenCalledWith('p1', 'rv_1', 'cut')
 })
 
+test('forwards the waiting preview to whichever backend answered', async () => {
+  const getPreview = vi.fn(() => Promise.resolve(null))
+  const acceptPreview = vi.fn(() => Promise.resolve({ request_id: 'r_1', status: 'applied' as const, reply: 'ok', steps: [] }))
+  const rejectPreview = vi.fn(() => Promise.resolve({ request_id: 'r_1', status: 'not_applied' as const, reply: 'no', steps: [] }))
+  const client = createAutoClient(
+    { ...fake('ok'), getPreview, acceptPreview, rejectPreview },
+    () => fake('mock'),
+  )
+  expect(await client.getPreview('p1')).toBeNull()
+  await client.acceptPreview('p1')
+  await client.rejectPreview('p1')
+  expect(getPreview).toHaveBeenCalledWith('p1')
+  expect(acceptPreview).toHaveBeenCalledWith('p1')
+  expect(rejectPreview).toHaveBeenCalledWith('p1')
+})
+
 test('decides once, so one session never mixes the two', async () => {
   const health = vi.fn(() => Promise.reject(new Error('offline')))
   const client = createAutoClient(fake('ok', health), () => fake('mock'))

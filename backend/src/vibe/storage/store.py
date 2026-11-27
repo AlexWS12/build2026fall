@@ -70,11 +70,21 @@ class ChatRecord(Model):
 
     request_id: str = Field(description="The ops this request wrote, if any, carry this id.")
     text: str = Field(description="What the user asked.")
-    status: Literal["applied", "clarify", "not_applied"]
+    status: Literal["applied", "clarify", "not_applied", "preview"]
     reply: str
     steps: list[dict[str, Any]] = Field(
         default_factory=list, description="The tool calls that ran, as the plan executor reports."
     )
+    at: datetime
+
+
+class PendingPreview(Model):
+    """A request's plan that is waiting for a person to accept or reject it (F-44). The plan is
+    kept as plain JSON so storage doesn't depend on the agent package."""
+
+    request_id: str
+    text: str = Field(description="What the user asked.")
+    plan: dict[str, Any]
     at: datetime
 
 
@@ -125,6 +135,10 @@ class Project:
     @property
     def chat_path(self) -> Path:
         return self.dir / "chat.jsonl"
+
+    @property
+    def pending_path(self) -> Path:
+        return self.dir / "pending.json"
 
     @property
     def user_tracks_path(self) -> Path:
@@ -207,6 +221,25 @@ class Project:
             f.flush()
             os.fsync(f.fileno())
         return record
+
+    # --- A proposed edit waiting for a go-ahead (one at a time; not part of the timeline) -----
+
+    def pending(self) -> PendingPreview | None:
+        """The proposal waiting to be accepted, or None. A file that can't be read counts as
+        none, with a warning: nothing was applied, so the user can simply ask again."""
+        try:
+            return PendingPreview.model_validate_json(self.pending_path.read_bytes())
+        except FileNotFoundError:
+            return None
+        except (ValidationError, OSError) as e:
+            log.warning("%s: unreadable pending preview ignored: %s", self.pending_path, e)
+            return None
+
+    def set_pending(self, pending: PendingPreview) -> None:
+        _atomic_write(self.pending_path, pending.model_dump_json(indent=2) + "\n")
+
+    def clear_pending(self) -> None:
+        self.pending_path.unlink(missing_ok=True)
 
     # --- Tracks drawn or corrected by hand (edits, so they live with the project) ---------
 

@@ -22,6 +22,9 @@ export function createAutoClient(
     // Only used to reopen a stored project, which demo data never has.
     videoUrl: (id) => real.videoUrl(id),
     sendRequest: (id, text) => pick().then((c) => c.sendRequest(id, text)),
+    getPreview: (id) => pick().then((c) => c.getPreview(id)),
+    acceptPreview: (id) => pick().then((c) => c.acceptPreview(id)),
+    rejectPreview: (id) => pick().then((c) => c.rejectPreview(id)),
     getState: (id) => pick().then((c) => c.getState(id)),
     getHistory: (id) => pick().then((c) => c.getHistory(id)),
     getMessages: (id) => pick().then((c) => c.getMessages(id)),
