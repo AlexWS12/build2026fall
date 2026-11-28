@@ -17,9 +17,10 @@ from fastapi.testclient import TestClient
 
 from vibe.api import projects
 from vibe.api.app import app
-from vibe.contract import Track, Undo
+from vibe.contract import AddMask, Effect, Track, Undo
 from vibe.modules.transcribe import Segment, Transcript, TranscriptAnalysis, Word
 from vibe.modules.vision import save_tracks
+from vibe.modules.vision.cache import default_tracks_key
 from vibe.storage import Storage
 from vibe.toolbox import ToolContext, call_tool
 from vibe.video import extract_audio, probe
@@ -406,12 +407,16 @@ def test_blur_with_tracks_in_the_cache_is_applied(
     client: TestClient, storage: Storage, long_clip: Path
 ) -> None:
     project_id = upload(client, long_clip)["project_id"]
-    track_id = analysed(storage, project_id)
+    # A face on screen for the whole clip: "blur faces" follows each track (while_tracked).
+    kf = face().keyframes[0]
+    whole = face().model_copy(update={"keyframes": [kf, kf.model_copy(update={"t": 10})]})
+    sha = storage.open_project(project_id).info.video.sha256
+    track_id = save_tracks(storage, sha, "k-aaaa1111", [whole])[0].track_id
 
     reply = ask(client, project_id, "blur faces from 0:02 to 0:04")
 
     assert reply["status"] == "applied"
-    assert reply["reply"] == "Blurred 1 face (0:02–0:04)."
+    assert reply["reply"] == "Blurred 1 face, each while on screen (0:02–0:04)."
     (span,) = get(client, project_id, "state")["masks"][track_id]
     assert (span["start"], span["end"], span["effect"]["type"]) == (2, 4, "blur")
     assert span["request_id"] == reply["request_id"]
@@ -840,25 +845,101 @@ def test_analysis_replays_what_is_cached(
     assert response.json() == {"analysed": True, "tracks": 1}
 
 
-@pytest.mark.parametrize("backend", ["stub", "local", "remote"])
-def test_analysis_with_nothing_cached_is_503_not_an_empty_result(
+def _nothing_cached(storage: Storage, project_id: str) -> bool:
+    sha = storage.open_project(project_id).info.video.sha256
+    return not (storage.cache_dir / sha).exists()
+
+
+@pytest.mark.parametrize(
+    ("backend", "detail"),
+    [
+        # Stub only replays: say so, never "0 tracks".
+        ("stub", projects._NO_ANALYSIS),
+        # Local, but YuNet's weights aren't downloaded (and OpenCV may be missing): say how.
+        ("local", projects._NO_VISION),
+        # Remote, with no model server configured: the server log has the reason.
+        ("remote", projects._VISION_FAILED),
+    ],
+)
+def test_analysis_that_cant_run_is_503_not_an_empty_result(
     client: TestClient,
     storage: Storage,
     long_clip: Path,
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
     backend: str,
+    detail: str,
 ) -> None:
-    # No detector is connected to the API yet, whatever the backend: say so, never "0 tracks".
     monkeypatch.setenv("VIBE_BACKEND", backend)
+    # Faces only: building tv-frcnn-mobile would download its weights where PyTorch is installed.
+    monkeypatch.setenv("VIBE_VISION_DETECTORS", "yunet:weights=@yunet,grow=2.6")
+    monkeypatch.setenv("VIBE_MODELS_DIR", str(tmp_path / "no-models"))
+    monkeypatch.delenv("VIBE_REMOTE_URL", raising=False)
     project_id = upload(client, long_clip)["project_id"]
 
     response = client.post(f"/api/projects/{project_id}/analysis")
 
     assert response.status_code == 503
-    assert response.json() == {"detail": projects._NO_ANALYSIS}
+    assert response.json() == {"detail": detail}
     assert get(client, project_id, "tracks")["analysed"] is False
-    assert not (storage.cache_dir / storage.open_project(project_id).info.video.sha256).exists()
+    assert _nothing_cached(storage, project_id)
     assert projects._busy == set()
+
+
+def test_a_bad_detector_spec_is_503(
+    client: TestClient, storage: Storage, long_clip: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VIBE_BACKEND", "local")
+    monkeypatch.setenv("VIBE_VISION_DETECTORS", "nope")
+    project_id = upload(client, long_clip)["project_id"]
+
+    response = client.post(f"/api/projects/{project_id}/analysis")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": projects._VISION_FAILED}
+    assert _nothing_cached(storage, project_id)
+
+
+@pytest.fixture(scope="module")
+def red_square_clip(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Two seconds, 64x48 at 10 fps: a red square drifting right, which the stub detector finds."""
+    path = tmp_path_factory.mktemp("clips") / "red square.mp4"
+    with av.open(str(path), "w") as out:
+        stream = out.add_stream("mpeg4", rate=10)
+        stream.width, stream.height, stream.pix_fmt = 64, 48, "yuv420p"
+        stream.bit_rate = 2_000_000
+        for i in range(20):
+            image = np.zeros((48, 64, 3), dtype=np.uint8)
+            image[12:28, 4 + i : 20 + i] = (255, 0, 0)
+            out.mux(stream.encode(av.VideoFrame.from_ndarray(image, format="rgb24")))
+        out.mux(stream.encode())
+    return path
+
+
+def test_analysis_runs_the_detectors_locally_then_blur_is_applied(
+    client: TestClient,
+    storage: Storage,
+    red_square_clip: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VIBE_BACKEND", "local")
+    monkeypatch.setenv("VIBE_VISION_DETECTORS", "stub:color=red,label=face")
+    project_id = upload(client, red_square_clip)["project_id"]
+    assert ask(client, project_id, "blur faces")["status"] == "not_applied"
+
+    response = client.post(f"/api/projects/{project_id}/analysis")
+
+    assert response.status_code == 200
+    assert response.json() == {"analysed": True, "tracks": 1}
+    sha = storage.open_project(project_id).info.video.sha256
+    assert default_tracks_key(storage, sha) is not None  # a later CLI run won't make it ambiguous
+    assert projects._busy == set()
+    reply = ask(client, project_id, "blur faces")
+    assert reply["status"] == "applied", reply
+    assert get(client, project_id, "state")["masks"]
+    # The stub backend now replays it: no detector runs a second time.
+    monkeypatch.setenv("VIBE_BACKEND", "stub")
+    assert client.post(f"/api/projects/{project_id}/analysis").json() == response.json()
 
 
 def test_an_analysis_that_cant_be_trusted_is_503_everywhere_it_matters(
@@ -870,14 +951,14 @@ def test_an_analysis_that_cant_be_trusted_is_503_everywhere_it_matters(
         save_tracks(storage, sha, key, [face()])
     base = f"/api/projects/{project_id}"
 
-    responses = [
-        client.get(f"{base}/tracks"),
-        client.post(f"{base}/analysis"),
-        client.post(f"{base}/exports"),
-    ]
+    responses = [client.get(f"{base}/tracks"), client.post(f"{base}/exports")]
+    # Analyse doesn't guess between them: it runs the app's own detectors, which the stub
+    # backend can't, so it says that instead.
+    analyse = client.post(f"{base}/analysis")
 
-    assert [r.status_code for r in responses] == [503] * 3
+    assert [r.status_code for r in responses] == [503] * 2
     assert {r.json()["detail"] for r in responses} == {projects._BAD_ANALYSIS}
+    assert (analyse.status_code, analyse.json()["detail"]) == (503, projects._NO_ANALYSIS)
     assert get(client, project_id, "")["analysed"] is False
     blur = ask(client, project_id, "blur faces")
     assert blur["status"] == "not_applied" and "analysis can't be used" in blur["reply"]
@@ -945,7 +1026,16 @@ def test_export_masks_with_the_cached_tracks_and_reports_what_it_had_to_guess(
 ) -> None:
     project_id = upload(client, long_clip)["project_id"]
     track_id = analysed(storage, project_id)  # one keyframe at 0 s: lost for the rest
-    ask(client, project_id, "blur faces")
+    # A whole-clip mask (as "everyone except ..." writes): past its track, the box is held.
+    # "blur faces" follows the track instead, so it ends with it and holds nothing.
+    storage.open_project(project_id).append(
+        AddMask(
+            request_id="r_whole",
+            source="agent",
+            targets=[track_id],
+            effect=Effect(type="blur"),
+        )
+    )
     ask(client, project_id, "keep 0:00 to 0:02")
 
     made = export(client, project_id)
@@ -1230,6 +1320,73 @@ def test_a_request_by_what_is_said_needs_a_transcript(
     assert reply["status"] == "not_applied"
     assert "no transcript yet" in reply["reply"]
     assert log_bytes(storage, project_id) == before
+
+
+def test_analysis_after_a_model_comparison_runs_the_apps_detectors_and_makes_them_default(
+    client: TestClient,
+    storage: Storage,
+    red_square_clip: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VIBE_BACKEND", "local")
+    monkeypatch.setenv("VIBE_VISION_DETECTORS", "stub:color=red,label=face")
+    project_id = upload(client, red_square_clip)["project_id"]
+    sha = storage.open_project(project_id).info.video.sha256
+    for key in ("k-aaaa1111", "k-bbbb2222"):  # a bake-off left two sets and no default
+        save_tracks(storage, sha, key, [face()])
+
+    response = client.post(f"/api/projects/{project_id}/analysis")
+
+    assert response.status_code == 200
+    assert response.json() == {"analysed": True, "tracks": 1}
+    assert default_tracks_key(storage, sha) not in (None, "k-aaaa1111", "k-bbbb2222")
+    assert get(client, project_id, "tracks")["analysed"] is True
+
+
+# --- POST /api/projects/{id}/masks/remove (F-42) -------------------------------------------
+
+
+def test_removing_a_mask_by_hand_unmasks_it_and_undo_brings_it_back(
+    client: TestClient, storage: Storage, long_clip: Path
+) -> None:
+    project_id = upload(client, long_clip)["project_id"]
+    track_id = analysed(storage, project_id)
+    assert ask(client, project_id, "blur faces")["status"] == "applied"
+    assert track_id in get(client, project_id, "state")["masks"]
+    base = f"/api/projects/{project_id}"
+
+    response = client.post(f"{base}/masks/remove", json={"targets": [track_id]})
+
+    assert response.status_code == 200
+    history = response.json()
+    assert history["requests"][-1]["source"] == "user"
+    assert history["requests"][-1]["kinds"] == ["remove_mask"]
+    assert get(client, project_id, "state")["masks"].get(track_id, []) == []
+    assert client.post(f"{base}/undo").status_code == 200
+    assert get(client, project_id, "state")["masks"][track_id]
+    assert projects._busy == set()
+
+
+def test_removing_a_mask_that_isnt_there_is_400_and_writes_nothing(
+    client: TestClient, storage: Storage, long_clip: Path
+) -> None:
+    project_id = upload(client, long_clip)["project_id"]
+    track_id = analysed(storage, project_id)
+    before = log_bytes(storage, project_id)
+
+    response = client.post(f"/api/projects/{project_id}/masks/remove", json={"targets": [track_id]})
+
+    assert response.status_code == 400
+    assert "isn't masked" in response.json()["detail"]
+    assert log_bytes(storage, project_id) == before
+
+
+def test_removing_masks_needs_at_least_one_target(
+    client: TestClient, storage: Storage, long_clip: Path
+) -> None:
+    project_id = upload(client, long_clip)["project_id"]
+    response = client.post(f"/api/projects/{project_id}/masks/remove", json={"targets": []})
+    assert response.status_code == 422
 
 
 # --- POST /api/projects/{id}/trim: the timeline's trim handles -----------------------------

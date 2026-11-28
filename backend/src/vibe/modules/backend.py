@@ -115,7 +115,7 @@ def make_analysis(module: str, settings: dict[str, object]) -> Analysis:
         raise ModuleError(f"unknown analysis module {module!r} (registered: {known})")
     try:
         return cls(**settings)
-    except TypeError as e:
+    except (TypeError, ValueError) as e:  # ValueError: the analysis rejected a setting's value
         raise ModuleError(f"bad settings for analysis module {module!r}: {e}") from e
 
 

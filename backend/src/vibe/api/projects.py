@@ -58,10 +58,18 @@ from vibe.agent import (
 from vibe.agent.describe import clock, describe, explain_failure
 from vibe.contract import Redo, TimelineState, Track, Undo, new_id
 from vibe.contract.common import Model, Source
-from vibe.modules import ModuleError
+from vibe.modules import ModuleError, NoAnalysis, run_analysis
 from vibe.modules.denoise import cached_noise_profile
 from vibe.modules.transcribe import Transcript, transcribe_video
-from vibe.modules.vision import CacheError, load_tracks
+from vibe.modules.vision import (
+    AmbiguousAnalysis,
+    CacheError,
+    VisionAnalysis,
+    load_tracks,
+    set_default_tracks,
+)
+from vibe.modules.vision.analysis import VisionNotInstalled
+from vibe.modules.vision.cache import default_tracks_key
 from vibe.render import (
     NothingToRender,
     RenderError,
@@ -101,9 +109,18 @@ _EXPORT_NAME = re.compile(r"export_[0-9a-f]{12}\.mp4")
 """Exactly what ``create_export`` makes. Anything else is 404."""
 
 _NO_ANALYSIS = (
-    "no analysis is cached for this video, and this server can't run one yet. Analyse it with "
-    "`python -m vibe.modules.vision analyze`, or copy the video's cache folder from a teammate."
+    "no analysis is cached for this video, and this server only replays cached results "
+    "(VIBE_BACKEND=stub). Set VIBE_BACKEND=local or remote to analyse it, or copy the video's "
+    "cache folder from a teammate."
 )
+_NO_VISION = (
+    "this server can't analyse videos yet: a detector's package or weights are missing. In "
+    "backend/, run `uv sync --extra cpu --extra vision` (or `--extra cu128` on an NVIDIA GPU) and "
+    "`uv run python -m vibe.modules download yunet`, or set "
+    'VIBE_VISION_DETECTORS="yunet:weights=@yunet,grow=2.6" for faces only. The server log names '
+    "what's missing."
+)
+_VISION_FAILED = "analysing this video failed on this server; the server log says why."
 _BAD_ANALYSIS = (
     "this video's analysis can't be used: it's unreadable, or several are cached and none is "
     "marked as the default (`python -m vibe.modules.vision default`)."
@@ -207,6 +224,12 @@ class ReviewReply(Model):
     )
     rules_not_audited: list[str] = Field(
         description="Standing rules, which can't be audited ahead of a render."
+    )
+
+
+class RemoveMasksBody(Model):
+    targets: list[str] = Field(
+        min_length=1, description="Track ids whose masks to remove over the whole clip."
     )
 
 
@@ -451,6 +474,34 @@ def redo(project_id: str, storage: StorageDep) -> HistoryReply:
     return _undo_or_redo(storage, project_id, "redo")
 
 
+@router.post("/{project_id}/masks/remove")
+def remove_masks(project_id: str, body: RemoveMasksBody, storage: StorageDep) -> HistoryReply:
+    """Stop masking the given targets over the whole clip, as a hand edit (F-42: a person clicked
+    a box in the player and removed it). Undo brings them back. 400 if a target isn't masked.
+    """
+    project = _open(storage, project_id)
+    with _one_request_at_a_time(project.id):
+        call = ToolCall(step_id="s1", tool="remove_mask", args={"targets": body.targets})
+        try:
+            done = execute_plan(
+                Plan(calls=(call,)),
+                project,
+                request_id=new_id("r"),
+                source="user",
+                registry=UI_TOOLS,
+            )
+        except (OSError, ValueError) as e:  # an unreadable timeline, or a write that failed
+            logger.exception("removing masks on project %s failed", project.id)
+            raise HTTPException(
+                status_code=500,
+                detail="couldn't remove the mask: the project's files can't be read or written.",
+            ) from e
+        if not done.ok:
+            reason = (done.error or "the edit was refused").removeprefix("remove_mask: ")
+            raise HTTPException(status_code=400, detail=reason)
+        return _history(project)
+
+
 @router.get("/{project_id}/tracks")
 def get_tracks(project_id: str, storage: StorageDep) -> TracksReply:
     """Where the targets are over time, for drawing boxes over the preview."""
@@ -520,15 +571,49 @@ def act_on_review_item(
 def analyse(project_id: str, storage: StorageDep) -> AnalysisReply:
     """Make sure the video has a vision analysis (F-10). 503 when this server can't provide one.
 
-    For now this only replays the shared cache: no detector is connected to the API yet, on any
-    backend, so a video nobody analysed gets 503 rather than an empty result.
+    A cached analysis is answered as it is. Otherwise the detectors in ``VIBE_VISION_DETECTORS``
+    run through F-08's backend: ``stub`` only replays the cache, ``local`` runs them here and
+    ``remote`` on the model server. Running them can take a while; the project is busy (409)
+    until it's done. A video that can't be analysed is 503, never an empty result.
+
+    When a model comparison left several track sets and none is the default, this runs (or
+    replays) the app's own detectors and makes that set the default, instead of guessing.
     """
     project = _open(storage, project_id)
     with _one_request_at_a_time(project.id):
+        sha = project.info.video.sha256
+        try:
+            needs_run = load_tracks(storage, sha) is None
+        except AmbiguousAnalysis:
+            needs_run = default_tracks_key(storage, sha) is None
+        except (CacheError, ValidationError):
+            needs_run = False  # unreadable, or a default pointing at nothing: _tracks says so
+        if needs_run:
+            _run_vision(storage, project)
         analysed, tracks = _tracks(storage, project)
-        if not analysed:
-            raise HTTPException(status_code=503, detail=_NO_ANALYSIS)
-        return AnalysisReply(analysed=True, tracks=len(tracks))
+        return AnalysisReply(analysed=analysed, tracks=len(tracks))
+
+
+def _run_vision(storage: Storage, project: Project) -> None:
+    """Detect and track the project's video, cache it and make it the video's default."""
+    video = project.info.video
+    try:
+        analysis = VisionAnalysis.default()
+        result = run_analysis(storage, video, analysis)
+    except NoAnalysis as e:  # stub, nothing cached: never "no targets"
+        raise HTTPException(status_code=503, detail=_NO_ANALYSIS) from e
+    except VisionNotInstalled as e:
+        logger.warning("analysing %s: %s", project.id, e)
+        raise HTTPException(status_code=503, detail=_NO_VISION) from e
+    except (ModuleError, ValueError) as e:  # ValueError: a bad VIBE_VISION_DETECTORS spec
+        logger.warning("analysing %s failed: %s", project.id, e)
+        raise HTTPException(status_code=503, detail=_VISION_FAILED) from e
+    except (VideoError, OSError) as e:
+        logger.exception("reading the video of %s for analysis failed", project.id)
+        raise HTTPException(status_code=500, detail="couldn't read this project's video") from e
+    if default_tracks_key(storage, video.sha256) is None:
+        # So a model comparison (CLI, bake-off) never leaves the app with unmarked sets to pick.
+        set_default_tracks(storage, video.sha256, result.key)
 
 
 @router.post("/{project_id}/exports")

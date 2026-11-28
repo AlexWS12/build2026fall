@@ -41,6 +41,8 @@ export interface ApiClient {
     itemId: string,
     action: ReviewAction['action'],
   ): Promise<ReviewReply>
+  /** Stop masking these tracks over the whole clip, as a hand edit (F-42). Undo brings them back. */
+  removeMasks(projectId: string, trackIds: string[]): Promise<HistoryReply>
   /** Undo the latest request still in effect. */
   undo(projectId: string): Promise<HistoryReply>
   /** Keep only `start`..`end` of the source (the timeline's trim handles), as a hand edit. */
@@ -121,6 +123,12 @@ export const httpClient: ApiClient = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action }),
+    }),
+  removeMasks: (projectId, trackIds) =>
+    call(project(projectId, '/masks/remove'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targets: trackIds }),
     }),
   undo: (projectId) => post(project(projectId, '/undo')),
   trim: (projectId, start, end) =>

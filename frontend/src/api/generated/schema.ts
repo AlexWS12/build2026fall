@@ -214,6 +214,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/masks/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Masks
+         * @description Stop masking the given targets over the whole clip, as a hand edit (F-42: a person clicked
+         *     a box in the player and removed it). Undo brings them back. 400 if a target isn't masked.
+         */
+        post: operations["remove_masks_api_projects__project_id__masks_remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/tracks": {
         parameters: {
             query?: never;
@@ -290,8 +311,13 @@ export interface paths {
          * Analyse
          * @description Make sure the video has a vision analysis (F-10). 503 when this server can't provide one.
          *
-         *     For now this only replays the shared cache: no detector is connected to the API yet, on any
-         *     backend, so a video nobody analysed gets 503 rather than an empty result.
+         *     A cached analysis is answered as it is. Otherwise the detectors in ``VIBE_VISION_DETECTORS``
+         *     run through F-08's backend: ``stub`` only replays the cache, ``local`` runs them here and
+         *     ``remote`` on the model server. Running them can take a while; the project is busy (409)
+         *     until it's done. A video that can't be analysed is 503, never an empty result.
+         *
+         *     When a model comparison left several track sets and none is the default, this runs (or
+         *     replays) the app's own detectors and makes that set the default, instead of guessing.
          */
         post: operations["analyse_api_projects__project_id__analysis_post"];
         delete?: never;
@@ -659,6 +685,14 @@ export interface components {
              */
             created_at: string;
             video: components["schemas"]["VideoRef"];
+        };
+        /** RemoveMasksBody */
+        RemoveMasksBody: {
+            /**
+             * Targets
+             * @description Track ids whose masks to remove over the whole clip.
+             */
+            targets: string[];
         };
         /** ReviewAction */
         ReviewAction: {
@@ -1289,6 +1323,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_masks_api_projects__project_id__masks_remove_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoveMasksBody"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -42,6 +42,44 @@ def models_dir() -> Path:
     return Path(value) if value else data_dir() / "models"
 
 
+DEFAULT_VISION_DETECTORS = ("tv-frcnn-mobile", "yunet:weights=@yunet,threshold=0.6,grow=2.2")
+"""People (torchvision's Faster R-CNN MobileNet, BSD-3) and faces (YuNet, MIT), with head boxes for
+faces YuNet misses (D-022, Proposed). YuNet's threshold is 0.6 and its boxes are grown 2.2x to the
+whole face: on the three face-labelled clips that left 0 face boxes exposed and masked the least
+of the settings that did (17-42% of the frame vs 20-58% at threshold 0.3 grow 2.6; 1.8x leaked one
+face). Needs PyTorch (`uv sync --extra cpu` or `cu128`) and OpenCV (`--extra vision`); set
+VIBE_VISION_DETECTORS="yunet:weights=@yunet,grow=2.6" to run faces only, without PyTorch (it then
+misses faces hidden by hair: 8/23 exposed on one clip)."""
+
+DEFAULT_VISION_EVERY = 3
+"""Detect on every 3rd frame (the tracker carries boxes between): still 0 faces exposed on the
+labelled clips, at a third of the time (D-022)."""
+
+
+def vision_detectors() -> list[str]:
+    """Detector specs the app's Analyse button runs (``VIBE_VISION_DETECTORS``, ``;``-separated).
+
+    E.g. ``rfdetr-s;yunet:weights=@yunet``. See ``python -m vibe.modules.vision detectors``.
+    """
+    value = os.environ.get("VIBE_VISION_DETECTORS", "")
+    specs = [s.strip() for s in value.split(";") if s.strip()]
+    return specs or list(DEFAULT_VISION_DETECTORS)
+
+
+def vision_every() -> int:
+    """Detect on every Nth frame in the app's analysis (``VIBE_VISION_EVERY``, default 3)."""
+    value = os.environ.get("VIBE_VISION_EVERY", "").strip()
+    if not value:
+        return DEFAULT_VISION_EVERY
+    try:
+        every = int(value)
+    except ValueError:
+        raise ValueError(f"VIBE_VISION_EVERY must be a whole number, got {value!r}") from None
+    if every < 1:
+        raise ValueError(f"VIBE_VISION_EVERY must be at least 1, got {every}")
+    return every
+
+
 def remote_url() -> str | None:
     """The model server the ``remote`` backend calls, e.g. ``http://alex-5070:8765``."""
     return os.environ.get("VIBE_REMOTE_URL") or None

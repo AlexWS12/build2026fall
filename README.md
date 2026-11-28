@@ -132,7 +132,7 @@ These hold whatever stack we pick.
 |---|---|---|
 | Backend | Python 3.12, FastAPI | Worked well at Knight Hacks |
 | Video I/O and render | ffmpeg, OpenCV, PyAV | PyAV or OpenCV for the per-frame path (live) |
-| Agent / planner LLM | Claude (Anthropic API); a local open model as fallback | Cloud allowed (hybrid); typed tool schemas, JSON plan |
+| Agent / planner LLM | Templates first; Gemma 4 E4B on local Ollama for the rest; Gemini free tier opt-in (D-023) | Cloud allowed (hybrid); typed tool schemas, JSON plan |
 | Detection | YOLOE / YOLO-World, Grounding DINO, EgoBlur (faces, plates) | Open-vocabulary detection for "find X" |
 | Segmentation and tracking | SAM 2 / SAM 3, BoT-SORT / ByteTrack | Pixel-accurate masks, better tracking |
 | Visual questions | Qwen-VL family, other VLMs | "Is this the person in red?" |
@@ -222,5 +222,6 @@ uv run python -m vibe.modules doctor     # GPU, driver, PyTorch build, tier, war
 | 1–2 | NVIDIA GPU (any, incl. RTX 50 / Blackwell) | Update the NVIDIA driver to **570+**, then `uv sync --extra cu128` | `VIBE_BACKEND=local`; run `doctor` again and fix any warning |
 
 - **Model weights:** `uv run python -m vibe.modules models` lists them with license and tier; `... download NAME` fetches one into `VIBE_MODELS_DIR` (default `data/models/`) and checks its sha256. Gated weights (EgoBlur) say where to get them by hand.
-- **Model packages a module needs** (e.g. `rfdetr`, `opencv-python`) are installed by hand for now with `uv pip install`. A plain `uv sync` removes them again; use `uv sync --inexact --extra ...` to keep them.
+- **Analyse button (vision, F-10b, D-022):** with `VIBE_BACKEND=local`, the app's Analyse button runs the detectors in `VIBE_VISION_DETECTORS` (`;`-separated specs) on every `VIBE_VISION_EVERY`-th frame. The default is `tv-frcnn-mobile;yunet:weights=@yunet,threshold=0.6,grow=2.2` every 3rd frame, with fragments stitched and head boxes for faces YuNet misses. Install it with `uv sync --extra cpu --extra vision` (or `cu128` on an NVIDIA GPU) and `uv run python -m vibe.modules download yunet`. torchvision downloads its Faster R-CNN weights from download.pytorch.org on the first run. Without PyTorch, set `VIBE_VISION_DETECTORS="yunet:weights=@yunet,grow=2.6"` for faces only: it's about 8x faster on an M2, but it misses faces hidden by hair, and "blur people" finds nobody. `weights=@NAME` names a `models.json` entry instead of a path. On `stub`, the button only replays the cache.
+- **Model packages a module needs** (e.g. `rfdetr`) are installed by hand for now with `uv pip install`. A plain `uv sync` removes them again; use `uv sync --inexact --extra ...` to keep them. OpenCV for YuNet is the `vision` extra.
 - **Remote backend:** on the GPU machine, `uv run python -m vibe.modules serve --host 0.0.0.0` (on a private network such as Tailscale only, with `VIBE_REMOTE_TOKEN` set in `.env`; without a token it refuses to listen beyond localhost unless you pass `--insecure`). On your laptop, set `VIBE_BACKEND=remote`, `VIBE_REMOTE_URL=http://<host>:8765`, `VIBE_REMOTE_HOSTS=<host>` and the same token. Only team-controlled hosts go in `VIBE_REMOTE_HOSTS` (D-017). The video is uploaded once, and results are cached on both machines.

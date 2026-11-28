@@ -468,6 +468,59 @@
         }
       }
     },
+    "/api/projects/{project_id}/masks/remove": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Remove Masks",
+        "description": "Stop masking the given targets over the whole clip, as a hand edit (F-42: a person clicked\na box in the player and removed it). Undo brings them back. 400 if a target isn't masked.",
+        "operationId": "remove_masks_api_projects__project_id__masks_remove_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveMasksBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryReply"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/tracks": {
       "get": {
         "tags": [
@@ -622,7 +675,7 @@
           "projects"
         ],
         "summary": "Analyse",
-        "description": "Make sure the video has a vision analysis (F-10). 503 when this server can't provide one.\n\nFor now this only replays the shared cache: no detector is connected to the API yet, on any\nbackend, so a video nobody analysed gets 503 rather than an empty result.",
+        "description": "Make sure the video has a vision analysis (F-10). 503 when this server can't provide one.\n\nA cached analysis is answered as it is. Otherwise the detectors in ``VIBE_VISION_DETECTORS``\nrun through F-08's backend: ``stub`` only replays the cache, ``local`` runs them here and\n``remote`` on the model server. Running them can take a while; the project is busy (409)\nuntil it's done. A video that can't be analysed is 503, never an empty result.\n\nWhen a model comparison left several track sets and none is the default, this runs (or\nreplays) the app's own detectors and makes that set the default, instead of guessing.",
         "operationId": "analyse_api_projects__project_id__analysis_post",
         "parameters": [
           {
@@ -1430,6 +1483,25 @@
           "video"
         ],
         "title": "ProjectInfo"
+      },
+      "RemoveMasksBody": {
+        "properties": {
+          "targets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Targets",
+            "description": "Track ids whose masks to remove over the whole clip."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "targets"
+        ],
+        "title": "RemoveMasksBody"
       },
       "ReviewAction": {
         "properties": {

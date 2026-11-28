@@ -27,6 +27,8 @@ export interface SessionCommands {
   transcribe(): Promise<void>
   /** Confirm a stretch of the review queue as it is, or cut it out. */
   review(itemId: string, action: 'confirm' | 'cut'): Promise<void>
+  /** Stop masking these tracks over the whole clip (a hand edit: clicked in the player). */
+  removeMasks(trackIds: string[], label: string): Promise<void>
   /** Keep only `start`..`end` of the source (the timeline's trim handles). */
   trim(start: number, end: number): Promise<void>
   /** Leave the open project and go back to the start screen. */
@@ -140,6 +142,12 @@ export function useSession(api: ApiClient): { session: Session; commands: Sessio
           const history = await api.redo(id)
           const [timeline, review] = await Promise.all([api.getState(id), reviewOf(id)])
           return { type: 'history_settled', sync: { history, timeline, ...review } }
+        }),
+      removeMasks: (trackIds, label) =>
+        run({ type: 'remove_started', label }, async (id) => {
+          const history = await api.removeMasks(id, trackIds)
+          const [timeline, review] = await Promise.all([api.getState(id), reviewOf(id)])
+          return { type: 'remove_settled', sync: { history, timeline, ...review } }
         }),
       analyse: () =>
         run({ type: 'analysis_started' }, async (id) => {

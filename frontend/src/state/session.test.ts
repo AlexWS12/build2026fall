@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import type { ChatReply, HistoryReply, ReviewReply, TimelineState } from '../api/types'
 import {
   busyLabel,
+  canEditByHand,
   canExport,
   canOpen,
   canRedo,
@@ -162,6 +163,7 @@ describe('one thing at a time', () => {
     { type: 'transcript_started' },
     { type: 'export_started' },
     { type: 'review_started' },
+    { type: 'remove_started', label: 'face 3' },
   ]
   const starts: SessionEvent[] = [
     ...busyWith,
@@ -390,6 +392,22 @@ describe('the review queue', () => {
     expect(project(analysed).review).toEqual(queue)
   })
 })
+
+describe('removing a mask by hand (F-42)', () => {
+  test('is one activity that ends with the fresh timeline and a note naming the target', () => {
+    const started = play([{ type: 'remove_started', label: 'face 3' }], opened())
+    expect(busyLabel(started)).toBe('Removing the blur…')
+    expect(canEditByHand(started)).toBe(false)
+    const settled = play([{ type: 'remove_settled', sync: afterMute }], started)
+    expect(project(settled)).toMatchObject({ activity: { kind: 'idle' }, timeline: muted })
+    expect(project(settled).chat.at(-1)).toMatchObject({
+      kind: 'note',
+      text: 'Removed the blur on face 3. Undo brings it back.',
+    })
+    expect(canEditByHand(settled)).toBe(true)
+  })
+})
+
 describe('trim (the timeline handles)', () => {
   test('trimming is an activity, and its end says what was kept', () => {
     const done = play(

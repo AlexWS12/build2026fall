@@ -27,6 +27,7 @@ else, change ``pad`` to match so exposure measures what viewers would actually s
 import bisect
 from collections.abc import Iterable, Sequence
 
+import numpy as np
 from pydantic import Field
 
 from vibe.contract import Effect, Track
@@ -55,6 +56,14 @@ class LabelScore(Model):
     recall: float | None
     precision: float | None
     exposure_rate: float | None
+    masked: float | None = Field(
+        default=None,
+        description="Mean share of the frame inside a padded prediction, at the scored moments.",
+    )
+    masked_outside: float | None = Field(
+        default=None,
+        description="Mean share of the frame masked but outside every labelled target (the cost).",
+    )
 
 
 class TrackScore(Model):
@@ -131,12 +140,43 @@ def _match(truth: Sequence[Box], predicted: Sequence[Box], threshold: float) -> 
     return len(used_t)
 
 
+MASK_GRID = 200
+"""Masked area is measured on a MASK_GRID x MASK_GRID raster of the frame (0.5% steps)."""
+
+
+def _raster(boxes: Sequence[Box]) -> np.ndarray:
+    grid = np.zeros((MASK_GRID, MASK_GRID), dtype=bool)
+    for x1, y1, x2, y2 in boxes:
+        grid[
+            int(np.floor(y1 * MASK_GRID)) : int(np.ceil(y2 * MASK_GRID)),
+            int(np.floor(x1 * MASK_GRID)) : int(np.ceil(x2 * MASK_GRID)),
+        ] = True
+    return grid
+
+
+def masked_shares(masks: Sequence[Box], targets: Sequence[Box]) -> tuple[float, float]:
+    """``(masked, masked_outside)``: the share of the frame inside any mask, and the share inside
+    a mask but outside every target. Overlapping masks count once."""
+    m = _raster(masks)
+    return float(m.mean()), float((m & ~_raster(targets)).mean())
+
+
 def _ratio(num: int, den: int) -> float | None:
     return num / den if den else None
 
 
-def _label_score(label: str, truth: int, predicted: int, detected: int, exposed: int) -> LabelScore:
+def _label_score(
+    label: str,
+    truth: int,
+    predicted: int,
+    detected: int,
+    exposed: int,
+    masked: float | None = None,
+    masked_outside: float | None = None,
+) -> LabelScore:
     return LabelScore(
+        masked=masked,
+        masked_outside=masked_outside,
         label=label,
         truth_boxes=truth,
         predicted_boxes=predicted,
@@ -161,6 +201,7 @@ def score_tracks(
     labels = sorted({t.label for t in truth} | {p.label for p in predicted})
 
     counts = {label: [0, 0, 0, 0] for label in labels}  # truth, predicted, detected, exposed
+    shares = {label: [0.0, 0.0, 0] for label in labels}  # masked, masked outside, moments
     for t in moments:
         for label in labels:
             gt = [b for g in truth if g.label == label and (b := box_at(g, t)) is not None]
@@ -171,8 +212,23 @@ def score_tracks(
             c[1] += len(preds)
             c[2] += _match(gt, preds, iou_threshold)
             c[3] += sum(1 for g in gt if not any(coverage(g, m) >= min_coverage for m in masks))
+            # Only labels that have targets: "how much of the frame does blur faces cover".
+            if any(g.label == label for g in truth):
+                inside, outside = masked_shares(masks, gt)
+                sh = shares[label]
+                sh[0] += inside
+                sh[1] += outside
+                sh[2] += 1
 
-    by_label = [_label_score(label, *counts[label]) for label in labels]
+    by_label = [
+        _label_score(
+            label,
+            *counts[label],
+            shares[label][0] / shares[label][2] if shares[label][2] else None,
+            shares[label][1] / shares[label][2] if shares[label][2] else None,
+        )
+        for label in labels
+    ]
     totals = [sum(c[i] for c in counts.values()) for i in range(4)]
     return TrackScore(
         iou=iou_threshold,

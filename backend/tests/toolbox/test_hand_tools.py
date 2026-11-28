@@ -1,9 +1,12 @@
-"""F-41: the hand tools the UI calls (``confirm_mask``). No GPU, no network, no video files."""
+"""F-41 / F-42: the hand tools the UI calls (``confirm_mask``, ``remove_mask``).
+
+No GPU, no network, no video files.
+"""
 
 import pytest
 
 from vibe.agent import Plan, ToolCall, execute_plan, validate_plan
-from vibe.contract import AddMask, ConfirmMask, Effect, OpLog, TimeRange, Undo
+from vibe.contract import AddMask, ConfirmMask, Effect, OpLog, RemoveMask, TimeRange, Undo
 from vibe.toolbox import HAND_TOOLS, TOOLS, UI_TOOLS, ToolContext, ToolError, call_tool
 
 
@@ -81,7 +84,7 @@ def test_only_the_ui_registry_has_it() -> None:
     assert "confirm_mask" not in TOOLS
     assert "confirm_mask" in HAND_TOOLS
     assert "confirm_mask" in UI_TOOLS
-    assert set(UI_TOOLS) == set(TOOLS) | {"confirm_mask"}
+    assert set(UI_TOOLS) == set(TOOLS) | {"confirm_mask", "remove_mask"}
     with pytest.raises(ToolError, match="unknown tool"):
         call_tool("confirm_mask", confirm_args("trk_1"), ctx(masked_log()))
 
@@ -104,3 +107,35 @@ def test_execute_plan_writes_it_as_one_request_and_undo_removes_it() -> None:
     assert "trk_1" in log.state().reviewed
     log.append(Undo(request_id="r_3", source="user", undo_request_id="r_2"))
     assert log.state().reviewed == {}
+
+
+# --- remove_mask (F-42: click a box in the player, remove it) ------------------------------
+
+
+def test_remove_mask_unmasks_the_target_over_the_whole_clip() -> None:
+    log = masked_log()
+    result = call_tool("remove_mask", {"targets": ["trk_1"]}, ctx(log), UI_TOOLS)
+
+    op = log.ops[-1]
+    assert isinstance(op, RemoveMask) and op.source == "user" and op.time_range is None
+    assert result.op_ids == [op.op_id]
+    assert log.state().masks.get("trk_1", []) == []
+
+
+def test_remove_mask_can_be_undone() -> None:
+    log = masked_log()
+    call_tool("remove_mask", {"targets": ["trk_1"]}, ctx(log), UI_TOOLS)
+    log.append(Undo(request_id="r_3", source="user", undo_request_id="r_2"))
+    [span] = log.state().masks["trk_1"]
+    assert (span.start, span.end) == (2, 6)
+
+
+def test_remove_mask_refuses_a_target_that_isnt_masked() -> None:
+    log = masked_log()
+    with pytest.raises(ToolError, match="trk_9.*isn't masked anywhere"):
+        call_tool("remove_mask", {"targets": ["trk_1", "trk_9"]}, ctx(log), UI_TOOLS)
+    assert len(log.ops) == 1
+
+
+def test_remove_mask_is_a_hand_tool_the_planner_never_gets() -> None:
+    assert "remove_mask" in HAND_TOOLS and "remove_mask" not in TOOLS

@@ -164,6 +164,18 @@ _HAND_TOOLS = (
         returns="none",
         run=tools.confirm_mask,
     ),
+    ToolSpec(
+        name="remove_mask",
+        kind="edit",
+        description=(
+            "Stop masking targets a person picked (the whole clip unless a range is given). "
+            "Hand edits only: it takes literal track ids, so the planner never gets it."
+        ),
+        args=tools.RemoveMaskArgs,
+        result=tools.EditResult,
+        returns="none",
+        run=tools.remove_mask,
+    ),
 )
 
 HAND_TOOLS: Mapping[str, ToolSpec] = MappingProxyType({t.name: t for t in _HAND_TOOLS})

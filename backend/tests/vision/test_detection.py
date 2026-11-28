@@ -100,3 +100,44 @@ def test_ultralytics_detectors_are_flagged_as_not_permissive():
     assert not DETECTORS["yoloe"].permissive
     assert DETECTORS["rfdetr-l"].permissive
     assert DETECTORS["egoblur-face"].permissive
+
+
+def _fake_yunet(grow: float, x: float = 90.0, y: float = 40.0):
+    """A YuNetDetector without OpenCV or weights: its model returns one fixed face row."""
+    import numpy as np
+
+    from vibe.modules.vision.detectors.yunet_det import YuNetDetector
+
+    det = object.__new__(YuNetDetector)
+    det._grow, det._size = grow, (200, 100)
+
+    class Model:
+        def setInputSize(self, size):  # noqa: N802 (OpenCV's name)
+            pass
+
+        def detect(self, image):
+            # x, y, w, h, 10 landmark values, score
+            return 1, np.array([[x, y, 20.0, 20.0, *[0.0] * 10, 0.9]])
+
+    det._model = Model()
+    return det
+
+
+def test_yunet_grow_scales_boxes_around_their_centre() -> None:
+    import numpy as np
+
+    image = np.zeros((100, 200, 3), dtype=np.uint8)
+    (plain,) = _fake_yunet(1.0).detect(image)
+    (grown,) = _fake_yunet(2.0).detect(image)
+
+    assert plain.box == (0.45, 0.4, 0.55, 0.6)
+    assert grown.box == (0.4, 0.3, 0.6, 0.7)  # twice as wide and tall, same centre
+    assert grown.conf == plain.conf
+
+
+def test_yunet_grow_is_clipped_to_the_frame() -> None:
+    import numpy as np
+
+    # A face in the top-left corner: 4x grows it past the frame on two sides.
+    (box,) = _fake_yunet(4.0, x=0.0, y=0.0).detect(np.zeros((100, 200, 3), dtype=np.uint8))
+    assert box.box == (0.0, 0.0, 0.25, 0.5)

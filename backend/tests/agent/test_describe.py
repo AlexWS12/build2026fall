@@ -9,7 +9,10 @@ from vibe.toolbox import UI_TOOLS
 
 
 def track(track_id: str, label: str) -> Track:
-    keyframes = [{"t": 0, "box": (0.1, 0.1, 0.3, 0.3), "conf": 0.9, "state": "detected"}]
+    # On screen for the whole 90 s clip: masks follow tracks, and these tests are about wording.
+    keyframes = [
+        {"t": t, "box": (0.1, 0.1, 0.3, 0.3), "conf": 0.9, "state": "detected"} for t in (0, 90)
+    ]
     return Track.model_validate(
         {"track_id": track_id, "label": label, "source": "detector", "keyframes": keyframes}
     )
@@ -49,9 +52,12 @@ def test_clock_is_minutes_and_seconds(seconds: float, text: str) -> None:
         ("denoise 0:10 to 0:20", "Added noise reduction to 0:10–0:20."),
         ("keep only the voices", "Turned down everything but the voices over the whole video."),
         ("remove taps 0:10 to 0:20", "Turned down everything but the voices over 0:10–0:20."),
-        ("blur people", "Blurred 2 people (the whole video)."),
-        ("pixelate faces from 0:10 to 0:20", "Pixelated 1 face (0:10–0:20)."),
-        ("black box everyone for the first half", "Covered 2 people with a black box (0:00–0:45)."),
+        ("blur people", "Blurred 2 people, each while on screen (the whole video)."),
+        ("pixelate faces from 0:10 to 0:20", "Pixelated 1 face, each while on screen (0:10–0:20)."),
+        (
+            "black box everyone for the first half",
+            "Covered 2 people with a black box, each while on screen (0:00–0:45).",
+        ),
         ("mute 0:10 to 0:20 and cut 0:30 to 0:40", "Muted 0:10–0:20. Cut 0:30–0:40."),
     ],
 )  # fmt: skip

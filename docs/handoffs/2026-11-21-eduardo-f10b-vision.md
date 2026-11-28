@@ -1,0 +1,102 @@
+---
+author: eduardo
+date: 2026-11-21
+branch: eduardo/f10b-vision
+features: [F-10b, F-09b, F-09, F-42, R-1b]
+base: v0.4.0 + #40 @ 97dbb80
+head: b4b7832
+status: ready for review
+---
+
+# The Analyse button detects faces and people for real (CPU is enough), with face labels, a bake-off and a decision (D-022)
+
+> **Shared files, heads-up to post in the team chat:**
+> - **API:** the `/analysis` route's behaviour changed (same response).
+> - **Settings and dependencies:** `config.py` (`VIBE_VISION_DETECTORS`, `VIBE_VISION_EVERY`), the new optional `vision` extra in `pyproject.toml` / `uv.lock`, and the YuNet hash in `models.json`.
+> - **Generated files:** `openapi.json` and `frontend/src/api/generated/schema.ts` are regenerated.
+> - **Toolbox and API (F-42):** a new hand-only tool `remove_mask` (`registry.py`, `tools.py`; the planner never gets it) and a new route `POST /api/projects/{id}/masks/remove`, plus `removeMasks` in `frontend/src/api/`.
+> - **Planner LLM decision (D-023, rewritten 2026-11-27):** templates first, local Gemma 4 E4B for the rest, Gemini's free tier opt-in, no paid model. The Claude planner this PR used to add (`agent/llm.py`, `VIBE_PLANNER_LLM=claude`, the `llm` extra) is removed, so it no longer conflicts with Paul's `paul/r1b-planner-llm`.
+> - **Benchmark (Jean's F-09):** two masked-area columns in `score.py` / `report.py`.
+> - **No contract or toolbox change.**
+> - **After merging, everyone runs** `uv sync --extra cpu --extra vision` (or `cu128`) **and** `uv run python -m vibe.modules download yunet`. PR #44.
+
+## What changed
+- **Analyse runs detection** (`modules/vision/analysis.py`, `VisionAnalysis`, registered as an F-08 analysis named `vision`). `POST /api/projects/{id}/analysis` runs `VIBE_VISION_DETECTORS` on every `VIBE_VISION_EVERY`-th frame through `run_analysis`.
+  - `stub` only replays the cache. `local` runs the detectors here, and `remote` runs them on the model server (tested in-process only).
+  - The result becomes the video's default track set. If a comparison left several sets and none is the default, Analyse runs (or replays) the app's own set.
+  - A missing package or missing weights is a 503 that says what to install. A bad setting is a 503 that points to the server log.
+- **Default (D-022, Proposed, in use):** `tv-frcnn-mobile` (people) + `yunet:weights=@yunet,threshold=0.6,grow=2.2` (faces), every 3rd frame, IoU tracker, fragments stitched, plus head boxes.
+- **YuNet `grow` option:** YuNet's own boxes cover only eyes to mouth, so `grow` scales them around their centre. It's only in the cache key when used.
+- **Weights by name:** `weights=@yunet` resolves through `models.json`. YuNet's sha256 is pinned (the file is 232,589 bytes).
+- **Hardening** (`modules/vision/stitch.py`):
+  - `stitch` joins same-label fragments that start ≤ 1.5 s later, where the last one was heading.
+  - `head_fallback` adds an `uncertain` face box over the full width of the top 30% of a person box, unless a face box covers 90% of it.
+  - Both are in the tracks key only when on (`--stitch` / `--heads` on `analyze`, `retrack` and `benchmark offline`).
+- **Benchmark tools:**
+  - `benchmark label-frames CLIP` / `import-labels CLIP FILE`: a self-contained page for drawing ground-truth boxes (F-09b).
+  - `benchmark offline --set SPECS [--every N] [--stitch] [--heads]`: timed detector runs, cached so `report` scores them, with the hardware stated. A detector that can't load is a `skipped` row with the reason.
+  - `benchmark report`: new `masked` / `masked outside` columns, the share of the frame inside padded masks at the scored moments (200×200 grid).
+- **Click a mask to remove it (F-42, the remove part):** in the player's preview, clicking selects the smallest mask under the pointer. **Remove blur** or Delete removes that target's whole mask as a hand edit (`remove_mask`, `source: user`), Esc cancels, and Undo brings it back. Typing in the chat never triggers Delete. Added because the default over-blurs, so a person can take off a wrong mask.
+- **Timeline lanes scroll** in a box capped at min(220px, 32vh), so one lane per tracked face no longer pushes the player off the screen.
+- **Planner LLM (R-1b, D-023):** no LLM code in this PR any more. A Claude planner was added on Nov 21 and removed on Nov 27, after D-023 was rewritten (see "Decisions made"). Chat plans with templates only until Paul's `paul/r1b-planner-llm` lands with the Gemma and Gemini adapters.
+- **Found targets follow their tracks:** "blur faces / people / plates" set `while_tracked`, so ended tracks don't leave boxes behind (32 → 9–21 on screen on trio-street-outfits).
+- **Face labels** for trio-street-outfits (3 people, 39 boxes), trio-sidewalk-totes (3, 21) and crowd-orange (16, 42), drawn by Eduardo. In crowd-orange, one track the page had joined across two people is split into tracks 6 and 16.
+
+## How to check it
+- `npm test`: backend 1656 passed, frontend 116 passed. `npm run lint` and `python -m vibe.api --check` are clean. Run on macOS, 2026-11-21.
+- After removing the Claude planner (2026-11-27, macOS): backend `uv run pytest -q` 1780 passed (main merged in since), `ruff check`, `ruff format --check` and `python -m vibe.api --check` clean. The frontend wasn't touched and wasn't rerun.
+- In the app:
+  1. In `backend/`, run `uv sync --extra cpu --extra vision` and `uv run python -m vibe.modules download yunet`.
+  2. Start the backend with `VIBE_BACKEND=local`.
+  3. Open a project, click Analyse, type "blur all faces", then Export.
+  - torchvision downloads its weights on the first run.
+  - Checked on crowd-orange: Analyse took about 14 s for 4 s of video (wall time, not a benchmark), and 52 faces were blurred. The export blurs heads and leaves bodies and the street visible.
+- Numbers come from `benchmark offline` and `benchmark report` on **Apple M2, 8 GB, CPU only (not GPU numbers)**. The outputs are under `data/bench/` (gitignored).
+
+- Click-to-remove, checked in the app on a scratch trio-street-outfits project: clicking a head box selected it, Remove blur took the boxes from 32 to 31, and the chat said "Removed the blur on face 3. Undo brings it back."
+
+## Results
+- **Faces exposed** (IoU ≥ 0.5, ≥ 90% covered after 0.15 padding):
+
+  | setting | trio-street-outfits | trio-sidewalk-totes | crowd-orange |
+  |---|---|---|---|
+  | YuNet as it was (no grow) | 39/39 | 21/23 | – |
+  | YuNet grow 2.6 alone, every 1 / every 3 | 0/39 | 7/23 / 8/23 | 0/42 |
+  | **default (people + YuNet t0.6 g2.2 + head boxes, every 3)** | **0/39** | **0/23** | **0/42** |
+
+  YuNet doesn't detect one person's face on trio-sidewalk-totes for most of 0–4 s (hair), so only the head boxes cover it. Narrower or shorter head boxes leak 1–4 of those 21 faces.
+- **Masked share** (0 faces exposed on all three unless noted):
+
+  | YuNet, with people + head boxes, every 3 | trio-street-outfits | trio-sidewalk-totes | crowd-orange |
+  |---|---|---|---|
+  | threshold 0.3, grow 2.6 (first default) | 20.2% | 41.0% | 57.5% |
+  | threshold 0.6, grow 2.6 | 18.9% | 28.8% | 46.5% |
+  | **threshold 0.6, grow 2.2 (default)** | **17.4%** | **27.6%** | **42.4%** |
+  | threshold 0.6, grow 1.8 | 16.4% | 26.1% | 39.5%, 1/42 exposed |
+- **People** (`tv-frcnn-mobile` + YuNet 0.6, every 3, stitched; 5 person-labelled clips): recall 80.7–100%, **exposed 0–21.2%**. The worst is pair-backpacks-behind at 14/66. "Blur people" isn't privacy-safe yet.
+- **Speed:** YuNet alone runs at 0.017–0.044 s/frame (peak 383 MB). The default runs at about 0.3 s/frame (peak about 1.1 GB).
+- **Stitching** cuts YuNet track counts by about 30–70% (`2026-11-21-yunet-m2/stitch.md`).
+
+## Decisions made
+- **D-022 (Proposed, in use)** in `docs/ARCHITECTURE.md`: the default above. Eduardo chose it for now from these scores. Revisit when the team weighs in, or when a GPU bake-off of D-015's RF-DETR + EgoBlur has numbers.
+- **"Blur people" stays in the demo** with its limit stated (up to 21% of labelled people exposed). Mention it as a known blocker when showing it.
+- **D-023 (Accepted 2026-11-27, Eduardo and Paul):** with no budget, the planner is templates first, then Gemma 4 E4B on local Ollama, with Gemini 3.5 Flash-Lite's free tier as an opt-in setting. Eduardo chose it from R-1b's benchmark (#45), and Paul agreed. Claude Opus 5.5 was also run once through R-1b's benchmark for reference (91% correct, 15 unsafe, $0.0033 per request, macOS arm64), but it's paid, so it isn't an option. The raw results and the adapter patch it needed are in `outputs/r1-planner/` (gitignored), not in this PR.
+
+## Next steps
+- **Team review of D-022.** Is about 0.3 s/frame acceptable on laptops? Or should tier 0 default to faces only (`VIBE_VISION_DETECTORS="yunet:weights=@yunet,grow=2.6"`), which misses hidden faces?
+- **People:** try every 1 and a lower `min_conf` (`retrack`, `benchmark offline`) before calling "blur people" safe.
+- **Masked share undercounts the export.** The renderer holds a lost track's last box over the whole range, so crowds still show large blurred blocks. A metric from the render's mask audit would show it.
+- **GPU bake-off** of RF-DETR + EgoBlur with `benchmark offline`, on the same labelled clips.
+- **Plates:** no clip has any. Add licensed clips with plates before claiming anything for them.
+- **F-42, the rest:** change a mask's effect, and correct or draw a box (still open).
+- **Description targeting:** on `local`/`remote`, "blur the person in orange" fails until F-13's VLM judge (D-020) lands; on `stub` the colour heuristic over-masks (18 targets for one person on trio-street-outfits). Position requests ("the person in the middle") aren't supported.
+- **Background job for Analyse** on long clips. Today the request waits and the project is busy (409).
+
+## Gotchas
+- **OpenCV and PyAV both bundle `libavdevice` on macOS.** Importing both prints `objc: Class AVFFrameReceiver is implemented in both ...`. It worked here, but it's a known source of rare crashes.
+- **A plain `uv sync` removes PyTorch and OpenCV.** Analyse then answers 503 with the install hint. Use `uv sync --extra cpu --extra vision`.
+- **`benchmark offline` and the CLI add track sets to the shared cache.** Analyse handles that, but `GET .../tracks` and exports answer 503 ("several cached") on that clip until Analyse is pressed or `python -m vibe.modules.vision default` is set.
+- **Changing the default doesn't re-analyse a video that already has a default set.** Delete `cache/<sha256>/default/tracks.json`, then Analyse. Undo any blur made on the old tracks first: masks name track ids, and missing ids fail closed (whole frame).
+- **An app-run analysis keeps only tracks, not raw detections,** so `retrack` works only on CLI or `benchmark offline` runs.
+- **Tests must not build `tv-frcnn-mobile`:** where PyTorch is installed, that downloads weights. The API tests pin YuNet only.
+- **`npm run dev` uses `--kill-others-on-fail`:** when the backend's reloader died during a branch switch, Vite went down with it.

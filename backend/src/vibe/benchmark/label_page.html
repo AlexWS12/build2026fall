@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Label frames</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: dark; --bg: #16161a; --fg: #ececf1; --muted: #9a9aa6; --accent: #8b7cf6; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px system-ui, sans-serif; }
+  header { display: flex; gap: 16px; align-items: center; padding: 10px 16px; flex-wrap: wrap; }
+  header b { font-size: 15px; } .muted { color: var(--muted); }
+  button, input { font: inherit; } button { padding: 4px 10px; cursor: pointer; }
+  #stage { position: relative; margin: 0 16px; max-width: calc(100vw - 32px); }
+  #stage img { display: block; max-width: 100%; max-height: calc(100vh - 140px); user-select: none; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+  footer { padding: 8px 16px; color: var(--muted); }
+</style></head><body>
+<header>
+  <b id="title"></b><span id="pos" class="muted"></span>
+  <label>Track <input id="track" type="number" min="1" value="1" style="width:4em"></label>
+  <button id="new">New track (n)</button><button id="copy">Copy previous frame (c)</button>
+  <button id="prev">← Prev</button><button id="next">Next →</button>
+  <button id="save">Save JSON</button>
+</header>
+<div id="stage"><img id="img" alt="frame"><canvas id="cv"></canvas></div>
+<footer>Drag to draw a box for the current track. Click a box to select its track; Delete removes
+it. One track number per real target across all frames. Dashed: the previous frame's boxes.
+Save downloads a file for <code>python -m vibe.benchmark import-labels</code>.</footer>
+<script>
+const DATA = /*DATA*/null;
+const boxes = DATA.boxes.map(list => list.map(b => ({...b})));
+let i = 0, selected = null, drag = null;
+const img = document.getElementById('img'), cv = document.getElementById('cv');
+const ctx = cv.getContext('2d'), trackIn = document.getElementById('track');
+document.getElementById('title').textContent = `${DATA.clip_id}: ${DATA.label}`;
+const colour = n => `hsl(${(n * 67) % 360} 85% 60%)`;
+function maxTrack() { return Math.max(0, ...boxes.flat().map(b => b.track)); }
+function show() {
+  img.src = DATA.frames[i].src;
+  document.getElementById('pos').textContent =
+    `frame ${i + 1} / ${DATA.frames.length} · t = ${DATA.frames[i].t.toFixed(2)} s`;
+}
+function draw() {
+  cv.width = img.clientWidth; cv.height = img.clientHeight;
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  const rect = (b, dashed) => {
+    const [x1, y1, x2, y2] = b.box;
+    ctx.setLineDash(dashed ? [5, 4] : []); ctx.lineWidth = b === selected ? 3 : 2;
+    ctx.strokeStyle = colour(b.track);
+    ctx.strokeRect(x1 * cv.width, y1 * cv.height, (x2 - x1) * cv.width, (y2 - y1) * cv.height);
+    if (!dashed) { ctx.fillStyle = colour(b.track); ctx.fillText(b.track, x1 * cv.width + 3, y1 * cv.height + 12); }
+  };
+  if (i > 0) boxes[i - 1].forEach(b => rect(b, true));
+  boxes[i].forEach(b => rect(b, false));
+  if (drag) rect({track: +trackIn.value, box: norm(drag)}, false);
+}
+function at(e) { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; }
+function norm(d) { return [Math.min(d[0], d[2]), Math.min(d[1], d[3]), Math.max(d[0], d[2]), Math.max(d[1], d[3])].map(v => Math.min(1, Math.max(0, v))); }
+cv.onmousedown = e => { const [x, y] = at(e); drag = [x, y, x, y]; };
+cv.onmousemove = e => { if (!drag) return; const [x, y] = at(e); drag[2] = x; drag[3] = y; draw(); };
+cv.onmouseup = e => {
+  const [x, y] = at(e), b = norm(drag); drag = null;
+  if (b[2] - b[0] < 0.004 || b[3] - b[1] < 0.004) {  // a click: select the box under it
+    selected = boxes[i].find(o => x >= o.box[0] && x <= o.box[2] && y >= o.box[1] && y <= o.box[3]) || null;
+    if (selected) trackIn.value = selected.track;
+  } else {
+    boxes[i] = boxes[i].filter(o => o.track !== +trackIn.value);  // one box per track per frame
+    selected = {track: +trackIn.value, box: b}; boxes[i].push(selected);
+  }
+  draw();
+};
+function go(d) { i = Math.min(DATA.frames.length - 1, Math.max(0, i + d)); selected = null; show(); }
+document.getElementById('prev').onclick = () => go(-1);
+document.getElementById('next').onclick = () => go(1);
+document.getElementById('new').onclick = () => { trackIn.value = maxTrack() + 1; };
+document.getElementById('copy').onclick = () => { if (i > 0) { boxes[i] = boxes[i - 1].map(b => ({track: b.track, box: [...b.box]})); draw(); } };
+document.getElementById('save').onclick = () => {
+  const out = {version: DATA.version, clip_id: DATA.clip_id, sha256: DATA.sha256, label: DATA.label,
+    frames: DATA.frames.map((f, k) => ({t: f.t, boxes: boxes[k]}))};
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 1)], {type: 'application/json'}));
+  a.download = `${DATA.clip_id}-${DATA.label}-labels.json`; a.click();
+};
+document.onkeydown = e => {
+  if (e.target === trackIn) return;
+  if (e.key === 'ArrowRight') go(1); else if (e.key === 'ArrowLeft') go(-1);
+  else if (e.key === 'n') document.getElementById('new').click();
+  else if (e.key === 'c') document.getElementById('copy').click();
+  else if ((e.key === 'Delete' || e.key === 'Backspace') && selected) { boxes[i] = boxes[i].filter(b => b !== selected); selected = null; draw(); }
+};
+img.onload = draw; window.onresize = draw; show();
+</script></body></html>

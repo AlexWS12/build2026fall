@@ -22,6 +22,7 @@ from vibe.contract import (
     Mute,
     Op,
     Redo,
+    RemoveMask,
     TimeRange,
     Undo,
     Unmute,
@@ -246,7 +247,8 @@ class AddMaskArgs(Model):
         description="False: every target stays hidden for the whole range; where the tracker "
         "lost it, its last box is held. True: each target is hidden only while its track "
         "exists (plus at least half a second each side), so the mask follows it and doesn't stay "
-        "behind. For one described target, not for hiding everyone.",
+        "behind. The planner uses it for found targets (blur faces / people / plates) and one "
+        "described target, not for 'everyone except ...', which hides bystanders all along.",
     )
 
 
@@ -254,6 +256,13 @@ class ConfirmMaskArgs(Model):
     targets: list[str] = Field(min_length=1, description="Track ids to mark as checked.")
     time_range: TimeRange = Field(
         description="The stretch that was checked; each target must be masked somewhere in it."
+    )
+
+
+class RemoveMaskArgs(Model):
+    targets: list[str] = Field(min_length=1, description="Track ids whose mask to remove.")
+    time_range: TimeRange | None = Field(
+        default=None, description="Where to unmask them; the whole clip if null."
     )
 
 
@@ -382,6 +391,13 @@ def _tracked_ranges(
 
 def add_mask(args: AddMaskArgs, ctx: ToolContext) -> EditResult:
     targets = list(dict.fromkeys(args.targets))  # drop repeats, keep order
+    if args.time_range is not None and ctx.duration is not None:
+        # The requested range first: "blur people after 2:00" on a 1-minute clip must say the
+        # time is past the end, not that nobody is on screen there.
+        try:
+            check_range(args.time_range, ctx.duration)
+        except TimeRangeError as exc:
+            raise TimeRangeError(f"add_mask: {exc}") from None
     if not args.while_tracked:
         ranges: dict[tuple[float, float] | None, list[str]] = {None: targets}
     else:
@@ -417,6 +433,26 @@ def confirm_mask(args: ConfirmMaskArgs, ctx: ToolContext) -> EditResult:
             raise ToolError(f"confirm_mask: {target!r} isn't masked from {_range(r)}")
     op = ConfirmMask(request_id=ctx.request_id, source=ctx.source, targets=targets, time_range=r)
     return _write("confirm_mask", [op], ctx)
+
+
+def remove_mask(args: RemoveMaskArgs, ctx: ToolContext) -> EditResult:
+    """Unmask targets a person picked (F-42), for hand edits: clicking a box in the player.
+
+    Refuses a target that isn't masked anywhere in the range, so a stale click (the mask was
+    already undone) says so instead of writing an op that changes nothing. Undo brings it back.
+    """
+    if ctx.log is None:
+        raise ToolError("remove_mask: needs a timeline to write to")
+    with _timeline_errors("remove_mask"):
+        masks = ctx.log.state().masks
+    r = args.time_range
+    targets = list(dict.fromkeys(args.targets))  # drop repeats, keep order
+    for target in targets:
+        if not any(_overlaps(m, r) for m in masks.get(target, [])):
+            where = "anywhere" if r is None else f"from {_range(r)}"
+            raise ToolError(f"remove_mask: {target!r} isn't masked {where}")
+    op = RemoveMask(request_id=ctx.request_id, source=ctx.source, targets=targets, time_range=r)
+    return _write("remove_mask", [op], ctx)
 
 
 def cut_range(args: CutRangeArgs, ctx: ToolContext) -> EditResult:

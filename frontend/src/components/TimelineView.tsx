@@ -199,51 +199,55 @@ export function TimelineView({
             </span>
           </div>
         )}
-        <div
-          className={`${styles.body}${onSeek ? ` ${styles.scrub}` : ''}`}
-          {...scrub}
-          {...(onSeek && {
-            role: 'slider',
-            tabIndex: 0,
-            'aria-label': 'Playhead',
-            'aria-valuemin': 0,
-            'aria-valuemax': Math.round(total * 10) / 10,
-            'aria-valuenow': Math.round((time ?? 0) * 10) / 10,
-            'aria-valuetext': formatTime(time ?? 0),
-            onKeyDown: seekByKey,
-          })}
-        >
-          <ul className={styles.lanes} aria-label="Timeline lanes">
-            {lanesOf(state, tracks).map((lane) => (
-              <li key={lane.id} className={styles.lane}>
-                <span className={styles.laneName} title={lane.id}>
-                  {lane.name}
-                </span>
-                <span className={styles.track}>
-                  {lane.spans.map((span) => {
-                    const end = span.end ?? total
-                    const dimmed =
-                      !!focusedRequest && span.requestId !== null && span.requestId !== focusedRequest
-                    return (
-                      <span
-                        key={`${span.start}-${span.label}`}
-                        className={`${styles.span} ${styles[lane.kind]}${dimmed ? ` ${styles.dimmed}` : ''}`}
-                        style={{ left: percent(span.start), width: percent(end - span.start) }}
-                        title={`${span.label}: ${formatTime(span.start)}–${
-                          span.end === null ? 'end' : formatTime(span.end)
-                        }`}
-                        onMouseEnter={() => span.requestId && onFocusRequest?.(span.requestId)}
-                        onMouseLeave={() => span.requestId && onFocusRequest?.(null)}
-                      />
-                    )
-                  })}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <span className={styles.playheadRail} ref={rail} aria-hidden="true">
-            {time !== undefined && <span className={styles.playhead} style={{ left: percent(time) }} />}
-          </span>
+        {/* Lanes scroll in a capped box, so many mask lanes (one per tracked face) never push
+            the player off the screen. The playhead sits inside it, so it spans every lane. */}
+        <div className={styles.scroll} data-testid="timeline-scroll">
+          <div
+            className={`${styles.body}${onSeek ? ` ${styles.scrub}` : ''}`}
+            {...scrub}
+            {...(onSeek && {
+              role: 'slider',
+              tabIndex: 0,
+              'aria-label': 'Playhead',
+              'aria-valuemin': 0,
+              'aria-valuemax': Math.round(total * 10) / 10,
+              'aria-valuenow': Math.round((time ?? 0) * 10) / 10,
+              'aria-valuetext': formatTime(time ?? 0),
+              onKeyDown: seekByKey,
+            })}
+          >
+            <ul className={styles.lanes} aria-label="Timeline lanes">
+              {lanesOf(state, tracks).map((lane) => (
+                <li key={lane.id} className={styles.lane}>
+                  <span className={styles.laneName} title={lane.id}>
+                    {lane.name}
+                  </span>
+                  <span className={styles.track}>
+                    {lane.spans.map((span) => {
+                      const end = span.end ?? total
+                      const dimmed =
+                        !!focusedRequest && span.requestId !== null && span.requestId !== focusedRequest
+                      return (
+                        <span
+                          key={`${span.start}-${span.label}`}
+                          className={`${styles.span} ${styles[lane.kind]}${dimmed ? ` ${styles.dimmed}` : ''}`}
+                          style={{ left: percent(span.start), width: percent(end - span.start) }}
+                          title={`${span.label}: ${formatTime(span.start)}–${
+                            span.end === null ? 'end' : formatTime(span.end)
+                          }`}
+                          onMouseEnter={() => span.requestId && onFocusRequest?.(span.requestId)}
+                          onMouseLeave={() => span.requestId && onFocusRequest?.(null)}
+                        />
+                      )
+                    })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <span className={styles.playheadRail} ref={rail} aria-hidden="true">
+              {time !== undefined && <span className={styles.playhead} style={{ left: percent(time) }} />}
+            </span>
+          </div>
         </div>
         {state.rules.length > 0 && (
           <p className={styles.rules}>

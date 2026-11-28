@@ -159,3 +159,32 @@ def test_one_box_cannot_detect_two_overlapping_faces() -> None:
 def test_no_ground_truth_gives_no_ratios() -> None:
     s = score_tracks([], [])
     assert (s.moments, s.total.recall, s.total.exposure_rate, s.by_label) == (0, None, None, [])
+
+
+def test_masked_shares_count_overlaps_once_and_split_inside_from_outside() -> None:
+    from vibe.benchmark.score import masked_shares
+
+    left = (0.0, 0.0, 0.5, 1.0)  # half the frame
+    inside, outside = masked_shares([left, left], [(0.0, 0.0, 0.25, 1.0)])
+    assert inside == pytest.approx(0.5)
+    assert outside == pytest.approx(0.25)
+    assert masked_shares([], [left]) == (0.0, 0.0)
+
+
+def test_scores_report_how_much_of_the_frame_is_masked() -> None:
+    from vibe.benchmark.score import score_tracks
+    from vibe.contract import Keyframe, Track
+
+    def tr(i: str, label: str, box: tuple) -> Track:
+        return Track(track_id=i, label=label, source="user",
+                     keyframes=[Keyframe(t=0.0, box=box, conf=1.0, state="user")])  # fmt: skip
+
+    truth = [tr("f", "face", (0.4, 0.4, 0.5, 0.5))]
+    tight = score_tracks(truth, [tr("p", "face", (0.4, 0.4, 0.5, 0.5))], padding=0.0)
+    huge = score_tracks(truth, [tr("p", "face", (0.0, 0.0, 1.0, 1.0))], padding=0.0)
+
+    (t,) = [s for s in tight.by_label if s.label == "face"]
+    (h,) = [s for s in huge.by_label if s.label == "face"]
+    assert t.masked == pytest.approx(0.01) and t.masked_outside == pytest.approx(0.0)
+    assert h.masked == pytest.approx(1.0) and h.masked_outside == pytest.approx(0.99)
+    assert t.exposed == h.exposed == 0

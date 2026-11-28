@@ -6,7 +6,7 @@
       "expect": "plan",
       "calls": [
         {"step_id": "s1", "tool": "find_objects", "args": {"label": "face"}},
-        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}}}
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}, "while_tracked": true}}
       ]
     },
     {
@@ -14,7 +14,7 @@
       "expect": "plan",
       "calls": [
         {"step_id": "s1", "tool": "find_objects", "args": {"label": "face"}},
-        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}}}
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}, "while_tracked": true}}
       ]
     },
     {
@@ -22,7 +22,7 @@
       "expect": "plan",
       "calls": [
         {"step_id": "s1", "tool": "find_objects", "args": {"label": "license_plate"}},
-        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "pixelate"}}}
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "pixelate"}, "while_tracked": true}}
       ]
     },
     {
@@ -30,7 +30,7 @@
       "expect": "plan",
       "calls": [
         {"step_id": "s1", "tool": "find_objects", "args": {"label": "person"}},
-        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "box"}, "time_range": {"start": 10, "end": 20}}}
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "box"}, "time_range": {"start": 10, "end": 20}, "while_tracked": true}}
       ]
     },
     {
@@ -39,7 +39,7 @@
       "calls": [
         {"step_id": "s1", "tool": "find_objects", "args": {"label": "person"}},
         {"step_id": "s2", "tool": "resolve_time", "args": {"phrase": "first half"}},
-        {"step_id": "s3", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}, "time_range": {"$ref": "s2"}}}
+        {"step_id": "s3", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}, "time_range": {"$ref": "s2"}, "while_tracked": true}}
       ]
     },
     {
@@ -47,7 +47,7 @@
       "expect": "plan",
       "calls": [
         {"step_id": "s1", "tool": "find_objects", "args": {"label": "face"}},
-        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}, "time_range": {"start": 0, "end": 30}}}
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}, "time_range": {"start": 0, "end": 30}, "while_tracked": true}}
       ]
     },
     {
@@ -113,7 +113,7 @@
       "expect": "plan",
       "calls": [
         {"step_id": "s1", "tool": "find_objects", "args": {"label": "face"}},
-        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}}},
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}, "while_tracked": true}},
         {"step_id": "s3", "tool": "mute", "args": {"time_range": {"start": 10, "end": 20}}}
       ]
     },
@@ -124,7 +124,7 @@
         {"step_id": "s1", "tool": "resolve_time", "args": {"phrase": "first 3 seconds"}},
         {"step_id": "s2", "tool": "cut_range", "args": {"time_range": {"$ref": "s1"}}},
         {"step_id": "s3", "tool": "find_objects", "args": {"label": "face"}},
-        {"step_id": "s4", "tool": "add_mask", "args": {"targets": {"$ref": "s3"}, "effect": {"type": "pixelate"}}}
+        {"step_id": "s4", "tool": "add_mask", "args": {"targets": {"$ref": "s3"}, "effect": {"type": "pixelate"}, "while_tracked": true}}
       ]
     },
     {
@@ -132,7 +132,7 @@
       "expect": "plan",
       "calls": [
         {"step_id": "s1", "tool": "find_objects", "args": {"label": "face"}},
-        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}}}
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "blur"}, "while_tracked": true}}
       ]
     },
     {
@@ -140,7 +140,7 @@
       "expect": "plan",
       "calls": [
         {"step_id": "s1", "tool": "find_objects", "args": {"label": "license_plate"}},
-        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "pixelate"}}}
+        {"step_id": "s2", "tool": "add_mask", "args": {"targets": {"$ref": "s1"}, "effect": {"type": "pixelate"}, "while_tracked": true}}
       ]
     },
     {"request": "cut it", "expect": "clarify"},

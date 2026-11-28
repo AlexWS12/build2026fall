@@ -30,7 +30,7 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 ### Visual edits
 | ID | Feature | Priority | Depends on | Status | Notes |
 |---|---|---|---|---|---|
-| F-10 | Find and track people, faces, plates, named objects (cached per video) | Must | F-03, F-08 | in progress | Knight Hacks: EgoBlur + YOLOE; D-015 proposes RF-DETR + EgoBlur + ByteTrack (no AGPL). Pipeline, stub, cache and detector adapters on `luis/f10-detect-track`; model comparison next |
+| F-10 | Find and track people, faces, plates, named objects (cached per video) | Must | F-03, F-08 | in progress | Knight Hacks: EgoBlur + YOLOE; D-015 proposes RF-DETR + EgoBlur + ByteTrack (no AGPL). Pipeline, stub, cache and detector adapters on `luis/f10-detect-track`; model comparison next. F-10b (eduardo, `eduardo/f10b-vision`, #44): the app's Analyse button runs it (stub / local / remote), stitching, head fallback, CPU bake-off, D-022 |
 | F-11 | Blur / pixelate / black-box targets | Must | F-04, F-10 | done | Mask audit: jonathan, `jonathan/f11-mask-effects`; cached tracks + export tests: christopher, `christopher/f11-track-loading` (merged into #29) |
 | F-12 | Time-bounded edits ("first half", "after 0:30") | Must | F-05 | done | `resolve_time` / `resolve_range` (jean/f12-time-bounded-edits) |
 | F-13 | Targeting by description ("the person in red", "everyone except me") | Must | F-10 | in progress | VLM yes/no per track |
@@ -59,7 +59,7 @@ Status: `idea` → `planned` → `in progress` → `done` (or `dropped`, with a 
 |---|---|---|---|---|---|
 | F-40 | Agent reports what it did in plain words + raw tool calls | Must | F-05 | done | alex, `alex/demo-wiring-redesign` |
 | F-41 | Review queue for low-confidence results | Must | F-02, F-07 | done | paulallain, `paulallain/f41-review-queue`; Knight Hacks "Check" |
-| F-42 | Hand fixes: select, change effect, remove, drag/correct box | Must | F-07, F-11 | idea | Through the same toolbox |
+| F-42 | Hand fixes: select, change effect, remove, drag/correct box | Must | F-07, F-11 | in progress | Through the same toolbox. Remove a mask: eduardo, `eduardo/f10b-vision` (#44); change effect and correct a box still open |
 | F-43 | Undo per request + version history | Must | F-02 | done | alex, `alex/demo-wiring-redesign`: undo/redo done. jonathan, `jonathan/f43-history-list`: history list in the UI, ready for review |
 | F-44 | Preview-before-apply for heavy edits (inpainting, cuts) | Should | F-04 | idea | |
 
@@ -222,11 +222,15 @@ Weekly sprints, Tuesday → Tuesday: each Tuesday closes one sprint and starts t
 | Export route + source-video route + Export button in the UI. Shared file (API routes) | alex | alex/demo-wiring-redesign | Upload → request → Export → the MP4 has the edit; route test in stub mode | done (#32) |
 | F-33b Renderer applies `audio_filters` (denoise) + pick the local/remote model | nickolas | nickolas/f33b-render-audio-filters | A test exports a clip with a denoise span, no GPU | in progress (renderer part); the model pick is a follow-up |
 | F-09b Consented clips + labels in `clips.json` / `labels/` | eduardo | eduardo/f09b-pexels-clips | `benchmark report` scores an F-10 run against real labels | in progress (#35: 9 clips, 5 labelled) |
-| F-10b Detector bake-off → decision row, then harden the winner (stitching, face↔person, fit under `run_analysis`) | _open_ | | Report table with hardware stated → decision row | planned |
+| F-10b (wiring) Vision as an F-08 analysis: the Analyse button runs `VIBE_VISION_DETECTORS` through stub / local / remote, YuNet weights by name (`@yunet`), `vision` extra | eduardo | eduardo/f10b-vision | Upload → Analyse → "blur faces" applied with real tracks (`VIBE_BACKEND=local`); stub tests pass with no GPU | in review (#44) |
+| F-10b (bake-off) `benchmark offline`: detector sets × strides, timed and cached for `report` → decision row | eduardo | eduardo/f10b-vision | Report tables with hardware stated → decision row (Proposed) | in review (#44): CPU numbers only (Apple M2, 8 GB); D-022 Proposed. GPU bake-off still to do |
+| F-10b (hardening) Stitch track fragments; head boxes for faces the face detector missed (fail closed) | eduardo | eduardo/f10b-vision | Fewer tracks per labelled target in `benchmark offline`, exposure not worse in `report` | in review (#44) |
+| F-09b (face labels) `label-frames` / `import-labels` helper, then face boxes on the clips that show faces | eduardo | eduardo/f10b-vision | `report` scores face tracks on the labelled clips | in review (#44): 3 clips labelled (trio-street-outfits, trio-sidewalk-totes, crowd-orange) |
 | F-13 Targeting by description ("the person in red", "everyone except me") | luis | luis/f13-targeting-by-description | A request picks the right tracks on a labeled clip; unsure = masked | first cut done (#33); VLM judge (D-020) → Sprint 5 |
 | F-40 Agent reports what it did in plain words + raw tool calls | alex | alex/demo-wiring-redesign | The chat shows a plain summary and the tool calls for each applied request | done (#32) |
 | F-41 Review queue for low-confidence results (uses `RenderResult.issues` and the mask audit) | paulallain | paulallain/f41-review-queue | Low-confidence stretches show in a queue; confirming or fixing one writes an op | done (#36) |
-| F-42 Hand fixes: select, change effect, remove, correct a box (through the toolbox) | _open_ | | A hand fix from the UI is an op in the timeline and can be undone | planned |
+| F-42 (remove a mask) Click a mask in the player and remove it: hand-only `remove_mask` tool, `POST .../masks/remove` | eduardo | eduardo/f10b-vision | A hand fix from the UI is an op in the timeline and can be undone | in review (#44) |
+| F-42 (change effect, correct a box) The rest of the hand fixes, through the same toolbox | _open_ | | A hand fix from the UI is an op in the timeline and can be undone | planned |
 | F-43 Undo per request + version history in the UI | alex, jonathan | alex/demo-wiring-redesign, jonathan/f43-history-list | Undo removes one whole request; history lists the requests | done (#32, #37) |
 
 **Risks / dependencies:**

@@ -283,9 +283,7 @@ def _sections(report: Report) -> list[tuple[str, list[str], list[list[str]] | No
     score_rows = []
     for s in report.scores:
         if s.score is None:
-            score_rows.append(
-                [s.clip_id, s.tracks_key, "-", "-", "-", "-", "-", s.status + ": " + s.detail]
-            )
+            score_rows.append([s.clip_id, s.tracks_key, *["-"] * 7, s.status + ": " + s.detail])
             continue
         for ls in [*s.score.by_label, s.score.total]:
             score_rows.append(
@@ -297,6 +295,8 @@ def _sections(report: Report) -> list[tuple[str, list[str], list[list[str]] | No
                     _pct(ls.recall),
                     _pct(ls.precision),
                     f"{ls.exposed} ({_pct(ls.exposure_rate)})",
+                    _pct(ls.masked),
+                    _pct(ls.masked_outside),
                     "",
                 ]
             )
@@ -317,7 +317,18 @@ def _sections(report: Report) -> list[tuple[str, list[str], list[list[str]] | No
         (
             f"Vision vs ground truth (IoU >= {DEFAULT_IOU}, covered >= {DEFAULT_COVERAGE:.0%} "
             f"after {DEFAULT_PADDING:g} padding)",
-            ["clip", "tracks", "label", "truth", "recall", "precision", "exposed", "note"],
+            [
+                "clip",
+                "tracks",
+                "label",
+                "truth",
+                "recall",
+                "precision",
+                "exposed",
+                "masked",
+                "masked outside",
+                "note",
+            ],
             score_rows or None,
             scores_note,
         ),

@@ -7,11 +7,11 @@ listing detectors needs nothing installed.
 """
 
 import inspect
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import get_args
 
-from vibe.modules.vision.detection import Detector
+from vibe.modules.vision.detection import Detector, NotInstalled
 from vibe.modules.vision.detectors.egoblur_det import EgoBlurDetector
 from vibe.modules.vision.detectors.rfdetr_det import RFDetrDetector
 from vibe.modules.vision.detectors.stub import ColorDetector
@@ -93,6 +93,10 @@ DETECTORS: dict[str, DetectorInfo] = {
 }
 
 
+MODEL_REF = "@"
+"""``weights=@yunet``: a ``models.json`` entry by name, resolved to its file in the models dir."""
+
+
 def parse_spec(spec: str) -> tuple[str, dict[str, str]]:
     """``"yolo:weights=yolo11m.pt,threshold=0.2"`` -> ``("yolo", {"weights": "yolo11m.pt",
     "threshold": "0.2"})``. Values stay text: only the detector knows what type each option is."""
@@ -139,6 +143,78 @@ def resolve_options(name: str, raw: dict[str, str]) -> dict[str, object]:
     return {k: _convert(name, k, v, params[k].annotation) for k, v in raw.items()}
 
 
+def finds_people(spec: str) -> bool:
+    """Whether the detector can report ``person`` boxes (COCO or open-vocabulary models, or the
+    stub told to call its blocks people)."""
+    name, raw = parse_spec(spec)
+    info = DETECTORS.get(name)
+    if info is None:
+        return False
+    if name == "stub":
+        return raw.get("label", "person") == "person"
+    return info.finds.startswith(("COCO", "anything"))
+
+
+def check_spec(spec: str) -> None:
+    """Raise ``ValueError`` for an unknown detector, a bad option or an unknown ``@`` model,
+    without importing any model package."""
+    name, raw = parse_spec(spec)
+    if name not in DETECTORS:
+        raise ValueError(f"unknown detector {name!r}; known: {', '.join(DETECTORS)}")
+    resolve_options(name, raw)
+    weights_refs([spec])
+
+
+def weights_refs(specs: Sequence[str]) -> dict[str, str | None]:
+    """The ``@name`` weights the specs use, with each one's pinned sha256 from ``models.json``.
+
+    ``weights=@yunet`` names a ``models.json`` entry instead of a path, so a spec means the same
+    file on every machine. Raises ``ValueError`` for a name that isn't in the manifest.
+    """
+    from vibe.modules.download import manifest
+
+    entries = None
+    refs: dict[str, str | None] = {}
+    for spec in specs:
+        for value in parse_spec(spec)[1].values():
+            if not value.startswith(MODEL_REF):
+                continue
+            entries = entries or manifest()
+            ref = value.removeprefix(MODEL_REF)
+            entry = entries.get(ref)
+            if entry is None or entry.file is None:
+                known = ", ".join(n for n, e in entries.items() if e.file) or "none"
+                raise ValueError(f"{value!r} in {spec!r} isn't a models.json file ({known})")
+            refs[ref] = entry.sha256
+    return refs
+
+
+def _resolve_refs(raw: dict[str, str]) -> dict[str, str]:
+    """``weights=@yunet`` becomes the downloaded file's path, or ``NotInstalled`` says how to
+    get it."""
+    if not any(v.startswith(MODEL_REF) for v in raw.values()):
+        return raw
+    from vibe.modules.download import manifest, model_path
+
+    entries = manifest()
+    resolved = {}
+    for key, value in raw.items():
+        if value.startswith(MODEL_REF):
+            ref = value.removeprefix(MODEL_REF)
+            entry = entries.get(ref)
+            if entry is None or entry.file is None:
+                raise ValueError(f"{value!r} isn't a models.json file")
+            path = model_path(entry)
+            if not path.is_file():
+                raise NotInstalled(
+                    f"{ref} weights aren't downloaded: run `uv run python -m vibe.modules "
+                    f"download {ref}` in backend/ (expected {path})"
+                )
+            value = str(path)
+        resolved[key] = value
+    return resolved
+
+
 def make_detector(spec: str) -> Detector:
     """Build a detector from a spec. Raises ``NotInstalled`` if its package or weights are
     missing, ``ValueError`` for an unknown name or a bad option."""
@@ -146,4 +222,4 @@ def make_detector(spec: str) -> Detector:
     info = DETECTORS.get(name)
     if info is None:
         raise ValueError(f"unknown detector {name!r}; known: {', '.join(DETECTORS)}")
-    return info.make(**{**info.defaults, **resolve_options(name, raw)})
+    return info.make(**{**info.defaults, **resolve_options(name, _resolve_refs(raw))})
