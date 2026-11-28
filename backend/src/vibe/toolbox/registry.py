@@ -164,6 +164,18 @@ _HAND_TOOLS = (
         returns="none",
         run=tools.confirm_mask,
     ),
+    ToolSpec(
+        name="mask_targets",
+        kind="edit",
+        description=(
+            "Hide targets a person clicked or drew a box around (F-14), like add_mask. "
+            "Hand edits only: it takes literal track ids, so the planner never gets it."
+        ),
+        args=tools.AddMaskArgs,
+        result=tools.EditResult,
+        returns="none",
+        run=tools.add_mask,
+    ),
 )
 
 HAND_TOOLS: Mapping[str, ToolSpec] = MappingProxyType({t.name: t for t in _HAND_TOOLS})

@@ -364,6 +364,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Target
+         * @description Mask the target clicked (``point``) or boxed (``box``) on the frame at ``t``, as a hand
+         *     edit (F-14). 400 if nothing is under a click, ``t`` is past the end, or the toolbox refuses.
+         */
+        post: operations["add_target_api_projects__project_id__targets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -800,6 +821,76 @@ export interface components {
             } | null;
             /** Ok */
             ok: boolean;
+        };
+        /** TargetReply */
+        TargetReply: {
+            /** Request Id */
+            request_id: string;
+            /**
+             * How
+             * @description picked: the clicked target; matched: an already followed target the box fills; followed: a new hand-drawn track.
+             * @enum {string}
+             */
+            how: "picked" | "matched" | "followed";
+            /** Track Id */
+            track_id: string;
+            /** Label */
+            label: string;
+            /** @description For a followed box: from its first keyframe to its last. */
+            followed?: components["schemas"]["TimeRange"] | null;
+            /**
+             * Lost Before
+             * @description Followed box: lost going back, at this time; null = never.
+             */
+            lost_before?: number | null;
+            /**
+             * Lost After
+             * @description Followed box: lost going forward, at this time; null = never.
+             */
+            lost_after?: number | null;
+            /**
+             * Reply
+             * @description What happened, in plain words.
+             */
+            reply: string;
+        };
+        /** TargetRequest */
+        TargetRequest: {
+            /**
+             * T
+             * @description Source time of the frame the user clicked or drew on.
+             */
+            t: number;
+            /**
+             * Point
+             * @description A click, normalized [x, y]: mask the target under it.
+             */
+            point?: [
+                number,
+                number
+            ] | null;
+            /**
+             * Box
+             * @description A drawn box, normalized [x1, y1, x2, y2]: mask what's in it.
+             */
+            box?: [
+                number,
+                number,
+                number,
+                number
+            ] | null;
+            /**
+             * Effect
+             * @default blur
+             * @enum {string}
+             */
+            effect: "blur" | "pixelate" | "box";
+            /**
+             * Label
+             * @description What a newly followed box is called, e.g. "person". Not used otherwise.
+             * @default object
+             */
+            label: string;
         };
         /**
          * TimeRange
@@ -1524,6 +1615,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HistoryReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_target_api_projects__project_id__targets_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TargetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TargetReply"];
                 };
             };
             /** @description Validation Error */

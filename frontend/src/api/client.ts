@@ -9,6 +9,8 @@ import type {
   ProjectInfo,
   ReviewAction,
   ReviewReply,
+  TargetReply,
+  TargetRequest,
   TimelineState,
   TracksReply,
   Transcript,
@@ -41,6 +43,8 @@ export interface ApiClient {
     itemId: string,
     action: ReviewAction['action'],
   ): Promise<ReviewReply>
+  /** Mask the target clicked or boxed on the frame at `t` (F-14); undo takes it back. */
+  addTarget(projectId: string, target: TargetRequest): Promise<TargetReply>
   /** Undo the latest request still in effect. */
   undo(projectId: string): Promise<HistoryReply>
   /** Keep only `start`..`end` of the source (the timeline's trim handles), as a hand edit. */
@@ -121,6 +125,12 @@ export const httpClient: ApiClient = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action }),
+    }),
+  addTarget: (projectId, target) =>
+    call(project(projectId, '/targets'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(target),
     }),
   undo: (projectId) => post(project(projectId, '/undo')),
   trim: (projectId, start, end) =>

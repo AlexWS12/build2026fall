@@ -7,6 +7,7 @@ import type {
   ProjectDetail,
   ReviewReply,
   StepReport,
+  TargetReply,
   TimelineState,
   Track,
   Transcript,
@@ -25,7 +26,8 @@ import type {
  *   empty ──open_started──► opening ──open_succeeded──► open(idle)
  *     ▲                        │                          │  ▲
  *     └──────open_failed───────┘        *_started ────────┘  └──── *_settled / activity_failed
- *                         (requesting | undoing | redoing | analysing | transcribing | exporting | reviewing)
+ *                         (requesting | undoing | redoing | analysing | transcribing | exporting | reviewing
+ *                          | targeting)
  */
 
 export type ChatEntry =
@@ -54,6 +56,8 @@ export type Activity =
   | { kind: 'exporting' }
   | { kind: 'reviewing' }
   | { kind: 'trimming' }
+  /** A click or a drawn box in the player (F-14): a drawn box is followed, which takes a while. */
+  | { kind: 'targeting' }
 
 export type ExportState =
   | { kind: 'none' }
@@ -127,6 +131,9 @@ export type SessionEvent =
   | { type: 'trim_settled'; sync: Sync; start: number; end: number }
   | { type: 'review_started' }
   | { type: 'review_settled'; sync: Sync; gone: boolean }
+  | { type: 'target_started' }
+  /** `tracks` come back too: a followed box is a new hand-drawn track. */
+  | { type: 'target_settled'; reply: TargetReply; sync: Sync; tracks: Track[] }
   /** The activity in flight failed. `sync`, when the server could still be read, is the truth. */
   | { type: 'activity_failed'; message: string; sync?: Sync }
 
@@ -287,6 +294,20 @@ function projectTransition(project: OpenProject, event: ProjectEvent): OpenProje
         },
         event.sync,
       )
+    case 'target_started':
+      if (!idle) return project
+      return { ...project, activity: { kind: 'targeting' } }
+    case 'target_settled':
+      if (activity.kind !== 'targeting') return project
+      return synced(
+        {
+          ...project,
+          activity: IDLE,
+          tracks: event.tracks,
+          chat: [...project.chat, { kind: 'note', id: nextId(project), text: event.reply.reply }],
+        },
+        event.sync,
+      )
     case 'activity_failed': {
       if (idle) return project
       const failed: OpenProject =
@@ -383,6 +404,7 @@ function failureText(activity: Activity, message: string): string {
     transcribing: 'Transcription failed',
     reviewing: 'Review failed',
     trimming: 'Trim failed',
+    targeting: "Couldn't mask that",
   }
   const label = activity.kind === 'idle' || activity.kind === 'exporting' ? '' : what[activity.kind]
   return `${label}: ${message}`
@@ -417,6 +439,7 @@ const ACTIVITY_LABEL: Record<Activity['kind'], string | null> = {
   exporting: 'Rendering the export…',
   reviewing: 'Applying review…',
   trimming: 'Trimming…',
+  targeting: 'Following your target…',
 }
 
 /** One line saying what's in flight, or null when idle. */
